@@ -37,7 +37,7 @@ import unity_csharp_eval as U
 from core.guard import guarded_dispatch
 from mcpbridge.http_client import MCPHttpServer
 
-SESSION_DIR = os.path.join("Library", "Q3CNFU", "sessions")
+SESSION_DIR = os.environ.get("Q3_SESSION_DIR") or os.path.join("Library", "Q3CNFU", "sessions")
 
 
 class Emitter:
@@ -137,7 +137,12 @@ def main() -> int:
     p.add_argument("--repairs", type=int, default=3)
     p.add_argument("--play", action="store_true")
     p.add_argument("--play-repairs", type=int, default=2)
+    p.add_argument("--session-dir", default="", help="sohbet dosyalarinin klasoru "
+                   "(varsayilan Library/Q3CNFU/sessions; MCP sunucusu kendi evini verir)")
     a = p.parse_args()
+    if a.session_dir:
+        global SESSION_DIR
+        SESSION_DIR = a.session_dir
 
     em = Emitter(a.jsonl)
     code = 1

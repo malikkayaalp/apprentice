@@ -24,7 +24,7 @@ core/            Ollama istemcisi, şema koruması, araç döngüsü — ortamda
 mcpbridge/       MCP taşıma (stdio + Streamable HTTP), bağımlılıksız
 envs/unity/      Unity ortamı: araçlar, derleme/play doğrulama, play_observe, sandbox hapsi
 envs/code/       genel kod ortamı (planlı): dosya, shell, test, git
-server/          MCP sunucusu (planlı): worker_run(görev, kabul_kriterleri, ortam)
+server/          MCP sunucusu: worker_run(görev, kabul_kriterleri, ortam) + status/env
 clients/unity/   Q3CNFU — Unity Editor paneli (UPM paketi)
 clients/web/     canlı izleme sayfası (planlı)
 tests/           hapis öz-testi
@@ -36,6 +36,33 @@ tests/           hapis öz-testi
 - [Ollama](https://ollama.com) + `hf.co/unsloth/Qwen3-Coder-Next-GGUF:UD-Q4_K_XL` (~20 GB)
 - Unity ortamı için: Unity 6000.0.x + [MCP for Unity](https://github.com/CoplayDev/unity-mcp) **v10.1.2**
   (bu sürüme karşı test edildi; sunucunun kendi dokümanı var olmayan API'ler tarif ediyor — şemaya güvenin)
+
+## Denetçi olarak bağlanmak (MCP sunucusu)
+
+Sunucu stdio MCP konuşur, bağımlılığı yoktur. Depo kökündeki `.mcp.json` Claude Code
+tarafından otomatik görülür (`claude` bu klasörde açılınca "apprentice" sunucusunu sorar).
+Cursor / VS Code için aynı girdiyi kendi MCP ayarına kopyala:
+
+```json
+{ "mcpServers": { "apprentice": { "command": "python", "args": ["C:/yol/Apprentice/server/apprentice_mcp.py"] } } }
+```
+
+Araçlar:
+
+| araç | ne yapar |
+|---|---|
+| `worker_run(gorev, kabul_kriterleri[], ortam="unity", oturum?, play?, onarim?, bekle?, zaman_asimi_s?)` | işçiyi koşturur; derleme sonucu, yazılan dosyalar (+/-), ham ölçümler, işçinin özeti döner |
+| `worker_status(is_id, olaylar?, durdur?)` | süren/biten işin raporu; `bekle=false` ile başlatılan işler için |
+| `worker_env()` | Ollama / model / ortam köprüsü hazır mı |
+
+Sözleşme: **kabul kriterini denetçi yazar** (işçinin en zayıf yeri), `ok` yalnızca
+derleyici/doğrulayıcının onayıdır, kriterlerin sağlanıp sağlanmadığına denetçi karar
+verir. Ölçümler ham gelir; denetçi özetleyip aynı `oturum` ile düzeltme istetir. Bir
+tur dakikalar sürer — istemcinin araç zaman aşımı kısaysa (`MCP_TOOL_TIMEOUT`)
+`bekle=false` + `worker_status`. İş dosyaları `~/.apprentice/jobs/<id>/` (prompt,
+olaylar, stderr), sohbet bağlamı `~/.apprentice/sessions/<ortam>/`.
+
+Test: `python tests/test_server.py` (Unity/Ollama gerekmez), `--live` ile gerçek tur.
 
 ## Unity paneli (Q3CNFU)
 
