@@ -669,6 +669,59 @@ def runtime_errors(srv):
     return out
 
 
+_BATCH_CS = r"""
+UnityEditor.SessionState.SetString("apprentice.obs", "");
+UnityEditor.SessionState.SetInt("apprentice.obs.n", 0);
+string NL = ((char)10).ToString();
+double sonraki = UnityEditor.EditorApplication.timeSinceStartup;
+double bitis = UnityEditor.EditorApplication.timeSinceStartup + __SANIYE__;
+UnityEditor.EditorApplication.CallbackFunction tick = null;
+System.Func<string> olc = () => { __KOD__ };
+tick = () => {
+    double t = UnityEditor.EditorApplication.timeSinceStartup;
+    if (t >= bitis || !UnityEditor.EditorApplication.isPlaying) {
+        UnityEditor.EditorApplication.update -= tick;
+        UnityEditor.SessionState.SetInt("apprentice.obs.n", -1); return; }
+    if (t < sonraki) return;
+    sonraki = t + 0.5;
+    string v; try { v = olc(); } catch (System.Exception e) { v = "HATA:" + e.GetType().Name + ": " + e.Message; }
+    UnityEditor.SessionState.SetString("apprentice.obs",
+        UnityEditor.SessionState.GetString("apprentice.obs", "") + v.Replace(NL, " ") + NL);
+    UnityEditor.SessionState.SetInt("apprentice.obs.n", UnityEditor.SessionState.GetInt("apprentice.obs.n", 0) + 1);
+};
+UnityEditor.EditorApplication.update += tick;
+return "kuruldu";
+"""
+
+
+def _observe_batched(srv, kod, saniye):
+    """Ornekleri Unity icinde biriktir (EditorApplication.update, 0.5 sn), tek okumayla al.
+
+    Neden: her ornek icin ayri execute_code = ayri codedom derlemesi; editorun ana
+    dongusunu takar ve 15 sn'de ancak ~10 ornek alinir. Burada 15 sn ~30 ornek.
+    Kurulum derlenmezse None doner, eski tek tek yol kullanilir.
+    """
+    cs = _BATCH_CS.replace("__SANIYE__", "%.1f" % saniye).replace("__KOD__", kod)
+    ham = U.raw_exec(srv, cs, safety=False, timeout=60)
+    try:
+        d = json.loads(ham)
+    except Exception:
+        return None
+    if not d.get("success"):
+        return None
+    bitis = time.time() + saniye + 10
+    while time.time() < bitis:
+        time.sleep(1.0)
+        n = _oyna(srv, "return UnityEditor.SessionState.GetInt(\"apprentice.obs.n\", 0).ToString();")
+        if n == "-1":
+            break
+    metin = _oyna(srv, "return UnityEditor.SessionState.GetString(\"apprentice.obs\", \"\");") or ""
+    ornekler = [x for x in metin.split(chr(10)) if x.strip()]
+    hatalar = [x for x in ornekler if x.startswith("HATA:")][:2]
+    return {"saniye": saniye, "ornek_sayisi": len(ornekler), "ornekler": ornekler,
+            "hatalar": hatalar, "toplu": True}
+
+
 def play_observe(srv, kod, saniye=8, zaman_asimi=40):
     """Modelin kendi olcum kodunu play modda ornekler.
 
@@ -696,7 +749,14 @@ def play_observe(srv, kod, saniye=8, zaman_asimi=40):
                 break
         if not girdi:
             return {"error": "play moda girilemedi (%d sn)" % zaman_asimi}
+        # OLCULDU (2026-08-23): editor odakta degilken Unity play dongusunu DURAKLATIR;
+        # ornekler 4-6 sn boyunca birebir ayni geldi, "kod donuyor" sanildi. runInBackground
+        # acilmazsa olcum editorun odagina bagli olur.
+        _oyna(srv, "UnityEngine.Application.runInBackground = true; return \"r\";")
         time.sleep(2.0)                          # Start()/ilk kareler
+        toplu = _observe_batched(srv, kod, saniye)
+        if toplu is not None:
+            return toplu
         t0 = time.time()
         while time.time() - t0 < saniye:
             ham = U.raw_exec(srv, kod, safety=False, timeout=60)

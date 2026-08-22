@@ -26,7 +26,7 @@ envs/unity/      Unity ortamı: araçlar, derleme/play doğrulama, play_observe,
 envs/code/       genel kod ortamı (taslak): dosya oku/yaz, shell, test; hapis + unittest/pytest doğrulayıcı
 server/          MCP sunucusu: tek araç worker_run(görev, kabul_kriterleri, ortam) — bkz. server/README.md
 clients/unity/   Q3CNFU — Unity Editor paneli (UPM paketi)
-clients/web/     canlı izleme sayfası (planlı)
+clients/web/     canlı izleme sayfası: `python clients/web/monitor.py` → http://127.0.0.1:8765 (jobs klasörünü okur)
 tests/           hapis öz-testi
 ```
 

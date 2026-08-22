@@ -133,6 +133,18 @@ class Job:
             self.stderr_f.close()
         except Exception:
             pass
+        # Isci 'exit' yazmadan oldüyse olay dosyasini biz kapatalim (izleyiciler icin).
+        try:
+            ev = self.events()
+            if not any(e.get("type") == "exit" for e in ev):
+                with open(self.events_path, "a", encoding="utf-8") as f:
+                    if not any(e.get("type") in ("result", "error") for e in ev):
+                        f.write(json.dumps({"type": "error", "message":
+                                            "isci sonuc yazmadan cikti (kod %s)" % self.code},
+                                           ensure_ascii=False) + "\n")
+                    f.write(json.dumps({"type": "exit", "code": self.code}) + "\n")
+        except Exception:
+            pass
         self.done = True
 
     def kill(self):
@@ -275,8 +287,16 @@ def tool_worker_run(a: dict) -> dict:
     rep = job.report()
     if not job.done:
         job.kill()
+        msg = "zaman asimi (%.0f s): isci durduruldu; olaylar %s" % (limit, job.events_path)
         rep["derleme_durumu"] = "zaman_asimi"
-        rep["hatalar"].append("zaman asimi (%.0f s): isci durduruldu; olaylar %s" % (limit, job.events_path))
+        rep["hatalar"].append(msg)
+        # Olay dosyasini kapat ki izleyiciler (clients/web) isi sonsuza kadar "calisiyor" gormesin.
+        try:
+            with open(job.events_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps({"type": "error", "message": msg}, ensure_ascii=False) + "\n")
+                f.write(json.dumps({"type": "exit", "code": -9}) + "\n")
+        except Exception:
+            pass
     return rep
 
 

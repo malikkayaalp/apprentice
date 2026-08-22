@@ -81,6 +81,10 @@ def offline() -> bool:
     print("%s dogrulayici: ok" % CR.TEST_ADI)
 
     # shell
+    r = d("run_shell", {"cmd": "git push origin main"})
+    assert "reddedildi" in r.get("error", ""), r
+    r = d("run_shell", {"cmd": "rm -rf ."})
+    assert "reddedildi" in r.get("error", ""), r
     r = d("run_shell", {"cmd": "echo merhaba"})
     assert r["exit"] == 0 and "merhaba" in r["out"]
     r = d("run_shell", {"cmd": sys.executable + " -c \"import time; time.sleep(3)\""})

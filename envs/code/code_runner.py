@@ -157,8 +157,8 @@ def _run(jail: Jail, written: list, em, name: str, a: dict):
         return {"path": a.get("path"), "contents": s[:MAX_READ],
                 "kirpildi": len(s) > MAX_READ}
     if name == "write_file":
-        rel = a.get("path", "")
-        p = jail.path(rel)
+        p = jail.path(a.get("path", ""))
+        rel = os.path.relpath(p, jail.root).replace("\\", "/")   # olaylarda daima goreli yol
         before = None
         if os.path.isfile(p):
             with open(p, encoding="utf-8", errors="replace") as f:
@@ -178,7 +178,14 @@ def _run(jail: Jail, written: list, em, name: str, a: dict):
                 out.append(os.path.relpath(p, jail.root).replace("\\", "/"))
         return {"files": sorted(out)[:500], "sayi": len(out)}
     if name == "run_shell":
-        return shell(str(a.get("cmd") or ""), jail.root)
+        cmd = str(a.get("cmd") or "")
+        # Silme yasagi shell uzerinden delinmesin; push disariya cikistir.
+        yasak = ("git push", "rm -rf", "rm -r ", "rmdir", "del ", "erase ", "Remove-Item",
+                 "shutil.rmtree", "os.remove", "git reset --hard", "git clean")
+        vur = [y for y in yasak if y.lower() in cmd.lower()]
+        if vur:
+            return {"error": "komut reddedildi (%s): silme ve push bu ortamda yok" % ", ".join(vur)}
+        return shell(cmd, jail.root)
     if name == "run_tests":
         cmd = TEST_CMD + [x for x in str(a.get("args") or "").split() if x]
         return shell(cmd, jail.root)

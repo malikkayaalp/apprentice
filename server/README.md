@@ -103,7 +103,22 @@ dosya > şablon > kod).
 |---|---|---|---|
 | `unity` | read/write_script, list_scripts, scene_objects, inspect_object, hierarchy, add_component, set_field, play_observe… | Unity derleyicisi (+ play, play_observe) | `envs/unity/panel_runner.py` |
 | `code` | read_file, write_file, list_files, run_shell, run_tests | `compile()` + pytest (yoksa stdlib unittest) | `envs/code/code_runner.py` |
+
+`code` ortamında silme aracı yoktur; `run_shell` içinde `git push` ve özyinelemeli silme komutları reddedilir. Git okuma/commit `run_shell` üzerinden serbesttir.
 | `fake` | — | — | `envs/fake/fake_runner.py` (olay şemasını taklit eder) |
+
+## İzleme
+
+`python clients/web/monitor.py [--port 8765] [--home ~/.apprentice]` — sunucuya bağlanmaz, iş
+klasörünü okur; hangi istemci başlatmış olursa olsun (Claude Code, Cursor, panel, test betiği)
+her iş listede: durum, derleme, dosyalar, araç akışı (argüman + sonuç), ölçümler, işçinin özeti.
+`/api/jobs` aynı veriyi JSON verir.
+
+## Ölçüm kampanyası
+
+`python tests/code_kampanya.py` — 6 kod görevi; denetçi (betik) kriter yazar, işçi yazar, denetçi
+**işçiye verilmeyen gizli kontrolleri** koşar, tutmayanları somut geri bildirime çevirip aynı
+`oturum` ile 2. tur ister. Sonuç `tests/code_kampanya.son.json` (tur-1 / tur-2 gizli başarı, süre).
 
 ## Test
 
