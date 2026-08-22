@@ -98,3 +98,75 @@ Canlı (sunucu üzerinden, `.apprentice_test_home/code_task/`): "toplam(a,b) + e
 3. `play_observe` örnekleme sıklığı: Unity tarafında biriktirip tek seferde almak (15 sn → 30 örnek).
 4. Denetçi düzeltme döngüsünü tetikleyen bir vaka (bilerek zayıf kriterle) ile `oturum` sürekliliğini canlı test etmek.
 5. İlk çalıştırmada `num_batch` ölçümü ve UPM paket yerleşimi (kullanıcı hedefi: GitHub'dan indiren rahat kursun).
+
+---
+
+# Aşama 2–3 (2026-08-23 gece, otonom devam) — commit `33b2131`
+
+## Ne yapıldı
+
+| iş | durum | kanıt |
+|---|---|---|
+| Gerçek IDE denetçisi: Claude Code → `worker_run` (MCP, `.mcp.json`) | **çalıştı** | code: parse_sure 2 tur (87 s + 84 s), oturum sürekliliği 23 mesaj; unity: lider takibi 6 tur |
+| Code ölçüm kampanyası (6 görev, gizli denetçi kontrolleri) | **bitti** | `tests/code_kampanya.son.json` |
+| Denetçi geri bildirimi kalitesi ölçümü (genel vs somut) | **bitti** | roma görevi, aşağıda |
+| `clients/web/monitor.py` izleme sayfası | **bitti** | `/` ve `/api/jobs`, tarayıcıda doğrulandı |
+| İlk-çalıştırma `num_batch` ölçümü (`core/olcum.py --yaz`) | **bitti** | `apprentice.config.json` yazıldı |
+| `play_observe` iyileştirmesi (toplu örnekleme + runInBackground) | **bitti** | 15 sn: 10 → 22 örnek |
+| Unity denetçi döngüsü vakası (lider takibi) | **kısmen**: kararlı durumda 21/22, ilk ~3 sn geçiş ihlali | `tests/lider_olc.son.json` |
+| Commit (push yok) | `33b2131` | |
+
+## Ölçümler
+
+### Code kampanyası — `python tests/code_kampanya.py`
+Denetçi (betik) kriter yazar; işçi yazar; denetçi **işçiye verilmeyen** gizli kontrolleri koşar; tutmayanı somut geri bildirime çevirip aynı `oturum` ile 2. tur ister.
+
+| görev | tur-1 gizli | son | tur | işçi süresi |
+|---|---|---|---|---|
+| parantez | 6/6 | 6/6 | 1 | 46 s |
+| lru | 6/6 | 6/6 | 1 | 53 s |
+| roma | 5/6 | 5/6 | 2 | 1094 + 972 s (4'er onarım turu, fazladan `test_debug.py`) |
+| satis | 6/6 | 6/6 | 1 | 62 s |
+| fib_onar (var olan hatalı dosyayı düzelt) | 6/6 | 6/6 | 1 | 42 s |
+| kelime | 5/6 | 6/6 | 2 | 65 + 82 s |
+| **toplam** | **34/36** | **35/36** | | |
+
+**Genel vs somut geri bildirim (roma):** betiğin otomatik geri bildirimi ("gidiş-dönüş 1..3999 tutmuyor: ValueError") 2 turda ~2000 sn harcayıp çözemedi; işçi kendi debug çıktısında `s.count('M') = 4` görmesine rağmen çıkarımı yapamadı. Claude Code denetçi olarak **somut özet** verdi ("`count('M')>3` kontrolü `CM` içindeki M'yi de sayıyor; gidiş-dönüş doğrulamaya geç") → **130 sn, 1 tur, 6/6**. Kampanya toplamı **36/36**. Tezin ölçülmüş hâli: işçi ham veriyi yorumlayamıyor, somut özeti uyguluyor.
+
+### Unity — lider takibi (Claude Code denetçi, 6 tur, aynı oturum)
+Görev: Lider küre daire çizer (r=3, 10 sn/tur), 8 küre liderden 1.5–4 birimde kalsın, çiftler ≥1.5, |x|,|z| ≤ 7.
+
+| tur | işçi | denetçi ölçümü (15 sn) | denetçi özeti |
+|---|---|---|---|
+| 1 | 227 s, derlendi, Lider yaratılamadı (araç setinde obje yaratma yok; 15 adımda özet yok) | — | "Lider'i kodda `CreatePrimitive` ile yarat" |
+| 2 | 473 s, 3× kendi ölçümü (`OLCUM_SINIRI` durdurdu) | max_lider 7.5–10, küreler |xz|=7 duvarında | "takip yok; d>4 yaklaş, d<1.5 uzaklaş; ölçme" |
+| 3 | 108 s, 3 araç, ölçmedi | 10/10 lider ihlali; `min_cift` her örnekte tam 1.500 → **kilitlenme** | "adım atlama kilitliyor; ayrışma kuvveti + sert çözümleme" |
+| 4 | 571 s, talimata rağmen 3× ölçtü | 8/10 ihlal ama hepsi kenarda (1.474 vs 1.5), max_lider ≤3.9 | "hedef bandı içe çek 2.0–3.5" |
+| 5 | 132 s | mesafeler tamam, **lider sabit** → sebep editör odaksızken play duraklıyor (harness hatası, aşağıda) | — |
+| 5' (düzeltilmiş ölçüm) | — | **22 örnek, 21/22 bantta**, lider tam tur; tek ihlal t≈0 | "başlangıç halkası 2.75" |
+| 6 | 157 s | 22 örnek, 21/22; ilk örnek (≈3 s) hâlâ geçiş | durduruldu |
+
+Sonuç: kararlı durum kriterleri iki ayrı koşuda 21/22 örnekte tutuyor (min_lider 1.98–2.00, max_lider 3.50–3.57, çift ≥1.5, |xz| ≤6); "her an" kriteri ilk ~3 sn'de tutmuyor. 6 turda durduruldu, kalan iş not edildi.
+
+### `num_batch` (12k token prompt, Qwen3-Coder-Next Q4_K_XL, RTX 5070 Ti)
+512: 140 t/s · 1024: 244 · 2048: 418 · **4096: 620 t/s (+%342)** → `apprentice.config.json` makine bölümü yazıldı; yükleyici env > dosya > şablon sırasıyla okuyor.
+
+## Bulunan ve düzeltilen hatalar
+1. **Editör odaksızken Unity play döngüsü duruyor** — `play_observe` örnekleri 4–6 sn boyunca birebir aynı geldi, "kod donuyor / lider sabit" sanıldı. Düzeltme: play'e girince `Application.runInBackground = true`.
+2. **Örnek başına ayrı `execute_code` derlemesi** editörü takıyor, 15 sn'de 10 örnek → örnekleme Unity içinde `EditorApplication.update` ile 0.5 sn'de biriktirilip tek okumayla alınıyor (22–30 örnek). Kurulum derlenmezse eski yol.
+3. Çöken/zaman aşımına uğrayan işçi olay dosyasına `exit` yazmıyordu → izleme sayfasında sonsuza kadar "çalışıyor"; sunucu artık kapatıyor.
+4. Code ortamında model mutlak yol verince olaylar mutlak yol taşıyordu → daima göreli.
+5. `run_shell`'de `git push` ve özyinelemeli silme reddi (silme yasağı shell'den delinmesin).
+6. Heredoc içindeki `
+` kaçışları yedinci ve sekizinci kez bozuldu → kaçış içeren her yazma Edit/Write ya da `chr(10)`.
+
+## Gözlemler (tasarım için)
+- İşçi "ölçme" talimatını iki turda ihlal etti; `OLCUM_SINIRI=3` onu kilitlenmekten kurtardı ama her ihlal ~400 s. Daha sert çözüm: denetçi `play_observe` aracını isteğe bağlı kapatabilmeli (`araclar_kapali` parametresi) — sırada.
+- İşçi, araç setinde olmayan şeyi (obje yaratma) uydurma araçla denemek yerine 15 adım harcadı; `max_steps` dolunca özet de yazmadı. Sunucu `ozet` boşsa bunu `hatalar`a "özet yok: adım sınırı" diye koymalı — sırada.
+- Denetçi özetinin değeri sayıyla görüldü: aynı işçi, aynı görev, genel özet 2000 sn/çözüm yok, somut özet 130 sn/çözüm.
+
+## Sırada
+1. `worker_run`'a `araclar_kapali` (ör. play_observe'u denetçiye saklamak) ve "özet yok" hatası.
+2. Lider takibi: ilk 3 sn geçişi (Start'ta halkayı liderin o anki konumuna göre kurup ilk Update'ten önce bir sert çözümleme).
+3. Cursor'dan aynı akış (`.cursor/mcp.json` hazır, denenmedi — bu oturumda Cursor yok).
+4. UPM paket yerleşimi + README (TR/EN, ekran görüntülü) — kullanıcı hedefi.
