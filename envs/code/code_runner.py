@@ -223,13 +223,14 @@ def test_errors(jail: Jail) -> list:
 
 
 def one_request(jail: Jail, dispatch, written: list, msgs: list, request: str,
-                model: str, max_repairs: int) -> dict:
+                model: str, max_repairs: int, tools: list | None = None) -> dict:
+    tools = tools if tools is not None else TOOLS
     msgs.append({"role": "user", "content": request})
     t0 = time.time()
     rounds = 0
     errs: list = []
     while True:
-        res = run_agent(msgs, TOOLS, dispatch, max_steps=12, model=model, think=False,
+        res = run_agent(msgs, tools, dispatch, max_steps=12, model=model, think=False,
                         num_ctx=NUM_CTX, temperature=0.0, num_predict=6000, retries=2,
                         extra_options={"num_batch": NUM_BATCH})
         msgs[:] = res.messages
@@ -308,11 +309,15 @@ def main() -> int:
         em.emit("system", subtype="init", model=a.model, session_id=a.session, workdir=jail.root)
 
         written: list = []
-        dispatch = guarded_dispatch(TOOLS, make_dispatch(jail, written, em))
+        kapali = [k.strip() for k in os.environ.get("APPRENTICE_TOOLS_OFF", "").split(",") if k.strip()]
+        tools = [t for t in TOOLS if t["function"]["name"] not in kapali]
+        if kapali:
+            em.emit("system", subtype="tools_off", tools=kapali)
+        dispatch = guarded_dispatch(tools, make_dispatch(jail, written, em))
         msgs = load_session(a.session_dir, a.session)
         if not msgs:
             msgs = [{"role": "system", "content": SYSTEM.format(dir=jail.root, test=TEST_ADI)}]
-        r = one_request(jail, dispatch, written, msgs, request, a.model, a.repairs)
+        r = one_request(jail, dispatch, written, msgs, request, a.model, a.repairs, tools)
         save_session(a.session_dir, a.session, msgs, a.model)
         if r["text"]:
             em.emit("assistant", text=r["text"])

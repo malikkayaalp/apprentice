@@ -78,8 +78,10 @@ def _diff_stat(before: str | None, after: str) -> tuple[int, int]:
 # --------------------------------------------------------------------------- is
 class Job:
     def __init__(self, ortam: str, gorev: str, kriterler: list, oturum: str,
-                 play: bool, onarim: int, model: str, url: str, workdir: str = ""):
+                 play: bool, onarim: int, model: str, url: str, workdir: str = "",
+                 kapali: list | None = None):
         self.workdir = workdir
+        self.kapali = [str(k) for k in (kapali or []) if str(k).strip()]
         self.id = time.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:6]
         self.dir = os.path.join(HOME, "jobs", self.id)
         os.makedirs(self.dir, exist_ok=True)
@@ -119,6 +121,8 @@ class Job:
             cmd += ["--workdir", self.workdir]
         env = dict(os.environ)
         env.setdefault("PYTHONIOENCODING", "utf-8")
+        if self.kapali:
+            env["APPRENTICE_TOOLS_OFF"] = ",".join(self.kapali)
         self.stderr_f = open(os.path.join(self.dir, "stderr.txt"), "w", encoding="utf-8")
         # stdin/stdout=DEVNULL SART: ikisi de MCP kanali. Olculdu: stdin miras alininca
         # cocuk Windows'ta ilk satirini bile yazmadan takildi (yalniz sunucu icinde).
@@ -203,6 +207,11 @@ class Job:
             elif t == "error":
                 rep["hatalar"].append(e.get("message", ""))
                 rep["derleme_durumu"] = "calistirilamadi"
+        if self.done and got_result and not rep["ozet"]:
+            # Olculdu: adim siniri dolunca isci nihai mesaj yazmadan bitti; denetci bunu
+            # "sessiz basari" sanmasin.
+            rep["hatalar"].append("isci nihai ozet yazmadi (adim siniri ya da bos cevap); "
+                                  "araclar listesine ve olcumlere bak")
         if self.done and not got_result and rep["derleme_durumu"] == "bilinmiyor":
             rep["derleme_durumu"] = "calistirilamadi"
             rep["hatalar"].append("isci sonuc yazmadan cikti (kod %s); bkz. %s" % (
@@ -278,7 +287,8 @@ def tool_worker_run(a: dict) -> dict:
               bool(a.get("play", False)),
               int(a.get("onarim", config.get("onarim.compile_rounds", 3))),
               config.env_or("UNITY_CODE_MODEL", "ollama.model"),
-              config.env_or("UNITY_MCP_URL", "unity.mcp_url"), workdir)
+              config.env_or("UNITY_MCP_URL", "unity.mcp_url"), workdir,
+              a.get("araclar_kapali") or [])
     JOBS[job.id] = job
     job.start()
     limit = float(a.get("zaman_asimi_s") or DEFAULT_TIMEOUT_S)
@@ -320,6 +330,8 @@ TOOLS = [
                                   "description": "Denetcinin yazdigi somut kriterler, her biri tek cumle."},
              "ortam": {"type": "string", "enum": list(ENVS), "default": "unity"},
              "calisma_dizini": {"type": "string", "description": "code ortami icin zorunlu: iscinin hapsedildigi klasor (mutlak yol)."},
+             "araclar_kapali": {"type": "array", "items": {"type": "string"},
+                                "description": "Bu turda isciden saklanacak arac adlari (orn. [\"play_observe\"]: olcumu denetci yapar, isci olcum-duzeltme dongusune giremez)."},
              "oturum": {"type": "string", "description": "Onceki worker_run'in 'oturum' degeri: isci ayni baglamla devam eder. Bos = yeni oturum."},
              "play": {"type": "boolean", "default": False,
                       "description": "unity: derlemeden sonra play moda girip calisma zamani hatasi ara."},

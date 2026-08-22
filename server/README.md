@@ -9,7 +9,7 @@ işi Ollama'daki yerel model yapar, sonucu derleyici/doğrulayıcı onaylar.
 ## Sözleşme
 
 ```
-worker_run(gorev, kabul_kriterleri, ortam="unity", calisma_dizini?, oturum?, play?, onarim?, zaman_asimi_s?)
+worker_run(gorev, kabul_kriterleri, ortam="unity", calisma_dizini?, oturum?, play?, onarim?, araclar_kapali?, zaman_asimi_s?)
 ```
 
 | girdi | tip | anlam |
@@ -21,6 +21,7 @@ worker_run(gorev, kabul_kriterleri, ortam="unity", calisma_dizini?, oturum?, pla
 | `oturum` | string | önceki çağrının `oturum`u verilirse işçi aynı bağlamla devam eder |
 | `play` | bool | unity: derlemeden sonra play moda girip çalışma zamanı hatası ara (vars. false) |
 | `onarim` | int | azami derleme onarım turu (vars. 3) |
+| `araclar_kapali` | string[] | bu turda işçiden saklanacak araçlar, ör. `["play_observe"]` — ölçümü denetçi yapar, işçi ölçüm-düzeltme döngüsüne giremez (ölçüldü: talimatla söylenince işçi iki turda yine ölçtü, ~400 s/tur) |
 | `zaman_asimi_s` | number | üst sınır (vars. 1800); aşılırsa işçi durdurulur |
 
 Dönüş:
@@ -43,6 +44,7 @@ Dönüş:
 
 Kurallar:
 
+- `ozet` boşsa `hatalar`a "işçi nihai özet yazmadı" düşer (adım sınırı dolmuş demektir; sessiz başarı sanma).
 - `derleme_durumu == "derlendi"` yalnızca **derleyicinin** onayıdır. Kabul kriterlerinin
   sağlanıp sağlanmadığına `olcumler`e bakarak **denetçi** karar verir.
 - Ölçümler ham gelir. Ölçülen: işçi kendi ölçümünü yorumlayıp düzeltmeye kalkınca

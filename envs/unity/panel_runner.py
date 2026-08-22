@@ -172,6 +172,10 @@ def main() -> int:
             em.emit("system", subtype="init", model=a.model, session_id=a.session)
 
             tools = UC.build_tools(srv)
+            kapali = [k.strip() for k in os.environ.get("APPRENTICE_TOOLS_OFF", "").split(",") if k.strip()]
+            if kapali:
+                tools = [t for t in tools if (t.get("function") or t).get("name") not in kapali]
+                em.emit("system", subtype="tools_off", tools=kapali)
             written: list = []
             dispatch = wrap_dispatch(
                 guarded_dispatch(tools, UC.make_dispatch(srv, written)), em, srv)
