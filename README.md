@@ -15,7 +15,7 @@ Türkçede *Çırak*. Usta bakar, çırak yapar.
 ölçümüne bakarak düzeltmeye çalışınca yakınsamadı (en küçük mesafe 1.15 → 0.01). Aynı
 ölçüm *özetlenip* "sert kısıt gerek" diye verilince 2 turda çözdü. Yazma ve araç kullanma
 yerelde güçlü; ham veriyi yorumlama ve durma kararı büyük modelde. Kanıtlar ve bütün
-deneyler [apprentice-lab](https://github.com/malikkayaalp/Q3CNFU) deposunda.
+deneyler [apprentice-lab](https://github.com/malikkayaalp/apprentice-lab) deposunda.
 
 ## Yapı
 
