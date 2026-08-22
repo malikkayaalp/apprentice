@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+reports/
+*.meta
+Library/
+.vs/
+apprentice.config.json
+mcpbridge/servers.json

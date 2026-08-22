@@ -1,0 +1,37 @@
+{
+  "_comment": [
+    "Real MCP server wiring. Copy to servers.json and edit paths.",
+    "Both Unity and Unreal MCP servers are stdio processes, same as the fake one,",
+    "so mcpbridge/client.py drives them without changes.",
+    "Unity: MCP for Unity (CoplayDev) exposes ~10 umbrella tools; the Unity Editor",
+    "must be running with the MCP for Unity package installed and the bridge connected.",
+    "Unreal: most community servers need the Python plugin enabled in the project",
+    "(Edit > Plugins > Python Editor Script Plugin) and remote execution turned on."
+  ],
+  "servers": {
+    "unity": {
+      "command": "uv",
+      "args": ["--directory", "C:/Users/<you>/AppData/Local/UnityMCP/UnityMcpServer/src", "run", "server.py"],
+      "cwd": null,
+      "env": {},
+      "enabled": false,
+      "notes": "Path is what the MCP for Unity window prints under 'Manual Configuration'."
+    },
+    "unreal": {
+      "command": "uv",
+      "args": ["--directory", "C:/path/to/unreal-mcp/Python", "run", "unreal_mcp_server.py"],
+      "cwd": null,
+      "env": {},
+      "enabled": false,
+      "notes": "Start the Unreal Editor first; the server connects to the editor bridge."
+    },
+    "fake_unity": {
+      "command": "python",
+      "args": ["mcpbridge/fake_unity_server.py"],
+      "cwd": null,
+      "env": {},
+      "enabled": true,
+      "notes": "Offline stand-in used by mcp_test.py."
+    }
+  }
+}
