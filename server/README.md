@@ -1,0 +1,130 @@
+# Apprentice MCP sunucusu
+
+**A local model does the work, a frontier model supervises.**
+
+`server/apprentice_server.py` bağımlılıksız (stdlib) bir stdio MCP sunucusudur. Denetçi
+(IDE'nizdeki Claude / GPT / Gemini ya da Claude Code) buna bağlanır ve tek aracı çağırır;
+işi Ollama'daki yerel model yapar, sonucu derleyici/doğrulayıcı onaylar.
+
+## Sözleşme
+
+```
+worker_run(gorev, kabul_kriterleri, ortam="unity", calisma_dizini?, oturum?, play?, onarim?, zaman_asimi_s?)
+```
+
+| girdi | tip | anlam |
+|---|---|---|
+| `gorev` | string | ne yapılacak, düz dille; dosya/obje adlarını ver |
+| `kabul_kriterleri` | string[] | **denetçi yazar**, somut ve ölçülebilir; göreve metin olarak eklenir |
+| `ortam` | `unity` \| `code` \| `fake` | araç seti + doğrulayıcı. `code` = genel kod (taslak), `fake` = Unity/Ollama'sız duman testi |
+| `calisma_dizini` | string | `code` için zorunlu: işçinin hapsedildiği klasör (dışına okuyamaz/yazamaz, silemez) |
+| `oturum` | string | önceki çağrının `oturum`u verilirse işçi aynı bağlamla devam eder |
+| `play` | bool | unity: derlemeden sonra play moda girip çalışma zamanı hatası ara (vars. false) |
+| `onarim` | int | azami derleme onarım turu (vars. 3) |
+| `zaman_asimi_s` | number | üst sınır (vars. 1800); aşılırsa işçi durdurulur |
+
+Dönüş:
+
+```json
+{
+  "yazilan_dosyalar": [{"yol": "Assets/Scripts/X.cs", "yeni": true, "eklendi": 41, "silindi": 0, "satir": 41}],
+  "derleme_durumu": "derlendi | derleme_hatasi | calistirilamadi | zaman_asimi",
+  "hatalar": ["...derleyici / çalışma zamanı / altyapı..."],
+  "tur_sayisi": 1,
+  "sure": 73.4,
+  "ozet": "işçinin kendi anlatımı — beyan, kanıt değil",
+  "olcumler": [{"arac": "play_observe", "sonuc": "HAM çıktı", "sure_s": 8.2}],
+  "araclar": ["read_script Assets/Scripts/X.cs", "write_script Assets/Scripts/X.cs", "..."],
+  "play": {"dogrulandi": true, "hatalar": []},
+  "oturum": "20260822-231500-a1b2c3",
+  "is_id": "...", "is_klasoru": "~/.apprentice/jobs/<id>"
+}
+```
+
+Kurallar:
+
+- `derleme_durumu == "derlendi"` yalnızca **derleyicinin** onayıdır. Kabul kriterlerinin
+  sağlanıp sağlanmadığına `olcumler`e bakarak **denetçi** karar verir.
+- Ölçümler ham gelir. Ölçülen: işçi kendi ölçümünü yorumlayıp düzeltmeye kalkınca
+  yakınsamadı (en küçük mesafe 1.15 → 0.01); aynı ölçüm özetlenip "sert kısıt gerek"
+  diye verilince 2 turda çözdü. Bu yüzden denetçi özetler, aynı `oturum` ile yeni
+  `worker_run` çağırır.
+- Bir tur 60–300 s sürer; `play` ile daha uzun. İstemcinin araç zaman aşımını buna göre
+  ayarla (Claude Code: `MCP_TOOL_TIMEOUT` ms cinsinden, ör. `1800000`).
+- İş dosyaları: `~/.apprentice/jobs/<id>/` → `prompt.txt` (işçinin gördüğü tam metin),
+  `events.jsonl` (ham olay akışı), `stderr.txt`, `job.json`. Sohbet bağlamı
+  `~/.apprentice/sessions/<ortam>/<oturum>.json`. Ev `APPRENTICE_HOME` ile değişir.
+
+## Örnek çağrı
+
+```json
+{
+  "name": "worker_run",
+  "arguments": {
+    "gorev": "Suru altındaki 8 küre XZ düzleminde rastgele hareket etsin.",
+    "kabul_kriterleri": [
+      "Hiçbir anda hiçbir küre çifti birbirine 2 birimden yakın olmasın.",
+      "Her kürenin |x| ve |z| değeri 5'i aşmasın.",
+      "play_observe ile 15 saniye boyunca doğrula ve ölçümü ham raporla."
+    ],
+    "ortam": "unity",
+    "play": true
+  }
+}
+```
+
+## Bağlanma
+
+**Claude Code** — depo kökündeki `.mcp.json` otomatik görülür; `claude` bu klasörde
+açılınca "apprentice" sunucusunu onaylaması istenir. Başka bir projeden:
+
+```bash
+claude mcp add apprentice -- python C:/yol/Apprentice/server/apprentice_server.py
+```
+
+**Cursor** — `.cursor/mcp.json` (proje) ya da `~/.cursor/mcp.json` (genel):
+
+```json
+{ "mcpServers": { "apprentice": { "command": "python",
+    "args": ["C:/yol/Apprentice/server/apprentice_server.py"],
+    "env": { "PYTHONIOENCODING": "utf-8" } } } }
+```
+
+**VS Code (Copilot)** — `.vscode/mcp.json`, aynı `command`/`args` ile `"servers"` altında.
+
+Ortam değişkenleri: `APPRENTICE_HOME`, `APPRENTICE_TIMEOUT_S`, `APPRENTICE_PYTHON`
+(işçi için ayrı yorumlayıcı), `UNITY_CODE_MODEL`, `UNITY_MCP_URL`. Diğer ayarlar
+`apprentice.config.json` (şablon: `apprentice.config.template.json`; öncelik env >
+dosya > şablon > kod).
+
+## Ortamlar
+
+| ortam | araçlar | doğrulayıcı | koşucu |
+|---|---|---|---|
+| `unity` | read/write_script, list_scripts, scene_objects, inspect_object, hierarchy, add_component, set_field, play_observe… | Unity derleyicisi (+ play, play_observe) | `envs/unity/panel_runner.py` |
+| `code` | read_file, write_file, list_files, run_shell, run_tests | `compile()` + pytest (yoksa stdlib unittest) | `envs/code/code_runner.py` |
+| `fake` | — | — | `envs/fake/fake_runner.py` (olay şemasını taklit eder) |
+
+## Test
+
+```bash
+python tests/test_server.py          # Unity/Ollama gerekmez: el sıkışma, şema, hata yolları,
+                                     # fake ortamla 4 senaryo (başarı / derleme hatası / çökme / zaman aşımı)
+python tests/test_server.py --live   # + gerçek Unity turu (Ollama + MCP for Unity açık)
+python tests/test_code_env.py [--live]   # code ortamı: hapis/araçlar/doğrulayıcı; --live gerçek görev
+python tests/suru_kabul.py           # denetçi-işçi kabul testi: Suru görevi, bağımsız 15 sn ölçüm
+```
+
+Ön koşullar `worker_run` içinde kontrol edilir: Ollama kapalıysa, model yüklü değilse
+ya da Unity köprüsü yoksa işçi hiç başlatılmaz, `derleme_durumu: calistirilamadi` ve
+sebep `hatalar`da döner.
+
+## Tasarım notları
+
+- İşçi **ayrık süreç** (`envs/<ortam>/panel_runner.py`): tur dakikalar sürer, Unity domain
+  reload yapar, işçi çökse sunucu ayakta kalır. Prompt komut satırından değil dosyadan
+  geçer (kaçış kazaları).
+- Çocuğun stdin/stdout'u `DEVNULL`: ikisi de MCP kanalı. Ölçülen: stdin miras alınınca
+  çocuk Windows'ta ilk satırını bile yazmadan takıldı.
+- `tools/call` ayrı iş parçacığında; `ping` uzun tur sırasında da cevaplanır.
+- Q3CNFU Unity paneli aynı koşucuyu kullanır; sunucu panelin IDE-bağımsız karşılığıdır.

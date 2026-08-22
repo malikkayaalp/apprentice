@@ -1,23 +1,30 @@
-"""Apprentice MCP sunucusunun stdio sozlesme testi.
+"""Apprentice MCP sunucusunun sozlesme testi.
 
-    python tests/test_server.py            # initialize, tools/list, worker_env (Unity/Ollama gerekmez)
-    python tests/test_server.py --live     # + gercek worker_run (Ollama + Unity koprusu acik olmali)
+    python tests/test_server.py            # Unity/Ollama GEREKMEZ: stdio el sikisma, tools/list,
+                                           # hata yollari, fake ortamla tam boru hatti (4 senaryo)
+    python tests/test_server.py --live     # + gercek worker_run (Ollama + Unity koprusu acik)
 
-Sunucuyu ayrik surec olarak baslatir ve gercek bir MCP istemcisi gibi konusur; boylece
-stdout'a karisan tek bir yabanci satir bile burada yakalanir.
+Sunucuyu ayrik surec olarak baslatir ve gercek bir MCP istemcisi gibi konusur; stdout'a
+karisan tek bir yabanci satir bile burada yakalanir. Fake ortam (envs/fake) isciyi taklit
+eder ve mcpbridge/fake_unity_server.py'ye gercekten baglanir.
 """
 from __future__ import annotations
 import json, os, subprocess, sys, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SERVER = os.path.join(ROOT, "server", "apprentice_mcp.py")
+SERVER = os.path.join(ROOT, "server", "apprentice_server.py")
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
+SOZLESME = {"yazilan_dosyalar": list, "derleme_durumu": str, "hatalar": list,
+            "tur_sayisi": int, "sure": (int, float), "ozet": str}
 
 
 class Client:
-    def __init__(self):
+    def __init__(self, env=None):
+        e = dict(os.environ)
+        e.update(env or {})
         self.p = subprocess.Popen([sys.executable, SERVER], stdin=subprocess.PIPE,
-                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=ROOT)
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=ROOT, env=e)
         self._id = 0
 
     def call(self, method, params=None, timeout=60):
@@ -39,6 +46,9 @@ class Client:
                 return msg["result"]
         raise TimeoutError(method)
 
+    def tool(self, name, args, timeout=60):
+        return self.call("tools/call", {"name": name, "arguments": args}, timeout)
+
     def notify(self, method, params=None):
         self.p.stdin.write((json.dumps({"jsonrpc": "2.0", "method": method,
                                         "params": params or {}}) + "\n").encode("utf-8"))
@@ -52,9 +62,19 @@ class Client:
             self.p.kill()
 
 
+def sema_kontrol(rep: dict):
+    for k, t in SOZLESME.items():
+        assert k in rep, "eksik alan: %s" % k
+        assert isinstance(rep[k], t), "%s tipi %s, beklenen %s" % (k, type(rep[k]).__name__, t)
+    for d in rep["yazilan_dosyalar"]:
+        for k in ("yol", "yeni", "eklendi", "silindi", "satir"):
+            assert k in d, "yazilan_dosyalar eksik alan: %s" % k
+
+
 def main() -> int:
     live = "--live" in sys.argv
-    c = Client()
+    home = os.path.join(ROOT, ".apprentice_test_home")
+    c = Client({"APPRENTICE_HOME": home})
     ok = True
     try:
         r = c.call("initialize", {"protocolVersion": "2024-11-05", "capabilities": {},
@@ -65,54 +85,80 @@ def main() -> int:
         tools = c.call("tools/list")["tools"]
         names = [t["name"] for t in tools]
         print("tools:", names)
-        assert names == ["worker_run", "worker_status", "worker_env"], names
-        for t in tools:
-            assert t["inputSchema"]["type"] == "object"
+        assert names == ["worker_run"], names
+        sch = tools[0]["inputSchema"]
+        assert sch["type"] == "object" and set(sch["required"]) == {"gorev", "kabul_kriterleri"}
 
-        env = c.call("tools/call", {"name": "worker_env", "arguments": {}})["structuredContent"]
-        print("worker_env:", json.dumps({k: v for k, v in env.items() if k != "ortamlar"}, ensure_ascii=False)[:300])
-        print("  ortamlar:", json.dumps(env["ortamlar"], ensure_ascii=False)[:400])
-
-        # Hata yollari: bos gorev, bilinmeyen ortam, planli ortam, bilinmeyen is
-        r = c.call("tools/call", {"name": "worker_run", "arguments": {"gorev": "", "kabul_kriterleri": []}})
+        # Hata yollari
+        r = c.tool("worker_run", {"gorev": "", "kabul_kriterleri": []})
         assert r["isError"] and "bos" in r["structuredContent"]["hata"], r
-        r = c.call("tools/call", {"name": "worker_run", "arguments": {"gorev": "x", "kabul_kriterleri": [], "ortam": "yok"}})
+        r = c.tool("worker_run", {"gorev": "x", "kabul_kriterleri": [], "ortam": "yok"})
         assert r["isError"] and "bilinmeyen ortam" in r["structuredContent"]["hata"]
-        r = c.call("tools/call", {"name": "worker_run", "arguments": {"gorev": "x", "kabul_kriterleri": [], "ortam": "code"}})
-        assert r["isError"] and "planli" in r["structuredContent"]["hata"]
-        r = c.call("tools/call", {"name": "worker_status", "arguments": {"is_id": "yok"}})
-        assert r["isError"]
+        r = c.tool("worker_run", {"gorev": "x", "kabul_kriterleri": [], "ortam": "code"})
+        assert r["isError"] and "calisma_dizini" in r["structuredContent"]["hata"]
         try:
-            c.call("tools/call", {"name": "yok", "arguments": {}})
+            c.tool("yok", {})
             raise AssertionError("bilinmeyen arac hata vermedi")
         except RuntimeError as e:
             assert "bilinmeyen arac" in str(e)
         print("hata yollari: ok")
 
+        # Fake ortam: tam boru hatti (surec, prompt-file, JSONL -> rapor)
+        rep = c.tool("worker_run", {"gorev": "FakeSmoke.cs yaz", "ortam": "fake",
+                                    "kabul_kriterleri": ["derlenir", "Start'ta log"]},
+                     timeout=120)["structuredContent"]
+        sema_kontrol(rep)
+        assert rep["derleme_durumu"] == "derlendi", rep
+        assert rep["tur_sayisi"] == 1 and not rep["hatalar"]
+        assert [d["yol"] for d in rep["yazilan_dosyalar"]] == ["Assets/Scripts/FakeSmoke.cs"]
+        assert rep["yazilan_dosyalar"][0]["yeni"] and rep["yazilan_dosyalar"][0]["eklendi"] == 2
+        assert rep["olcumler"] and rep["olcumler"][0]["arac"] == "read_console"
+        assert "FakeSmoke" in rep["ozet"]
+        assert os.path.exists(os.path.join(home, "sessions", "fake", rep["oturum"] + ".json"))
+        with open(os.path.join(home, "jobs", rep["is_id"], "prompt.txt"), encoding="utf-8") as f:
+            pt = f.read()
+        assert "KABUL KRITERLERI" in pt and "- derlenir" in pt and "- Start'ta log" in pt
+        print("fake/basari: ok  (%s, %.1fs)" % (rep["derleme_durumu"], rep["sure"]))
+
+        rep = c.tool("worker_run", {"gorev": "HATA_URET", "ortam": "fake", "kabul_kriterleri": ["x"]},
+                     timeout=120)["structuredContent"]
+        sema_kontrol(rep)
+        assert rep["derleme_durumu"] == "derleme_hatasi" and rep["tur_sayisi"] == 2
+        assert rep["hatalar"] and "CS0000" in rep["hatalar"][0]
+        print("fake/derleme_hatasi: ok")
+
+        rep = c.tool("worker_run", {"gorev": "COK", "ortam": "fake", "kabul_kriterleri": ["x"]},
+                     timeout=120)["structuredContent"]
+        sema_kontrol(rep)
+        assert rep["derleme_durumu"] == "calistirilamadi" and "sonuc yazmadan" in rep["hatalar"][0], rep
+        print("fake/cokme: ok")
+
+        rep = c.tool("worker_run", {"gorev": "YAVAS", "ortam": "fake", "kabul_kriterleri": ["x"],
+                                    "zaman_asimi_s": 1}, timeout=120)["structuredContent"]
+        sema_kontrol(rep)
+        assert rep["derleme_durumu"] == "zaman_asimi"
+        print("fake/zaman_asimi: ok")
+
         if live:
-            if not env["ortamlar"]["unity"]["hazir"] or not env["ollama"]["acik"]:
-                print("LIVE atlandi: unity koprusu/ollama hazir degil")
-            else:
-                args = {"gorev": "Assets/Scripts/ApprenticeSmoke.cs adinda bir MonoBehaviour yaz.",
-                        "kabul_kriterleri": ["Dosya derlenir, sinif adi ApprenticeSmoke.",
-                                             "Start icinde Debug.Log(\"apprentice ok\") cagrilir.",
-                                             "Baska hicbir sey yapmaz, Update yok."],
-                        "ortam": "unity", "bekle": False}
-                r = c.call("tools/call", {"name": "worker_run", "arguments": args})["structuredContent"]
-                jid = r["is_id"]
-                print("live is:", jid, r["durum"])
-                t0 = time.time()
-                while time.time() - t0 < 600:
-                    time.sleep(5)
-                    r = c.call("tools/call", {"name": "worker_status", "arguments": {"is_id": jid}})["structuredContent"]
-                    print("  %4.0fs %s araclar=%d" % (time.time() - t0, r["durum"], len(r["araclar"])))
-                    if r["durum"] == "bitti":
-                        break
-                print(json.dumps({k: r[k] for k in ("ok", "derleme", "dosyalar", "ozet", "hata", "sure_s")},
-                                 ensure_ascii=False, indent=1))
-                ok = ok and r["ok"] is True and any(d["yol"].endswith("ApprenticeSmoke.cs") for d in r["dosyalar"])
+            args = {"gorev": "Assets/Scripts/ApprenticeSmoke.cs adinda bir MonoBehaviour yaz.",
+                    "kabul_kriterleri": ["Dosya derlenir, sinif adi ApprenticeSmoke.",
+                                         "Start icinde Debug.Log(\"apprentice ok\") cagrilir.",
+                                         "Baska hicbir sey yapmaz, Update yok."],
+                    "ortam": "unity"}
+            t0 = time.time()
+            rep = c.tool("worker_run", args, timeout=900)["structuredContent"]
+            sema_kontrol(rep)
+            print(json.dumps({k: rep.get(k) for k in ("derleme_durumu", "hatalar", "yazilan_dosyalar",
+                                                      "tur_sayisi", "sure", "ozet")},
+                             ensure_ascii=False, indent=1))
+            canli = rep["derleme_durumu"] == "derlendi" and \
+                any(d["yol"].endswith("ApprenticeSmoke.cs") for d in rep["yazilan_dosyalar"])
+            print("live: %s (%.0fs)" % ("ok" if canli else "KALDI", time.time() - t0))
+            ok = ok and canli
     except Exception as e:
         ok = False
+        import traceback
+        traceback.print_exc()
         print("HATA:", e)
     finally:
         c.close()

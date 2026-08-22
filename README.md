@@ -23,8 +23,8 @@ deneyler [apprentice-lab](https://github.com/malikkayaalp/apprentice-lab) deposu
 core/            Ollama istemcisi, şema koruması, araç döngüsü — ortamdan bağımsız
 mcpbridge/       MCP taşıma (stdio + Streamable HTTP), bağımlılıksız
 envs/unity/      Unity ortamı: araçlar, derleme/play doğrulama, play_observe, sandbox hapsi
-envs/code/       genel kod ortamı (planlı): dosya, shell, test, git
-server/          MCP sunucusu: worker_run(görev, kabul_kriterleri, ortam) + status/env
+envs/code/       genel kod ortamı (taslak): dosya oku/yaz, shell, test; hapis + unittest/pytest doğrulayıcı
+server/          MCP sunucusu: tek araç worker_run(görev, kabul_kriterleri, ortam) — bkz. server/README.md
 clients/unity/   Q3CNFU — Unity Editor paneli (UPM paketi)
 clients/web/     canlı izleme sayfası (planlı)
 tests/           hapis öz-testi
@@ -44,25 +44,22 @@ tarafından otomatik görülür (`claude` bu klasörde açılınca "apprentice" 
 Cursor / VS Code için aynı girdiyi kendi MCP ayarına kopyala:
 
 ```json
-{ "mcpServers": { "apprentice": { "command": "python", "args": ["C:/yol/Apprentice/server/apprentice_mcp.py"] } } }
+{ "mcpServers": { "apprentice": { "command": "python", "args": ["C:/yol/Apprentice/server/apprentice_server.py"] } } }
 ```
 
 Araçlar:
 
 | araç | ne yapar |
 |---|---|
-| `worker_run(gorev, kabul_kriterleri[], ortam="unity", oturum?, play?, onarim?, bekle?, zaman_asimi_s?)` | işçiyi koşturur; derleme sonucu, yazılan dosyalar (+/-), ham ölçümler, işçinin özeti döner |
-| `worker_status(is_id, olaylar?, durdur?)` | süren/biten işin raporu; `bekle=false` ile başlatılan işler için |
-| `worker_env()` | Ollama / model / ortam köprüsü hazır mı |
+| `worker_run(gorev, kabul_kriterleri[], ortam="unity"\|"code", calisma_dizini?, oturum?, play?, onarim?, zaman_asimi_s?)` | işçiyi koşturur; `{yazilan_dosyalar, derleme_durumu, hatalar, tur_sayisi, sure, ozet, olcumler}` döner |
 
 Sözleşme: **kabul kriterini denetçi yazar** (işçinin en zayıf yeri), `ok` yalnızca
 derleyici/doğrulayıcının onayıdır, kriterlerin sağlanıp sağlanmadığına denetçi karar
 verir. Ölçümler ham gelir; denetçi özetleyip aynı `oturum` ile düzeltme istetir. Bir
-tur dakikalar sürer — istemcinin araç zaman aşımı kısaysa (`MCP_TOOL_TIMEOUT`)
-`bekle=false` + `worker_status`. İş dosyaları `~/.apprentice/jobs/<id>/` (prompt,
+tur dakikalar sürer — istemcinin araç zaman aşımını (`MCP_TOOL_TIMEOUT`) buna göre ayarla. İş dosyaları `~/.apprentice/jobs/<id>/` (prompt,
 olaylar, stderr), sohbet bağlamı `~/.apprentice/sessions/<ortam>/`.
 
-Test: `python tests/test_server.py` (Unity/Ollama gerekmez), `--live` ile gerçek tur.
+Test: `python tests/test_server.py` (Unity/Ollama gerekmez), `tests/test_code_env.py`, `tests/suru_kabul.py` (kabul testi). Ayrıntı: [server/README.md](server/README.md).
 
 ## Unity paneli (Q3CNFU)
 
