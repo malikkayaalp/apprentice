@@ -8,4 +8,5 @@ apprentice.config.json
 mcpbridge/servers.json
 .apprentice_test_home/
 deneme/
-envs/unity/          # apprentice-unity eklentisi buraya klonlanir
+# apprentice-unity eklentisi buraya klonlanir (ayri depo)
+envs/unity/
