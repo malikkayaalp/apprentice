@@ -97,7 +97,9 @@ TOOLS = [
         "name": "run_tests",
         "description": "Testleri calistir (%s); sonucu ve cikis kodunu doner." % TEST_ADI,
         "parameters": {"type": "object", "properties": {
-            "args": {"type": "string", "description": "ek pytest argumanlari (istege bagli)"}},
+            "args": {"type": "string", "description": "istege bagli: test dosyasi/modulu "
+                     "(orn 'test_x.py' ya da 'tests/test_x.py') veya ek %s argumani. "
+                     "Bos birakirsan tum testler kosar - kabul olcumu budur." % TEST_ADI}},
             "required": []}}},
 ]
 
@@ -187,9 +189,38 @@ def _run(jail: Jail, written: list, em, name: str, a: dict):
             return {"error": "komut reddedildi (%s): silme ve push bu ortamda yok" % ", ".join(vur)}
         return shell(cmd, jail.root)
     if name == "run_tests":
-        cmd = TEST_CMD + [x for x in str(a.get("args") or "").split() if x]
-        return shell(cmd, jail.root)
+        return shell(_test_cmd(str(a.get("args") or "")), jail.root)
     return {"error": "bilinmeyen arac %r" % name}
+
+
+def _test_cmd(args: str) -> list:
+    """run_tests komutunu kur.
+
+    OLCULDU (2026-08-23, Cursor turu): isci makul bicimde run_tests(args="test_x.py")
+    cagirdi; TEST_CMD pytest yoksa "unittest discover" oldugu icin ilk konumsal arguman
+    BASLANGIC DIZINI sayildi -> "Start directory is not importable: 'test_x.py'". Isci
+    ayni testi run_shell ile kosup gecti gordu ve "testler gecti" dedi; resmi olcum
+    kirmizi kaldi. Yani sahte bir beyan-olcum celiskisi URETTIK - mimarinin dayandigi
+    sinyali kirletir. unittest'te dosya/yol argumani modul adina cevrilir.
+    """
+    ek = [x for x in args.split() if x]
+    if not ek or HAS_PYTEST:
+        return TEST_CMD + ek                      # pytest dosya yolunu zaten anlar
+
+    moduller, bayraklar = [], []
+    for x in ek:
+        if x.startswith("-"):
+            bayraklar.append(x)
+            continue
+        y = x.replace("\\", "/").strip("/")
+        if y.endswith(".py"):
+            y = y[:-3]
+        moduller.append(y.replace("/", "."))
+
+    if not moduller:
+        return TEST_CMD + bayraklar
+    # discover DEGIL: modul adiyla dogrudan kosulur.
+    return [x for x in TEST_CMD if x != "discover"] + bayraklar + moduller
 
 
 # ----------------------------------------------------------------- dogrulayici
