@@ -170,3 +170,39 @@ Sonuç: kararlı durum kriterleri iki ayrı koşuda 21/22 örnekte tutuyor (min_
 2. Lider takibi: ilk 3 sn geçişi (Start'ta halkayı liderin o anki konumuna göre kurup ilk Update'ten önce bir sert çözümleme).
 3. Cursor'dan aynı akış (`.cursor/mcp.json` hazır, denenmedi — bu oturumda Cursor yok).
 4. UPM paket yerleşimi + README (TR/EN, ekran görüntülü) — kullanıcı hedefi.
+
+---
+
+# Cursor denetçi deneyi — A: Cursor→çırak (2026-08-23 03:02–03:30, kullanıcı uzakta, nöbetçi izledi)
+
+Kurulum: `~/.cursor/mcp.json`'a apprentice eklendi (unityMCP ile yan yana). Cursor'ın modeli denetçi,
+`worker_run` çırak. Görev: 8 küre r=4 çemberde 45° aralıkla saat yönünde dönsün (12 sn/tur), y=0.5;
+eski bileşenler kaldırılmadan kapatılsın. Ölçüm: `tests/devriye_olc.py` (bağımsız, 15 sn, Unity içi toplu örnekleme).
+
+| iş | başlangıç | süre | ne oldu |
+|---|---|---|---|
+| 1 | 03:02:36 | >150 s → **Cursor iptal etti** | script yazıldı; sunucu iptali dinlemediği için işçi zombi kaldı (elle öldürdüm) |
+| 2 | 03:05:06 | >150 s → iptal | Cursor önceki çıktıyı unityMCP ile okuyup "Update hatalı" dedi; `oturum` geçirmedi (yeni bağlam) |
+| 3 | 03:07:43 | 143 s ✓ | sahne kurulumu; işçi SuruYoneticisi'ni kapattı ama **SuruDevriye'yi de kapattı**, istenmeyen `SuruDevreDisiYapici.cs` yazdı |
+| 4 | 03:11:12 | 355 s → iptal | Cursor "SuruDevreDisiYapici SuruDevriye'yi de kapatıyor" diye yakaladı (doğru) |
+| 5 | 03:18:57 | 238 s → iptal | Cursor "ters yön, 33.6 sn/tur" dedi (**yanlış**: yön uzlaşımı ve ölçüm hatası) |
+| 6 | 03:23:52 | 359 s → iptal | "missing script" hatası: işçi yardımcı dosyayı **boşaltarak silmiş**, kırık bileşen kalmış; **33 kez** aynı dosyayı yazarak düzeltmeye çalıştı |
+
+**Bağımsız ölçüm (son hal, 20 örnek):** yarıçap 3.999–4.001 (0 ihlal), komşu açı 45.0° (0 ihlal), y=0.5,
+**tur 12.0 sn, saat yönü → GEÇTİ.** Kalan: Suru'da kırık bileşen + boş `SuruDevreDisiYapici.cs` (temizlik).
+
+## Bulgular
+1. **Cursor'ın araç zaman aşımı ~150 sn** < Unity turu (140–360 s). 6 işten 5'i iptal edildi; Cursor sonucu
+   görmeden bir sonraki turu başlattı, ama unityMCP ile sahneyi okuyarak yine de doğru teşhis koydu.
+   Düzeltme (commit `ff6b8bc`): sunucu `notifications/cancelled` alınca işçiyi öldürür; `bekle=false` +
+   `worker_status` eklendi. Cursor'ın sunucu süreci eski koddaydı — MCP yenilenince devreye girer.
+2. **Zombi işçiler**: iptal dinlenmeyince iki işçi aynı dosyaya paralel yazdı. Aynı düzeltme.
+3. **Dosya boşaltarak silme** → kırık bileşen → düzeltilemez döngü (33 yazma). Düzeltme (`3c6e179`):
+   `remove_missing_components` aracı (yalnızca kırık bileşen), hata mesajına çözüm ipucu, sistem istemine "boşaltma".
+4. **Denetçi de yanılır**: Cursor yönü ters ve süreyi 33.6 sn okudu; benim ölçüm betiğim de ilk sürümde aynı iki
+   hatayı yaptı (açı sarması + Unity saat yönü uzlaşımı). Düzeltilmiş ölçüm 12.0 sn, saat yönü. Denetçinin
+   ölçüm aracı da doğrulanmalı — kriter "sayıyla" olunca hata görünür oldu.
+5. Cursor `oturum` parametresini hiç kullanmadı (her tur yeni bağlam); görevleri kendi kendine yeterli yazdığı
+   için iş yine yürüdü ama işçi her turda dosyaları baştan okudu.
+
+**B (Cursor tek başına, unityMCP ile) henüz koşmadı** — kullanıcı dönünce.
