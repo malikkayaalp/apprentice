@@ -41,17 +41,34 @@ DEFAULT_TIMEOUT_S = float(os.environ.get("APPRENTICE_TIMEOUT_S", "1800"))
 
 ICERIK_SINIRI = int(os.environ.get("APPRENTICE_ICERIK_SINIRI", "12000"))   # dosya icerigi/karakter
 # Olcum sayilan araclar: sonuclari ham olarak denetciye tasinir.
-MEASURE_TOOLS = {"play_observe", "read_console", "scene_objects", "inspect_object"}
+MEASURE_TOOLS = {"play_observe", "read_console", "scene_objects", "inspect_object", "run_tests"}
 
-ENVS = {
-    "unity": {"runner": os.path.join(ROOT, "envs", "unity", "panel_runner.py"),
-              "aciklama": "Unity Editor: write_script/read_script + derleme, opsiyonel play/play_observe. MCP for Unity koprusu gerekir."},
-    "fake": {"runner": os.path.join(ROOT, "envs", "fake", "fake_runner.py"),
-             "aciklama": "Duman testi: Unity/Ollama olmadan ayni olay semasi."},
-    "code": {"runner": os.path.join(ROOT, "envs", "code", "code_runner.py"),
-             "aciklama": "Genel kod ortami (TASLAK): read/write_file, list_files, run_shell, run_tests; "
-                         "dogrulayici py_compile + pytest. calisma_dizini zorunlu."},
-}
+def _ortamlari_kesfet() -> dict:
+    """envs/<ad>/env.json olan her klasor bir ortamdir. Unity bir EKLENTIDIR: klasor yoksa
+    'unity' secenegi hic gorunmez; Cursor/Claude Code kullanicisi Unity ile muhatap olmaz."""
+    out = {}
+    kok = os.path.join(ROOT, "envs")
+    if not os.path.isdir(kok):
+        return out
+    for ad in sorted(os.listdir(kok)):
+        p = os.path.join(kok, ad, "env.json")
+        if not os.path.isfile(p):
+            continue
+        try:
+            with open(p, encoding="utf-8") as f:
+                meta = json.load(f)
+        except Exception:
+            continue
+        kosucu = os.path.join(kok, ad, meta.get("kosucu", ""))
+        if not os.path.isfile(kosucu):
+            continue
+        meta["runner"] = kosucu
+        out[meta.get("ad", ad)] = meta
+    return out
+
+
+ENVS = _ortamlari_kesfet()
+VARSAYILAN_ORTAM = "code" if "code" in ENVS else (next(iter(ENVS)) if ENVS else "code")
 
 PROMPT_TMPL = (
     "{gorev}\n\n"
@@ -297,7 +314,7 @@ _CUR_REQ = threading.local()
 def _precheck(ortam: str) -> str:
     """Isciyi baslatmadan once acik bir sebep varsa onu dondur (bos = sorun yok)."""
     import urllib.request, urllib.error
-    if ortam == "fake":
+    if "ollama" not in (ENVS.get(ortam, {}).get("on_kosul") or []):
         return ""
     ollama = (config.get("ollama.url") or "http://localhost:11434").rstrip("/")
     model = config.env_or("UNITY_CODE_MODEL", "ollama.model")
@@ -308,7 +325,7 @@ def _precheck(ortam: str) -> str:
         return "Ollama'ya ulasilamadi (%s): %s" % (ollama, str(e)[:120])
     if model not in names:
         return "model yuklu degil: %s (ollama pull gerekli; yuklu: %s)" % (model, names)
-    if ortam == "unity":
+    if "unity_koprusu" in (ENVS.get(ortam, {}).get("on_kosul") or []):
         url = config.env_or("UNITY_MCP_URL", "unity.mcp_url")
         try:
             urllib.request.urlopen(urllib.request.Request(url, method="GET"), timeout=3)
@@ -328,13 +345,13 @@ def tool_worker_run(a: dict) -> dict:
     kriterler = a.get("kabul_kriterleri") or []
     if isinstance(kriterler, str):
         kriterler = [k for k in kriterler.splitlines() if k.strip()]
-    ortam = str(a.get("ortam") or "unity")
+    ortam = str(a.get("ortam") or VARSAYILAN_ORTAM)
     if ortam not in ENVS:
         return {"hata": "bilinmeyen ortam %r; secenekler: %s" % (ortam, list(ENVS))}
     if not ENVS[ortam]["runner"]:
         return {"hata": "ortam %r planli, henuz yok" % ortam}
     workdir = str(a.get("calisma_dizini") or "")
-    if ortam == "code":
+    if ENVS.get(ortam, {}).get("kosucu") == "code_runner.py" or ortam == "code":
         kok = calisma_koku()
         if not workdir:
             workdir = kok
@@ -422,7 +439,9 @@ TOOLS = [
              "gorev": {"type": "string", "description": "Ne yapilacak, duz dille. Dosya/obje adlarini ver."},
              "kabul_kriterleri": {"type": "array", "items": {"type": "string"},
                                   "description": "Denetcinin yazdigi somut kriterler, her biri tek cumle."},
-             "ortam": {"type": "string", "enum": list(ENVS), "default": "unity"},
+             "ortam": {"type": "string", "enum": [e for e in ENVS if not ENVS[e].get("gizli")] or list(ENVS),
+                       "default": VARSAYILAN_ORTAM,
+                       "description": "Arac seti + dogrulayici. " + "; ".join("%s: %s" % (k, v.get("aciklama", "")) for k, v in ENVS.items() if not v.get("gizli"))},
              "calisma_dizini": {"type": "string", "description": "code ortami: workspace kokune GORELI alt klasor (bos = kokun kendisi). Kok, istemcinin bildirdigi workspace'tir (MCP roots); disina cikilamaz."},
              "araclar_kapali": {"type": "array", "items": {"type": "string"},
                                 "description": "Bu turda isciden saklanacak arac adlari (orn. [\"play_observe\"]: olcumu denetci yapar, isci olcum-duzeltme dongusune giremez)."},
