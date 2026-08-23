@@ -110,7 +110,7 @@ Roots desteklemeyen istemci için `APPRENTICE_WORKDIR_ROOT`; o da yoksa sunucunu
 Ölçüldü: IDE'nin açık klasörü sunucuyu kendiliğinden sınırlamaz — sınır bu mekanizmadır.
 
 Ortam değişkenleri: `APPRENTICE_WORKDIR_ROOT`, `APPRENTICE_HOME`, `APPRENTICE_TIMEOUT_S`, `APPRENTICE_PYTHON`
-(işçi için ayrı yorumlayıcı), `UNITY_CODE_MODEL`, `UNITY_MCP_URL`. Diğer ayarlar
+(işçi için ayrı yorumlayıcı), `APPRENTICE_MODEL`, `APPRENTICE_CTX`, `APPRENTICE_BATCH`. Diğer ayarlar
 `apprentice.config.json` (şablon: `apprentice.config.template.json`; öncelik env >
 dosya > şablon > kod).
 
