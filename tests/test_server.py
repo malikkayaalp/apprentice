@@ -1,12 +1,12 @@
 """Apprentice MCP sunucusunun sozlesme testi.
 
-    python tests/test_server.py            # Unity/Ollama GEREKMEZ: stdio el sikisma, tools/list,
+    python tests/test_server.py            # Ollama GEREKMEZ: stdio el sikisma, tools/list,
                                            # hata yollari, fake ortamla tam boru hatti (4 senaryo)
-    python tests/test_server.py --live     # + gercek worker_run (Ollama + Unity koprusu acik)
+    python tests/test_server.py --live     # + gercek worker_run (code ortami, Ollama acik)
 
 Sunucuyu ayrik surec olarak baslatir ve gercek bir MCP istemcisi gibi konusur; stdout'a
 karisan tek bir yabanci satir bile burada yakalanir. Fake ortam (envs/fake) isciyi taklit
-eder ve mcpbridge/fake_unity_server.py'ye gercekten baglanir.
+eder ve mcpbridge/fake_server.py'ye gercekten baglanir.
 """
 from __future__ import annotations
 import json, os, subprocess, sys, time
@@ -197,19 +197,17 @@ def main() -> int:
         print("roots: ok")
 
         if live:
-            args = {"gorev": "Assets/Scripts/ApprenticeSmoke.cs adinda bir MonoBehaviour yaz.",
-                    "kabul_kriterleri": ["Dosya derlenir, sinif adi ApprenticeSmoke.",
-                                         "Start icinde Debug.Log(\"apprentice ok\") cagrilir.",
-                                         "Baska hicbir sey yapmaz, Update yok."],
-                    "ortam": "unity"}
+            work = os.path.join(home, "live_code")
+            os.makedirs(work, exist_ok=True)
+            args = {"gorev": "selam.py dosyasina selam() fonksiyonu yaz: 'selam' dondursun. test_selam.py ile unittest testi yaz.",
+                    "kabul_kriterleri": ["selam() == 'selam'", "run_tests hatasiz gecer", "yalnizca selam.py ve test_selam.py yazilir"],
+                    "ortam": "code", "calisma_dizini": work}
             t0 = time.time()
             rep = c.tool("worker_run", args, timeout=900)["structuredContent"]
             sema_kontrol(rep)
-            print(json.dumps({k: rep.get(k) for k in ("derleme_durumu", "hatalar", "yazilan_dosyalar",
-                                                      "tur_sayisi", "sure", "ozet")},
+            print(json.dumps({k: rep.get(k) for k in ("derleme_durumu", "hatalar", "tur_sayisi", "sure", "ozet")},
                              ensure_ascii=False, indent=1))
-            canli = rep["derleme_durumu"] == "derlendi" and \
-                any(d["yol"].endswith("ApprenticeSmoke.cs") for d in rep["yazilan_dosyalar"])
+            canli = rep["derleme_durumu"] == "derlendi" and os.path.exists(os.path.join(work, "selam.py"))
             print("live: %s (%.0fs)" % ("ok" if canli else "KALDI", time.time() - t0))
             ok = ok and canli
     except Exception as e:

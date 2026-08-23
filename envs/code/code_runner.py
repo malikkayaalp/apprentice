@@ -1,4 +1,4 @@
-"""Genel kod ortami (TASLAK): dosya oku/yaz, shell, pytest - Unity'ye bagli degil.
+"""Genel kod ortami: dosya oku/yaz, shell, test.
 
 Sunucu (server/apprentice_server.py) bunu panel_runner ile AYNI komut satiri ve AYNI
 olay semasiyla ayrik surecte kosturur; tek fark --workdir (calisma dizini, hapis koku).
@@ -9,10 +9,10 @@ modele geri verilir, --repairs kadar onarim turu. Basari = derleme temiz + pytes
 (test yoksa derleme temiz). Modelin beyani degil.
 
 Hapis: butun yollar --workdir altinda kalmak zorunda; disari cikan yol reddedilir.
-Silme araci YOK (Unity ortamindaki kazadan ders). Shell komutu calisma dizininde,
+Silme araci YOK (olculdu: silme yetkisi bir kez gercek zarar verdi). Shell komutu calisma dizininde,
 zaman asimi 120 s, cikti kirpilir.
 
-Olay semasi: envs/unity/panel_runner.py ile ayni (system/tool/tool_result/write/
+Olay semasi: butun ortam kosuculariyla ayni (system/tool/tool_result/write/
 assistant/result/exit). Sohbet baglami <session-dir>/<session>.json (schema 1).
 """
 from __future__ import annotations
@@ -33,10 +33,10 @@ from core.client import run_agent
 from core.guard import guarded_dispatch
 from core import config as CFG
 
-DEFAULT_MODEL = CFG.env_or("UNITY_CODE_MODEL", "ollama.model",
+DEFAULT_MODEL = CFG.env_or(["APPRENTICE_MODEL", "UNITY_CODE_MODEL"], "ollama.model",
                            "hf.co/unsloth/Qwen3-Coder-Next-GGUF:UD-Q4_K_XL")
-NUM_CTX = CFG.env_or("UNITY_CODE_CTX", "makine.num_ctx", 65536, int)
-NUM_BATCH = CFG.env_or("UNITY_CODE_BATCH", "makine.num_batch", 4096, int)
+NUM_CTX = CFG.env_or(["APPRENTICE_CTX", "UNITY_CODE_CTX"], "makine.num_ctx", 65536, int)
+NUM_BATCH = CFG.env_or(["APPRENTICE_BATCH", "UNITY_CODE_BATCH"], "makine.num_batch", 4096, int)
 MAX_READ = 60000
 MAX_OUT = 8000
 SHELL_TIMEOUT = 120

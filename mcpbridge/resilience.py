@@ -59,7 +59,7 @@ def drop_filters(*keys: str) -> Callable[[dict], dict]:
     return f
 
 
-#: Defaults that cover the search-returned-nothing failure for Unity and Unreal.
+#: Defaults that cover the search-returned-nothing failure seen in engine bridges.
 DEFAULT_RULES: list[Rule] = [
     Rule(tools=("unity_find_objects", "find_objects", "unity_manage_gameobject"),
          when=lambda a, r: looks_empty(r) and bool(a.get("name_contains")),

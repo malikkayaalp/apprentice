@@ -10,35 +10,35 @@ işi Ollama'daki yerel model yapar, sonucu derleyici/doğrulayıcı onaylar.
 ## Sözleşme
 
 ```
-worker_run(gorev, kabul_kriterleri, ortam="unity", calisma_dizini?, oturum?, play?, onarim?, araclar_kapali?, zaman_asimi_s?)
+worker_run(gorev, kabul_kriterleri, ortam="code", calisma_dizini?, oturum?, play?, onarim?, araclar_kapali?, bekle?, zaman_asimi_s?)
 ```
 
 | girdi | tip | anlam |
 |---|---|---|
 | `gorev` | string | ne yapılacak, düz dille; dosya/obje adlarını ver |
 | `kabul_kriterleri` | string[] | **denetçi yazar**, somut ve ölçülebilir; göreve metin olarak eklenir |
-| `ortam` | `unity` \| `code` \| `fake` | araç seti + doğrulayıcı. `code` = genel kod (taslak), `fake` = Unity/Ollama'sız duman testi |
+| `ortam` | `code` (+ kurulu eklentiler) | araç seti + doğrulayıcı; `envs/*/env.json` ile keşfedilir. `fake` = modelsiz duman testi |
 | `calisma_dizini` | string | `code`: workspace köküne **göreli** alt klasör; boş = kökün kendisi. Kök, IDE'nin bildirdiği workspace'tir (MCP `roots`); dışına çıkılamaz |
 | `oturum` | string | önceki çağrının `oturum`u verilirse işçi aynı bağlamla devam eder |
-| `play` | bool | unity: derlemeden sonra play moda girip çalışma zamanı hatası ara (vars. false) |
+| `play` | bool | ortama özgü ek çalışma-zamanı doğrulaması (eklenti destekliyorsa; vars. false) |
 | `onarim` | int | azami derleme onarım turu (vars. 3) |
-| `araclar_kapali` | string[] | bu turda işçiden saklanacak araçlar, ör. `["play_observe"]` — ölçümü denetçi yapar, işçi ölçüm-düzeltme döngüsüne giremez (ölçüldü: talimatla söylenince işçi iki turda yine ölçtü, ~400 s/tur) |
+| `araclar_kapali` | string[] | bu turda işçiden saklanacak araçlar (ör. bir ölçüm aracı) — ölçümü denetçi yapar, işçi ölçüm-düzeltme döngüsüne giremez (ölçüldü: talimatla söylenince işçi iki turda yine ölçtü, ~400 s/tur) |
 | `zaman_asimi_s` | number | üst sınır (vars. 1800); aşılırsa işçi durdurulur |
-| `bekle` | bool | `false`: hemen `is_id` ile dön, `worker_status(is_id)` ile yokla. **Cursor için gerekli** (ölçüldü: Cursor'ın araç zaman aşımı ~2.5 dk, bir Unity turu 2–8 dk) |
+| `bekle` | bool | `false`: hemen `is_id` ile dön, `worker_status(is_id)` ile yokla. **Cursor için gerekli** (ölçüldü: Cursor'ın araç zaman aşımı ~2.5 dk, bir motor-eklentisi turu 2–8 dk) |
 
 Dönüş:
 
 ```json
 {
-  "yazilan_dosyalar": [{"yol": "Assets/Scripts/X.cs", "yeni": true, "eklendi": 41, "silindi": 0, "satir": 41, "icerik": "dosyanin son hali (12k karaktere kadar)"}],
+  "yazilan_dosyalar": [{"yol": "app.py", "yeni": true, "eklendi": 41, "silindi": 0, "satir": 41, "icerik": "dosyanın son hali (12k karaktere kadar)"}],
   "derleme_durumu": "derlendi | derleme_hatasi | calistirilamadi | zaman_asimi",
-  "hatalar": ["...derleyici / çalışma zamanı / altyapı..."],
+  "hatalar": ["...doğrulayıcı / çalışma zamanı / altyapı..."],
   "tur_sayisi": 1,
   "sure": 73.4,
   "ozet": "işçinin kendi anlatımı — beyan, kanıt değil",
-  "olcumler": [{"arac": "play_observe", "sonuc": "HAM çıktı", "sure_s": 8.2}],
-  "araclar": ["read_script Assets/Scripts/X.cs", "write_script Assets/Scripts/X.cs", "..."],
-  "play": {"dogrulandi": true, "hatalar": []},
+  "olcumler": [{"arac": "run_tests", "sonuc": "HAM çıktı", "sure_s": 1.2}],
+  "araclar": ["read_file app.py", "write_file app.py", "run_tests", "..."],
+  "play": null,
   "oturum": "20260822-231500-a1b2c3",
   "is_id": "...", "is_klasoru": "~/.apprentice/jobs/<id>"
 }
@@ -65,8 +65,7 @@ Kurallar:
 ## Canlı akış
 
 Tur sürerken sunucu her olay için `notifications/progress` (istek `_meta.progressToken` taşıyorsa) ve
-`notifications/message` (log) gönderir: "arac: write_file app.py", "yazdi: app.py (88 satir)",
-"run_tests -> …", "isci ozeti: …". Cursor ve Claude Code bunları araç kutusunda gösterir; dönüşteki
+`notifications/message` (log) gönderir: "arac: write_file app.py", "yazdi: app.py (88 satir)", "run_tests -> …", "isci ozeti: …". Cursor ve Claude Code bunları araç kutusunda gösterir; dönüşteki
 `yazilan_dosyalar[].icerik` ise yazılan dosyanın son halidir.
 
 ## Örnek çağrı
@@ -75,14 +74,13 @@ Tur sürerken sunucu her olay için `notifications/progress` (istek `_meta.progr
 {
   "name": "worker_run",
   "arguments": {
-    "gorev": "Suru altındaki 8 küre XZ düzleminde rastgele hareket etsin.",
+    "gorev": "sure.py: parse_sure('1h30m') gibi metinleri saniyeye çeviren fonksiyon + test_sure.py (unittest).",
     "kabul_kriterleri": [
-      "Hiçbir anda hiçbir küre çifti birbirine 2 birimden yakın olmasın.",
-      "Her kürenin |x| ve |z| değeri 5'i aşmasın.",
-      "play_observe ile 15 saniye boyunca doğrula ve ölçümü ham raporla."
+      "parse_sure('1h30m') == 5400, parse_sure('45s') == 45, parse_sure('10m5s') == 605",
+      "Geçersiz girdide ValueError: '', 'abc', '5x', '1h1h'",
+      "run_tests hatasız geçer; yalnızca sure.py ve test_sure.py yazılır"
     ],
-    "ortam": "unity",
-    "play": true
+    "ortam": "code"
   }
 }
 ```
@@ -120,45 +118,46 @@ dosya > şablon > kod).
 
 | ortam | araçlar | doğrulayıcı | koşucu |
 |---|---|---|---|
-| `unity` (eklenti: apprentice-unity, `envs/unity` olarak klonlanır) | read/write_script, scene_objects, inspect_object, add_component, set_field, play_observe… | Unity derleyicisi (+ play, play_observe) | `envs/unity/panel_runner.py` |
 | `code` | read_file, write_file, list_files, run_shell, run_tests | `compile()` + pytest (yoksa stdlib unittest) | `envs/code/code_runner.py` |
+| `fake` | — | — | `envs/fake/fake_runner.py` (olay şemasını taklit eder, model gerektirmez) |
+| eklentiler | ortamın kendi seti | ortamın kendi doğrulayıcısı (ör. derleyici + play) | `envs/<ad>/` — `env.json` ile tanımlanır, klonlanınca belirir |
 
-`code` ortamında silme aracı yoktur; `run_shell` içinde `git push` ve özyinelemeli silme komutları reddedilir. Git okuma/commit `run_shell` üzerinden serbesttir.
-| `fake` | — | — | `envs/fake/fake_runner.py` (olay şemasını taklit eder) |
+`code` ortamında silme aracı yoktur; `run_shell` içinde `git push` ve özyinelemeli silme komutları reddedilir.
+Git okuma/commit `run_shell` üzerinden serbesttir.
+
+Eklenti yazmak: `envs/<ad>/env.json` → `{"ad", "kosucu", "aciklama", "on_kosul": ["ollama"], "kopru": {...},
+"olcum_araclari": [...], "ayarlar": {...}}`; koşucu `panel_runner`/`code_runner` ile aynı komut satırını ve
+olay şemasını (system/tool/tool_result/write/assistant/result/exit) uygular.
 
 ## İzleme
 
 `python clients/web/monitor.py [--port 8765] [--home ~/.apprentice]` — sunucuya bağlanmaz, iş
-klasörünü okur; hangi istemci başlatmış olursa olsun (Claude Code, Cursor, panel, test betiği)
-her iş listede: durum, derleme, dosyalar, araç akışı (argüman + sonuç), ölçümler, işçinin özeti.
-`/api/jobs` aynı veriyi JSON verir.
+klasörünü okur; hangi istemci başlatmış olursa olsun her iş listede: durum, doğrulama, dosyalar, araç akışı
+(argüman + sonuç), ölçümler, işçinin özeti. `/api/jobs` aynı veriyi JSON verir.
 
 ## Ölçüm kampanyası
 
 `python tests/code_kampanya.py` — 6 kod görevi; denetçi (betik) kriter yazar, işçi yazar, denetçi
 **işçiye verilmeyen gizli kontrolleri** koşar, tutmayanları somut geri bildirime çevirip aynı
-`oturum` ile 2. tur ister. Sonuç `tests/code_kampanya.son.json` (tur-1 / tur-2 gizli başarı, süre).
+`oturum` ile 2. tur ister. Sonuç `tests/code_kampanya.son.json`.
 
 ## Test
 
 ```bash
-python tests/test_server.py          # Unity/Ollama gerekmez: el sıkışma, şema, hata yolları,
-                                     # fake ortamla 4 senaryo (başarı / derleme hatası / çökme / zaman aşımı)
-python tests/test_server.py --live   # + gerçek Unity turu (Ollama + MCP for Unity açık)
+python tests/test_server.py          # model gerekmez: el sıkışma, şema, hata yolları, roots, iptal,
+                                     # fake ortamla 4 senaryo (başarı / doğrulama hatası / çökme / zaman aşımı)
+python tests/test_server.py --live   # + gerçek code turu (Ollama açık)
 python tests/test_code_env.py [--live]   # code ortamı: hapis/araçlar/doğrulayıcı; --live gerçek görev
-python tests/suru_kabul.py           # denetçi-işçi kabul testi: Suru görevi, bağımsız 15 sn ölçüm
 ```
 
-Ön koşullar `worker_run` içinde kontrol edilir: Ollama kapalıysa, model yüklü değilse
-ya da Unity köprüsü yoksa işçi hiç başlatılmaz, `derleme_durumu: calistirilamadi` ve
-sebep `hatalar`da döner.
+Ön koşullar `worker_run` içinde kontrol edilir: Ollama kapalıysa, model yüklü değilse ya da ortamın
+köprüsü yoksa işçi hiç başlatılmaz, `derleme_durumu: calistirilamadi` ve sebep `hatalar`da döner.
 
 ## Tasarım notları
 
-- İşçi **ayrık süreç** (`envs/<ortam>/panel_runner.py`): tur dakikalar sürer, Unity domain
-  reload yapar, işçi çökse sunucu ayakta kalır. Prompt komut satırından değil dosyadan
+- İşçi **ayrık süreç** (`envs/<ortam>/` koşucusu): tur dakikalar sürer, işçi çökse sunucu ayakta kalır. Prompt komut satırından değil dosyadan
   geçer (kaçış kazaları).
 - Çocuğun stdin/stdout'u `DEVNULL`: ikisi de MCP kanalı. Ölçülen: stdin miras alınınca
   çocuk Windows'ta ilk satırını bile yazmadan takıldı.
 - `tools/call` ayrı iş parçacığında; `ping` uzun tur sırasında da cevaplanır.
-- Q3CNFU Unity paneli aynı koşucuyu kullanır; sunucu panelin IDE-bağımsız karşılığıdır.
+- Eklenti panelleri (ör. apprentice-unity'nin Editor paneli) aynı koşucuyu sunucusuz kullanabilir.

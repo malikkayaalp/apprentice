@@ -75,7 +75,7 @@ def ratio_for(model: str) -> float:
 
 
 # Tool schemas are repetitive JSON and tokenize BETTER than prose, not worse: measured
-# on MCP for Unity's live 48-tool block, 62 082 chars became 15 676 qwen3.8 tokens, or
+# on a live 48-tool MCP tool block, 62 082 chars became 15 676 qwen3.8 tokens, or
 # 3.96 chars per token against 2.81 for prose. Treating them as dense data over-estimated
 # the block by more than three times.
 TOOL_RATIOS = {"qwen3.8": 3.90, "qwen3.8:latest": 3.90}

@@ -3,17 +3,15 @@
 Denetci (Claude Code, Cursor, VS Code... IDE'nin kendi modeli) bu sunucuya stdio MCP ile
 baglanir ve TEK araci cagirir:
 
-    worker_run(gorev, kabul_kriterleri, ortam="unity")
+    worker_run(gorev, kabul_kriterleri, ortam="code")
       -> {yazilan_dosyalar, derleme_durumu, hatalar, tur_sayisi, sure, ozet, olcumler, oturum}
 
-Isci = Ollama'daki yerel model (Qwen3-Coder-Next). Ortam = arac seti + dogrulayici:
-  unity  envs/unity/unity_code.one_request dongusu (write_script + Unity derleyicisi +
-         opsiyonel play / play_observe). Sunucu bunu envs/unity/panel_runner.py ile
-         AYRIK surecte kosturur - tur dakikalar surer, Unity domain reload yapar,
-         heredoc/kacis kazalari yasandi; isci cokse sunucu ayakta kalir.
-  fake   envs/fake/fake_runner.py - Unity ve Ollama OLMADAN ayni olay semasini ureten
-         duman testi ortami (tests/test_server.py).
-  code   envs/code/code_runner.py - genel kod (TASLAK): dosya oku/yaz, shell, test; hapis.
+Isci = Ollama'daki yerel model (Qwen3-Coder-Next). Ortam = arac seti + dogrulayici; her
+ortam envs/<ad>/ altinda bir klasor ve env.json ile tanimlanir, sunucu bunlari KESFEDER:
+  code   envs/code/code_runner.py - genel kod: dosya oku/yaz, shell, test; workspace'e hapis.
+  fake   envs/fake/fake_runner.py - isci olmadan ayni olay semasini ureten duman testi.
+  (eklentiler: ornegin apprentice-unity, envs/unity olarak klonlanir; cekirdek onu bilmez.)
+Kosucu AYRIK surecte calisir - tur dakikalar surer, isci cokse sunucu ayakta kalir.
 
 Denetci kabul kriterini yazar (iscinin en zayif yeri). Sunucu kriterleri goreve metin
 olarak ekler, isciyi kosturur, DOGRULANMIS sonucu (derleyici) ve HAM olcumleri dondurur;
@@ -44,8 +42,8 @@ ICERIK_SINIRI = int(os.environ.get("APPRENTICE_ICERIK_SINIRI", "12000"))   # dos
 MEASURE_TOOLS = {"play_observe", "read_console", "scene_objects", "inspect_object", "run_tests"}
 
 def _ortamlari_kesfet() -> dict:
-    """envs/<ad>/env.json olan her klasor bir ortamdir. Unity bir EKLENTIDIR: klasor yoksa
-    'unity' secenegi hic gorunmez; Cursor/Claude Code kullanicisi Unity ile muhatap olmaz."""
+    """envs/<ad>/env.json olan her klasor bir ortamdir. Eklentiler (ayri depolar) buraya
+    klonlanir; klasor yoksa o ortam secenegi hic gorunmez."""
     out = {}
     kok = os.path.join(ROOT, "envs")
     if not os.path.isdir(kok):
@@ -317,7 +315,7 @@ def _precheck(ortam: str) -> str:
     if "ollama" not in (ENVS.get(ortam, {}).get("on_kosul") or []):
         return ""
     ollama = (config.get("ollama.url") or "http://localhost:11434").rstrip("/")
-    model = config.env_or("UNITY_CODE_MODEL", "ollama.model")
+    model = config.env_or(["APPRENTICE_MODEL", "UNITY_CODE_MODEL"], "ollama.model")
     try:
         with urllib.request.urlopen(ollama + "/api/tags", timeout=3) as r:
             names = [m.get("name") for m in json.load(r).get("models", [])]
@@ -325,17 +323,24 @@ def _precheck(ortam: str) -> str:
         return "Ollama'ya ulasilamadi (%s): %s" % (ollama, str(e)[:120])
     if model not in names:
         return "model yuklu degil: %s (ollama pull gerekli; yuklu: %s)" % (model, names)
-    if "unity_koprusu" in (ENVS.get(ortam, {}).get("on_kosul") or []):
-        url = config.env_or("UNITY_MCP_URL", "unity.mcp_url")
+    # Ortamin kendi koprusu (env.json "kopru": {"ayar": "<ad>.mcp_url", "ortam_degiskeni": "..."}).
+    kopru = ENVS.get(ortam, {}).get("kopru")
+    if kopru:
+        url = _kopru_url(ortam)
         try:
             urllib.request.urlopen(urllib.request.Request(url, method="GET"), timeout=3)
         except urllib.error.HTTPError as he:
             if he.code not in (400, 405, 406):
-                return "Unity MCP koprusu beklenmeyen cevap: HTTP %d" % he.code
+                return "%s koprusu beklenmeyen cevap: HTTP %d" % (ortam, he.code)
         except Exception as e:
-            return ("Unity MCP koprusune ulasilamadi (%s): %s - Unity acik ve MCP for Unity "
-                    "baglandi mi?" % (url, str(e)[:100]))
+            return "%s koprusune ulasilamadi (%s): %s - %s" % (
+                ortam, url, str(e)[:100], kopru.get("ipucu", "ortamin sunucusu acik mi?"))
     return ""
+
+
+def _kopru_url(ortam: str) -> str:
+    k = ENVS.get(ortam, {}).get("kopru") or {}
+    return config.env_or(k.get("ortam_degiskeni", ""), k.get("ayar", ""), k.get("varsayilan", "")) or ""
 
 
 def tool_worker_run(a: dict) -> dict:
@@ -373,8 +378,8 @@ def tool_worker_run(a: dict) -> dict:
     job = Job(ortam, gorev, [str(k) for k in kriterler], str(a.get("oturum") or ""),
               bool(a.get("play", False)),
               int(a.get("onarim", config.get("onarim.compile_rounds", 3))),
-              config.env_or("UNITY_CODE_MODEL", "ollama.model"),
-              config.env_or("UNITY_MCP_URL", "unity.mcp_url"), workdir,
+              config.env_or(["APPRENTICE_MODEL", "UNITY_CODE_MODEL"], "ollama.model"),
+              _kopru_url(ortam), workdir,
               a.get("araclar_kapali") or [])
     JOBS[job.id] = job
     rid = getattr(_CUR_REQ, "id", None)
@@ -447,7 +452,7 @@ TOOLS = [
                                 "description": "Bu turda isciden saklanacak arac adlari (orn. [\"play_observe\"]: olcumu denetci yapar, isci olcum-duzeltme dongusune giremez)."},
              "oturum": {"type": "string", "description": "Onceki worker_run'in 'oturum' degeri: isci ayni baglamla devam eder. Bos = yeni oturum."},
              "play": {"type": "boolean", "default": False,
-                      "description": "unity: derlemeden sonra play moda girip calisma zamani hatasi ara."},
+                      "description": "Ortama ozgu ek calisma-zamani dogrulamasi (ortam destekliyorsa; ornegin bir motor eklentisinde play modu)."},
              "onarim": {"type": "integer", "default": 3, "description": "Azami derleme onarim turu."},
              "zaman_asimi_s": {"type": "number", "default": DEFAULT_TIMEOUT_S},
          },

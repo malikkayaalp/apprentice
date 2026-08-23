@@ -2,81 +2,81 @@
 
 **A local model does the work, a frontier model supervises.**
 
-Yerel bir kodlama modeli (Ollama, Qwen3-Coder-Next) işi yapar: dosya yazar, araç
-çağırır, derler, hatayı düzeltir. Büyük bir model (IDE'nizdeki Claude/GPT/Gemini ya da
-Claude Code) denetler: görevi kabul kriterleriyle verir, ölçümü özetler, ne zaman
-durulacağına karar verir. Kod dışarı çıkmaz, kota yoktur; denetçiye yalnızca özetler gider.
+Yerel bir kodlama modeli (Ollama, Qwen3-Coder-Next) işi yapar: dosya yazar, araç çağırır,
+test koşar, hatayı düzeltir. Büyük bir model (IDE'nizdeki Claude/GPT/Gemini ya da Claude Code)
+denetler: görevi kabul kriterleriyle verir, dönen ölçümü yorumlar, ne zaman durulacağına karar
+verir. Kod dışarı çıkmaz, kota yoktur; denetçiye yalnızca özetler ve ölçümler gider.
 
 Türkçede *Çırak*. Usta bakar, çırak yapar.
 
-## Neden bu bölünme
+## Neden bu bölünme (ölçüldü)
 
-Ölçümle: yerel model 8 küreli "birbirine 2 birimden fazla yaklaşmasın" görevinde kendi
-ölçümüne bakarak düzeltmeye çalışınca yakınsamadı (en küçük mesafe 1.15 → 0.01). Aynı
-ölçüm *özetlenip* "sert kısıt gerek" diye verilince 2 turda çözdü. Yazma ve araç kullanma
-yerelde güçlü; ham veriyi yorumlama ve durma kararı büyük modelde. Kanıtlar ve bütün
-deneyler [apprentice-lab](https://github.com/malikkayaalp/apprentice-lab) deposunda.
+- Aynı işçi, aynı görev: ham ölçümü kendisi yorumlayıp düzeltmeye kalkınca yakınsamadı; ölçüm
+  **özetlenip** "şu kural tutmuyor" diye verilince 2 turda çözdü.
+- 6 görevlik kod kampanyası (gizli denetçi kontrolleri): tur-1 34/36 → denetçinin somut geri
+  bildirimiyle 36/36. Genel geri bildirim ("test tutmuyor") 2×1000 sn'de çözemediğini, somut özet
+  130 sn'de çözdü.
+- Kriterler baştan sayıyla verilince işçi sonradan öğretilmesi gereken deseni kendiliğinden kurdu.
+
+Kanıtlar ve bütün deneyler [apprentice-lab](https://github.com/malikkayaalp/apprentice-lab) deposunda.
 
 ## Yapı
 
 ```
-core/            Ollama istemcisi, şema koruması, araç döngüsü — ortamdan bağımsız
-mcpbridge/       MCP taşıma (stdio + Streamable HTTP), bağımlılıksız
-envs/unity/      (eklenti, ayrı depo: apprentice-unity) Unity araçları + Q3CNFU paneli
-envs/code/       genel kod ortamı (taslak): dosya oku/yaz, shell, test; hapis + unittest/pytest doğrulayıcı
-server/          MCP sunucusu: tek araç worker_run(görev, kabul_kriterleri, ortam) — bkz. server/README.md
-clients/web/     canlı izleme sayfası: `python clients/web/monitor.py` → http://127.0.0.1:8765 (jobs klasörünü okur)
-tests/           hapis öz-testi
+server/          MCP sunucusu: worker_run(görev, kabul_kriterleri, ortam) — bkz. server/README.md
+core/            Ollama istemcisi, şema koruması, ayar yükleyici, ilk-çalıştırma ölçümü
+mcpbridge/       MCP taşıma (stdio + Streamable HTTP), bağımlılıksız; test için fake_server
+envs/code/       kod ortamı: dosya oku/yaz, shell, test; workspace'e hapis; compile()+unittest/pytest doğrulayıcı
+envs/fake/       duman testi ortamı (model gerektirmez)
+envs/<eklenti>/  eklentiler buraya klonlanır ve otomatik keşfedilir (örn. apprentice-unity)
+clients/web/     canlı izleme sayfası: python clients/web/monitor.py → http://127.0.0.1:8765
+tests/           sözleşme testleri, kod ortamı testi, ölçüm kampanyası
 ```
 
 ## Gereksinimler
 
 - Python 3.10+ (ek paket yok, stdlib)
-- [Ollama](https://ollama.com) + `hf.co/unsloth/Qwen3-Coder-Next-GGUF:UD-Q4_K_XL` (~20 GB)
-- Unity için: apprentice-unity eklentisi (aşağıda)
+- [Ollama](https://ollama.com) + `ollama pull hf.co/unsloth/Qwen3-Coder-Next-GGUF:UD-Q4_K_XL` (~20 GB)
 
-## Denetçi olarak bağlanmak (MCP sunucusu)
+## Kurulum (Cursor / Claude Code / VS Code)
 
-Sunucu stdio MCP konuşur, bağımlılığı yoktur. Depo kökündeki `.mcp.json` Claude Code
-tarafından otomatik görülür (`claude` bu klasörde açılınca "apprentice" sunucusunu sorar).
-Cursor / VS Code için aynı girdiyi kendi MCP ayarına kopyala:
-
-```json
-{ "mcpServers": { "apprentice": { "command": "python", "args": ["C:/yol/Apprentice/server/apprentice_server.py"] } } }
+```bash
+git clone https://github.com/malikkayaalp/apprentice
 ```
 
-Araçlar:
+Claude Code: depodaki `.mcp.json` otomatik görülür. Cursor: `~/.cursor/mcp.json`'a ekle:
 
-| araç | ne yapar |
-|---|---|
-| `worker_run(gorev, kabul_kriterleri[], ortam="unity"\|"code", calisma_dizini?, oturum?, play?, onarim?, zaman_asimi_s?)` | işçiyi koşturur; `{yazilan_dosyalar, derleme_durumu, hatalar, tur_sayisi, sure, ozet, olcumler}` döner |
+```json
+{ "mcpServers": { "apprentice": { "command": "python", "args": ["<depo>/server/apprentice_server.py"] } } }
+```
 
-Sözleşme: **kabul kriterini denetçi yazar** (işçinin en zayıf yeri), `ok` yalnızca
-derleyici/doğrulayıcının onayıdır, kriterlerin sağlanıp sağlanmadığına denetçi karar
-verir. Ölçümler ham gelir; denetçi özetleyip aynı `oturum` ile düzeltme istetir. Bir
-tur dakikalar sürer — istemcinin araç zaman aşımını (`MCP_TOOL_TIMEOUT`) buna göre ayarla. İş dosyaları `~/.apprentice/jobs/<id>/` (prompt,
-olaylar, stderr), sohbet bağlamı `~/.apprentice/sessions/<ortam>/`.
+Yol yazmanız gerekmez: işçi, IDE'nin bildirdiği workspace köküne hapsedilir (MCP `roots`).
+Sohbette: *"Sen denetçisin; kodu kendin yazma, apprentice.worker_run'a ver. Kabul kriterlerini
+sayıyla yaz, dönen sonucu kendin doğrula."* Araçlar, dönüş şeması ve kurallar: [server/README.md](server/README.md).
 
-Test: `python tests/test_server.py` (Unity/Ollama gerekmez), `tests/test_code_env.py`, `tests/suru_kabul.py` (kabul testi). Ayrıntı: [server/README.md](server/README.md).
+İlk çalıştırmada makineye özel hız ayarı için `python core/olcum.py --yaz` (num_batch; ölçüldü: 512 → 4096 arası +%342 prefill).
 
-## Unity (eklenti)
+## Eklentiler
 
-Unity desteği ayrı depodadır: [apprentice-unity](https://github.com/malikkayaalp/apprentice-unity)
-(çırağın Unity araç seti + Q3CNFU Editor paneli). Kurulum: o depoyu `envs/unity` olarak klonla;
-`worker_run`'da `ortam="unity"` belirir. Cursor/Claude Code ile yalnızca kod işi yapanlar bunu atlar.
+Ortamlar `envs/<ad>/env.json` ile keşfedilir; çekirdek yalnızca `code` içerir. Oyun motoru gibi
+alanlar ayrı depolardır ve `envs/<ad>` olarak klonlanır:
+
+- [apprentice-unity](https://github.com/malikkayaalp/apprentice-unity) — Unity araç seti + derleme/play
+  doğrulaması + Q3CNFU Editor paneli. Klonlanınca `worker_run`'da `ortam="unity"` belirir.
 
 ## Ölçülmüş tasarım kararları
 
-- Başarı **Unity derleyicisiyle** doğrulanır, modelin beyanıyla değil. Play modu derleyicinin
-  göremediği hataları yakalar; `play_observe` davranışı ölçer.
-- Araç bloğu küçük ve sabit (tam MCP yüzeyi 20k token, bizimki 1.1k): her turda yeniden
-  gönderilir, kullanılmayan araç sürekli ödenen vergidir.
-- Yazmalar birikir, tek Refresh: dosya başına ~6 sn (bir domain reload) kazanç, ara durum hatası yok.
-- Silme yetkisi varsayılan kapalı; açılırsa iki katmanlı sandbox hapsi (Python + C#).
-- `num_batch` / `num_ctx` makineye özel — `apprentice.config.template.json` notlarına bakın.
+- Başarı **doğrulayıcıyla** (derleyici, test) belirlenir, modelin beyanıyla değil; `ozet` beyandır.
+- Ölçüm ham döner, yorum denetçide; işçi ölçüm-düzeltme döngüsüne sokulmaz (`araclar_kapali`).
+- Silme aracı yok; `run_shell`'de silme ve `git push` reddedilir.
+- İşçi ayrık süreç; istemci iptal ederse öldürülür (Cursor'ın ~150 sn zaman aşımı ölçüldü →
+  `bekle=false` + `worker_status`).
+- Araç bloğu küçük ve sabit tutulur: her turda yeniden gönderilir, kullanılmayan araç kalıcı vergidir.
 
-## Durum
+## Test
 
-Unity ortamı ve paneli çalışıyor, uçtan uca doğrulandı. MCP sunucusu (`server/`) ve genel
-kod ortamı (`envs/code/`) sırada. Bu depo laboratuvardan çıkarıldı (2026-08-22); her kararın
-ölçüm kanıtı orada.
+```bash
+python tests/test_server.py        # model gerekmez
+python tests/test_code_env.py      # kod ortamı; --live ile gerçek görev
+python tests/code_kampanya.py      # 6 görevlik ölçüm kampanyası (Ollama gerekir)
+```

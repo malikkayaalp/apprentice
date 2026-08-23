@@ -14,7 +14,7 @@ Kullanim:
     from core import config
     config.get("ollama.model")                 # "hf.co/unsloth/..."
     config.get("makine.num_batch", 512)
-    config.env_or("UNITY_CODE_MODEL", "ollama.model")   # env once, sonra dosya
+    config.env_or("APPRENTICE_MODEL", "ollama.model")   # env once, sonra dosya
 """
 from __future__ import annotations
 import json, os
@@ -62,6 +62,14 @@ def load(force: bool = False) -> dict:
     if _cache is not None and not force:
         return _cache
     cfg = _read(TEMPLATE)
+    # Eklenti ayarlari: envs/<ad>/env.json icindeki "ayarlar" bolumu <ad> anahtari altina
+    # girer (ornek: apprentice-unity -> cfg["unity"]). Cekirdek sablonu eklentileri bilmez.
+    envs = os.path.join(ROOT, "envs")
+    if os.path.isdir(envs):
+        for ad in sorted(os.listdir(envs)):
+            meta = _read(os.path.join(envs, ad, "env.json"))
+            if meta.get("ayarlar"):
+                cfg = _merge(cfg, {meta.get("ad", ad): meta["ayarlar"]})
     up = user_path()
     if os.path.exists(up):
         cfg = _merge(cfg, _read(up))
@@ -87,9 +95,17 @@ def get(path: str, default=None):
     return cur
 
 
-def env_or(env_name: str, path: str, default=None, cast=None):
-    """Ortam degiskeni varsa o, yoksa dosyadaki deger, yoksa default."""
-    v = os.environ.get(env_name)
+def env_or(env_name, path: str, default=None, cast=None):
+    """Ortam degiskeni varsa o, yoksa dosyadaki deger, yoksa default.
+
+    env_name tek ad ya da ad listesi olabilir (ilk dolu olan kazanir) - eski adlar
+    (UNITY_CODE_*) uyumluluk icin ikinci sirada verilir."""
+    names = [env_name] if isinstance(env_name, str) else list(env_name)
+    v = None
+    for n in names:
+        v = os.environ.get(n)
+        if v not in (None, ""):
+            break
     if v is None or v == "":
         v = get(path, default)
     if cast is not None and v is not None:

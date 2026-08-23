@@ -1,7 +1,7 @@
 """MCP Streamable HTTP transport (spec 2025-03-26 onwards), dependency free.
 
-MCP for Unity can run either as a stdio subprocess or as a local HTTP server. When the
-Unity Editor already holds a live session (the Connect tab shows "Session Active"), HTTP
+Some tool servers (e.g. game-engine bridges) run either as a stdio subprocess or as a local HTTP server. When the
+editor already holds a live session, HTTP
 is the better target: the editor is already attached, so there is no process to launch
 and no risk of disturbing another client's stdio configuration.
 
@@ -143,7 +143,7 @@ class MCPHttpServer:
             return []
 
     def stderr_tail(self, n: int = 25) -> str:
-        return "(http transport: server logs live in the Unity console)"
+        return "(http transport: server logs live on the server side)"
 
     def stop(self) -> None:
         if not self.session_id:

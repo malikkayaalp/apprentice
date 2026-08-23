@@ -1,8 +1,8 @@
-"""Duman testi ortami: Unity ve Ollama OLMADAN panel_runner ile ayni olay semasini uretir.
+"""Duman testi ortami: isci ve Ollama OLMADAN gercek kosucularla ayni olay semasini uretir.
 
 Ne dogrular: sunucunun isciyi ayrik surecte baslatmasi, prompt-file'i okumasi, JSONL
 olaylarini rapora cevirmesi (write -> yazilan_dosyalar, result -> derleme_durumu...).
-Gercek Unity yuzeyi yerine mcpbridge/fake_unity_server.py'ye stdio ile baglanir ve
+Gercek bir arac sunucusu yerine mcpbridge/fake_server.py'ye stdio ile baglanir ve
 read_console cagirir: boylece kopru katmani da ayni testte kosar.
 
 Ne DOGRULAMAZ: modelin kodu, derleyici. Bunlar icin tests/test_server.py --live.
@@ -16,7 +16,7 @@ if _KOK not in sys.path:
     sys.path.insert(0, _KOK)
 from mcpbridge.client import MCPServer  # noqa: E402
 
-FAKE = os.path.join(_KOK, "mcpbridge", "fake_unity_server.py")
+FAKE = os.path.join(_KOK, "mcpbridge", "fake_server.py")
 
 
 def main() -> int:
@@ -50,7 +50,7 @@ def main() -> int:
             time.sleep(5)                # zaman asimi senaryosu
         emit("system", subtype="init", model=a.model, session_id=a.session)
 
-        srv = MCPServer(sys.executable, [FAKE], name="fake-unity")
+        srv = MCPServer(sys.executable, [FAKE], name="fake")
         srv.start()
         try:
             names = [t["name"] for t in srv.list_tools()]

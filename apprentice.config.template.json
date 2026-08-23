@@ -1,13 +1,11 @@
 {
   "schema": 1,
-
   "_not": [
     "Apprentice tek ayar evi. Kopyala: apprentice.config.json (gitignore).",
-    "Tek ayar evi. Hem Python katmani hem Unity paneli bu dosyayi okur.",
     "Oncelik sirasi: ortam degiskeni > bu dosya > kodun icindeki varsayilan.",
+    "Eklentiler kendi varsayilanlarini envs/<ad>/env.json 'ayarlar' bolumunde tasir; yukleyici <ad> anahtari altina birlestirir.",
     "'_olcum' ile isaretli degerler olcumden geldi. Degistirmeden once notu oku."
   ],
-
   "ollama": {
     "url": "http://localhost:11434",
     "model": "hf.co/unsloth/Qwen3-Coder-Next-GGUF:UD-Q4_K_XL",
@@ -15,7 +13,6 @@
     "timeout_s": 3600,
     "_olcum_model": "6 model icinde kod yazmada anlamli bicimde one cikan tek model. Cloner 7.00/8 (stock 5.00, p=0.016), MCP 10/11, 29.6 tok/s. Q6 denendi: -%22 hiz, tek gorevde kazanc, degmez."
   },
-
   "makine": {
     "_not": "BU MAKINEYE OZEL. Baska donanimda yeniden olculmeli - kopyalanmamali.",
     "num_ctx": 65536,
@@ -25,7 +22,6 @@
     "_olcum_ctx": "32768 -> 65536: yavaslama YOK (28.0 -> 28.9 tok/s, GPU payi %28 sabit). Sinir asilirsa Ollama prompt'u SESSIZCE yariya keser ve model kesik parcadan emin sekilde uydurur.",
     "_olcum_batch": "16.6k tokenlik promptla: 512=189 t/s, 1024=320, 2048=520, 4096=730 (+%285). VRAM harcar - kucuk kartta sigmayabilir, o yuzden ilk calistirmada olculur. DIKKAT: kisa promptla olcum yaniltir."
   },
-
   "sampling": {
     "temperature": 0.0,
     "think": false,
@@ -34,37 +30,14 @@
     "retries": 2,
     "_not_think": "false her model ailesinde OFF demek. 'low' YAZMA: eski bir surumde False->low cevrimi dusunmeyi gizlice geri acti ve bir kosu gorev basina ~3900 dusunme tokeni yakti."
   },
-
-  "unity": {
-    "mcp_url": "http://127.0.0.1:8080/mcp",
-    "script_dir": "Assets/Scripts",
-    "sandbox_dir": "Assets/_ModelSandbox",
-    "sandbox_enabled": false,
-    "server_tools": ["read_console", "validate_script"],
-    "mcp_paket_surumu": "10.1.2",
-    "_olcum_tools": "Tam MCP yuzeyi 20497 token (~73s prefill); bu ikili 1150 (~4s). Arac blogu HER TURDA yeniden gonderilir, yani kullanilmayan arac surekli odenen bir vergi. manage_asset olcumden sonra atildi: 11 parametre, 433 token/tur, hicbir kosu cagirmadi.",
-    "_not_sandbox": "sandbox_enabled silme yetkisi acar. Bu projede silme bir kez gercek zarar verdi (Assets/Scripts agaci). Koruma reddetmede degil aracin icinde: iki katmanli hapis (Python + C#).",
-    "_not_surum": "Bu MCP surumune karsi test edildi. Sunucunun kendi dokumani var olmayan okuma API'leri tarif ediyor - semaya guven, dokumana degil."
-  },
-
   "onarim": {
     "compile_rounds": 3,
     "play_enabled": false,
     "play_rounds": 2,
     "_not": "Play modu derleyicinin cevaplamadigi soruyu cevaplar. Bu projede derleyicinin goremedigi 3 hata yakaladi: recorderMode disinda playbackTime no-op, Play(string) hash ile cagrilmis, GameObject.Find pasif objede."
   },
-
   "prompt": {
-    "system_file": "prompts/unity_code.system.txt",
-    "_not": "Cok satirli metin JSON'a gomulmez - okunmaz ve duzenlenemez hale gelir. Ayri dosya, yolu buradan."
-  },
-
-  "panel": {
-    "auto_refresh": true,
-    "highlight": true,
-    "auto_title": true,
-    "auto_open_diff": false,
-    "font_scale": 1.0,
-    "_not": "Panel tarafi. Su an EditorPrefs'te (makine basina); buraya tasinirsa proje ile birlikte versiyonlanir ve ekip ayni ayarla calisir."
+    "_not": "Ortam sistem istemleri ortamin kendi kosucusundadir; buraya yalnizca genel ek talimat konabilir.",
+    "ek_talimat": ""
   }
 }

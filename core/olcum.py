@@ -31,15 +31,15 @@ def _post(url: str, body: dict, timeout: float = 600) -> dict:
 
 def uzun_prompt(hedef_token: int) -> str:
     # ~4 karakter/token varsayimi; kod benzeri metin (gercek is yuku: arac blogu + dosyalar)
-    satir = ("public class Ornek%d : MonoBehaviour { void Update() { transform.position += "
-             "new Vector3(%d, 0, %d) * Time.deltaTime; } }\n")
+    satir = ("class Ornek%d:\n    def guncelle(self, dt):\n        self.konum = "
+             "(self.konum[0] + %d * dt, self.konum[1] + %d * dt)\n\n")
     parcalar, n, i = [], 0, 0
     while n < hedef_token * 4:
         s = satir % (i, i % 7, i % 5)
         parcalar.append(s)
         n += len(s)
         i += 1
-    return "".join(parcalar) + "\nYukaridaki siniflardan kacinin Update'i var? Tek sayi yaz."
+    return "".join(parcalar) + "\nYukaridaki siniflardan kacinin guncelle metodu var? Tek sayi yaz."
 
 
 def olc(base: str, model: str, num_batch: int, num_ctx: int, prompt: str) -> dict:
@@ -61,7 +61,7 @@ def olc(base: str, model: str, num_batch: int, num_ctx: int, prompt: str) -> dic
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", default=config.env_or("UNITY_CODE_MODEL", "ollama.model"))
+    ap.add_argument("--model", default=config.env_or(["APPRENTICE_MODEL", "UNITY_CODE_MODEL"], "ollama.model"))
     ap.add_argument("--url", default=(config.get("ollama.url") or "http://localhost:11434").rstrip("/"))
     ap.add_argument("--batches", default="512,1024,2048,4096")
     ap.add_argument("--tokens", type=int, default=12000)
