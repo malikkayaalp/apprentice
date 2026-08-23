@@ -463,6 +463,16 @@ def main() -> int:
                 test_satiri=(TEST_SATIRI_TAM.format(test=TEST_ADI) if DOGRULAMA == "tam" else TEST_SATIRI_DERLEME))
             if hafiza:
                 sistem += "\n\nPROJE HAFIZASI (bu projenin kurallari ve gecmis dersleri; UY):\n" + hafiza
+            # PROJE HARITASI (2026-08-24, OpenMemory'nin MAP fikri): hedefin YERI bilinmeyen
+            # iste isci adressiz kaliyordu (olculdu: 120 dosyayi sirayla okuyup coktu).
+            # Harita "dosya -> semboller" adresini sifir sorguyla verir; denetci acar (harita=true).
+            if os.environ.get("APPRENTICE_HARITA") == "1":
+                try:
+                    from core import harita as HARITA
+                    sistem += "\n\n" + HARITA.uret(jail.root)[:16000] + \
+                              "\nHaritadaki adresi kullan: once ilgili dosyayi read_file ile oku."
+                except Exception as e:                           # noqa: BLE001 - harita cokse is surer
+                    em.emit("system", subtype="harita_hatasi", error=str(e)[:200])
             msgs = [{"role": "system", "content": sistem}]
         r = one_request(jail, dispatch, written, msgs, request, a.model, a.repairs, tools)
         save_session(a.session_dir, a.session, msgs, a.model)
@@ -471,9 +481,16 @@ def main() -> int:
         errs = list(r["errors"])
         if r.get("error"):
             errs.append("model dongusu: %s" % r["error"])
+        # Ruff bulgulari USTAYA da gider: olculdu (2026-08-24, ruff_ab) - isci uyariyla yeni
+        # kodu temiz yaziyor ama MEVCUT tohum hataya "davranisi koru" diye dokunmuyor; o karar
+        # ustanin. Hata degil uyari olarak ayri alanda doner, derleme_durumu'nu etkilemez.
+        ruff_rapor = []
+        for rel in dict.fromkeys(written):
+            if rel.endswith(".py"):
+                ruff_rapor += ruff_uyarilari(jail, rel)
         em.emit("result", ok=not errs, errors=[e[:600] for e in errs[:5]], rounds=r["rounds"],
                 wall=round(r["wall"], 1), written=list(dict.fromkeys(written)), play=None,
-                kullanim=r.get("kullanim"))
+                kullanim=r.get("kullanim"), ruff=ruff_rapor[:12] or None)
         code = 0 if not errs else 2
     except Exception as e:  # noqa: BLE001
         em.emit("error", message=("%s: %s" % (type(e).__name__, e))[:300])
