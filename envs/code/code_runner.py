@@ -58,13 +58,24 @@ TEST_CMD = ([sys.executable, "-B", "-m", "pytest", "-q", "-p", "no:cacheprovider
             else [sys.executable, "-B", "-m", "unittest", "discover", "-v"])
 TEST_ADI = "pytest" if HAS_PYTEST else "unittest"
 
+# "tam": derleme + test kosulur (varsayilan). "derleme": yalnizca derlenir; isci test kosmaz,
+# olcum uretilmez - dogrulamayi denetci yapar (kucuk donus, kucuk baglam).
+DOGRULAMA = os.environ.get("APPRENTICE_DOGRULAMA", "tam")
+
+TEST_SATIRI_TAM = ("- Testleri run_tests ile kosarsin ({test}; test dosyalari test_*.py, "
+                   "unittest.TestCase siniflari her iki kosucuda da calisir). Komutlari "
+                   "run_shell ile calistirirsin (120 sn sinir).\n")
+TEST_SATIRI_DERLEME = ("- BU TURDA TEST KOSUCUSU YOK. Kodu yaz; dogru ve derlenir olmasi yeterli. "
+                       "Test dosyasi istenmediyse yazma, komut calistirma. Dogrulamayi DENETCI "
+                       "yapacak: yazdigin kodu okuyacak. Bu yuzden okunur yaz ve nihai mesajinda "
+                       "ne yaptigini kisa ve somut anlat.\n")
+
 SYSTEM = (
     "Sen bir yazilim gelistiricisisin. Calisma dizini: {dir}\n"
     "- Dosya yollari calisma dizinine gorelidir; disina cikamazsin, silemezsin.\n"
     "- Var olan dosyayi degistirecegin zaman once read_file ile oku, sonra write_file ile "
     "TAM yeni icerigi yaz. Kismi yama yapma.\n"
-    "- Testleri run_tests ile kosarsin ({test}; test dosyalari test_*.py, unittest.TestCase "
-    "siniflari her iki kosucuda da calisir). Komutlari run_shell ile calistirirsin (120 sn sinir).\n"
+    "{test_satiri}"
     "- Derleme ya da test hatasi bildirilirse ilgili dosyayi oku, sebebi bul, duzeltilmis "
     "TAM dosyayi yaz.\n"
     "- Tur basina tek arac cagir. Bittiginde kisaca Turkce ozetle: ne yazdin, testler "
@@ -269,7 +280,9 @@ def one_request(jail: Jail, dispatch, written: list, msgs: list, request: str,
                         extra_options={"num_batch": NUM_BATCH})
         kullanim.merge(res.metrics); adim_sayisi += len(res.turns)
         msgs[:] = res.messages
-        errs = compile_errors(jail, written) or test_errors(jail)
+        errs = compile_errors(jail, written)
+        if not errs and DOGRULAMA == "tam":
+            errs = test_errors(jail)
         if not errs or rounds >= max_repairs:
             break
         rounds += 1
@@ -353,7 +366,8 @@ def main() -> int:
         dispatch = guarded_dispatch(tools, make_dispatch(jail, written, em))
         msgs = load_session(a.session_dir, a.session)
         if not msgs:
-            msgs = [{"role": "system", "content": SYSTEM.format(dir=jail.root, test=TEST_ADI)}]
+            msgs = [{"role": "system", "content": SYSTEM.format(dir=jail.root, test=TEST_ADI,
+                test_satiri=(TEST_SATIRI_TAM.format(test=TEST_ADI) if DOGRULAMA == "tam" else TEST_SATIRI_DERLEME))}]
         r = one_request(jail, dispatch, written, msgs, request, a.model, a.repairs, tools)
         save_session(a.session_dir, a.session, msgs, a.model)
         if r["text"]:

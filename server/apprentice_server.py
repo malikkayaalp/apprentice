@@ -95,8 +95,9 @@ def _diff_stat(before: str | None, after: str) -> tuple[int, int]:
 class Job:
     def __init__(self, ortam: str, gorev: str, kriterler: list, oturum: str,
                  play: bool, onarim: int, model: str, url: str, workdir: str = "",
-                 kapali: list | None = None):
+                 kapali: list | None = None, dogrulama: str = "tam"):
         self.workdir = workdir
+        self.dogrulama = dogrulama
         self.kapali = [str(k) for k in (kapali or []) if str(k).strip()]
         self.id = time.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:6]
         self.dir = os.path.join(HOME, "jobs", self.id)
@@ -139,6 +140,8 @@ class Job:
         env.setdefault("PYTHONIOENCODING", "utf-8")
         if self.kapali:
             env["APPRENTICE_TOOLS_OFF"] = ",".join(self.kapali)
+        if self.dogrulama != "tam":
+            env["APPRENTICE_DOGRULAMA"] = self.dogrulama
         self.stderr_f = open(os.path.join(self.dir, "stderr.txt"), "w", encoding="utf-8")
         # stdin/stdout=DEVNULL SART: ikisi de MCP kanali. Olculdu: stdin miras alininca
         # cocuk Windows'ta ilk satirini bile yazmadan takildi (yalniz sunucu icinde).
@@ -406,12 +409,16 @@ def tool_worker_run(a: dict) -> dict:
     if sebep:
         return {"hata": sebep, "derleme_durumu": "calistirilamadi", "yazilan_dosyalar": [],
                 "hatalar": [sebep], "tur_sayisi": 0, "sure": 0.0, "ozet": ""}
+    dogrulama = str(a.get("dogrulama") or "tam")
+    if dogrulama not in ("tam", "derleme"):
+        return {"hata": "dogrulama 'tam' ya da 'derleme' olmali"}
+    kapali_ek = ["run_tests", "run_shell"] if dogrulama == "derleme" else []
     job = Job(ortam, gorev, [str(k) for k in kriterler], str(a.get("oturum") or ""),
               bool(a.get("play", False)),
               int(a.get("onarim", config.get("onarim.compile_rounds", 3))),
               config.env_or(["APPRENTICE_MODEL", "UNITY_CODE_MODEL"], "ollama.model"),
               _kopru_url(ortam), workdir,
-              a.get("araclar_kapali") or [])
+              list(a.get("araclar_kapali") or []) + kapali_ek, dogrulama)
     JOBS[job.id] = job
     rid = getattr(_CUR_REQ, "id", None)
     if rid is not None:
@@ -479,6 +486,10 @@ TOOLS = [
                        "default": VARSAYILAN_ORTAM,
                        "description": "Arac seti + dogrulayici. " + "; ".join("%s: %s" % (k, v.get("aciklama", "")) for k, v in ENVS.items() if not v.get("gizli"))},
              "calisma_dizini": {"type": "string", "description": "code ortami: workspace kokune GORELI alt klasor (bos = kokun kendisi). Kok, istemcinin bildirdigi workspace'tir (MCP roots); disina cikilamaz."},
+             "dogrulama": {"type": "string", "enum": ["tam", "derleme"], "default": "tam",
+                           "description": "tam: isci testleri de kosar, ham test ciktisi doner (buyuk donus). "
+                                          "derleme: isci YALNIZCA yazar - test/shell araclari kapali, harness test "
+                                          "kosmaz, olcum donmez; kodu SEN okuyup onaylarsin ya da hatasini soylersin."},
              "araclar_kapali": {"type": "array", "items": {"type": "string"},
                                 "description": "Bu turda isciden saklanacak arac adlari (orn. [\"play_observe\"]: olcumu denetci yapar, isci olcum-duzeltme dongusune giremez)."},
              "oturum": {"type": "string", "description": "Onceki worker_run'in 'oturum' degeri: isci ayni baglamla devam eder. Bos = yeni oturum."},
