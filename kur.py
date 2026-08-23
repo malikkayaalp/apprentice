@@ -426,7 +426,7 @@ Dongu, olcumle secildi: cirak yazar -> usta CALISTIRARAK dogrular -> duzeltme bu
    kokundeki HAFIZA.md dosyasina KISA bir madde ekle/guncelle; cirak her iste bunu sistem
    isteminde gorur (ilk 3000 karakter). Gecici seyleri yazma.
 5) BUYUK PROJE - cok dosyali depoda gorevde ciraga soyle: "once ara('...') ile ilgili yeri bul,
-   sonra yalnizca o dosyalari oku". ara araci anlamsal arama yapar (bge-m3), korlemesine okumayi onler.
+   sonra yalnizca o dosyalari oku". ara araci anlamsal arama yapar (bge-m3; yoksa BM25 sozcuksel yedek), korlemesine okumayi onler.
 6) En fazla 4 tur. Bitince raporla: tur sayisi, sure, her kriter NASIL dogrulandi (hangi komut/cikti).
 """
 
