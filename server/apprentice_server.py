@@ -246,6 +246,8 @@ class Job:
                 m["eklendi"] += d["eklendi"]
                 m["silindi"] += d["silindi"]
                 m["satir"] = d["satir"]
+                m["icerik"] = d["icerik"]        # HATA idi: ilk surum donuyordu, denetci bayat
+                m["yazma"] = m.get("yazma", 1) + 1   # kac kez yazildi (onarim isareti)
             else:
                 merged[d["yol"]] = dict(d)
         rep["yazilan_dosyalar"] = list(merged.values())
