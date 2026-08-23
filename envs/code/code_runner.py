@@ -260,10 +260,14 @@ def one_request(jail: Jail, dispatch, written: list, msgs: list, request: str,
     t0 = time.time()
     rounds = 0
     errs: list = []
+    from core.client import Metrics
+    kullanim = Metrics()            # olcum: toplam prompt/uretim tokeni ve sureleri (Ollama sayar)
+    adim_sayisi = 0
     while True:
         res = run_agent(msgs, tools, dispatch, max_steps=12, model=model, think=False,
                         num_ctx=NUM_CTX, temperature=0.0, num_predict=6000, retries=2,
                         extra_options={"num_batch": NUM_BATCH})
+        kullanim.merge(res.metrics); adim_sayisi += len(res.turns)
         msgs[:] = res.messages
         errs = compile_errors(jail, written) or test_errors(jail)
         if not errs or rounds >= max_repairs:
@@ -273,8 +277,10 @@ def one_request(jail: Jail, dispatch, written: list, msgs: list, request: str,
                      "DOGRULAMA HATASI:\n" + "\n".join(errs[:6]) +
                      "\nIlgili dosyayi read_file ile oku, sebebi bul ve write_file ile "
                      "duzeltilmis TAM dosyayi yaz."})
+    k = kullanim.as_dict(); k["model_cagrisi"] = adim_sayisi
     return {"errors": errs, "rounds": rounds, "wall": time.time() - t0,
-            "text": res.final_text or "", "stopped": res.stopped, "error": res.error}
+            "text": res.final_text or "", "stopped": res.stopped, "error": res.error,
+            "kullanim": k}
 
 
 # ---------------------------------------------------------------------- CLI
@@ -356,7 +362,8 @@ def main() -> int:
         if r.get("error"):
             errs.append("model dongusu: %s" % r["error"])
         em.emit("result", ok=not errs, errors=[e[:600] for e in errs[:5]], rounds=r["rounds"],
-                wall=round(r["wall"], 1), written=list(dict.fromkeys(written)), play=None)
+                wall=round(r["wall"], 1), written=list(dict.fromkeys(written)), play=None,
+                kullanim=r.get("kullanim"))
         code = 0 if not errs else 2
     except Exception as e:  # noqa: BLE001
         em.emit("error", message=("%s: %s" % (type(e).__name__, e))[:300])

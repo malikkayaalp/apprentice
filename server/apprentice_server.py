@@ -221,6 +221,8 @@ class Job:
                 rep["derleme_durumu"] = "derlendi" if not errs else "derleme_hatasi"
                 rep["tur_sayisi"] = int(e.get("rounds", 0)) + 1
                 rep["play"] = e.get("play")
+                if e.get("kullanim"):
+                    rep["kullanim"] = e["kullanim"]     # token/sure: Ollama'nin kendi sayaci
                 if e.get("play") and e["play"].get("hatalar"):
                     rep["hatalar"].extend("calisma zamani: " + h for h in e["play"]["hatalar"])
             elif t == "error":

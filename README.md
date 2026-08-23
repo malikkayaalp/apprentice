@@ -2,6 +2,55 @@
 
 **A local model does the work, a frontier model supervises.**
 
+A local coding model (Ollama, Qwen3-Coder-Next) does the work: it writes files, calls tools, runs
+tests and repairs its own errors. A frontier model — the one already in your IDE (Cursor, Claude
+Code, VS Code) — supervises: it writes the task and the **acceptance criteria**, reads the raw
+measurements that come back, and decides when the work is done. Your code never leaves the machine
+and the worker burns no API tokens; the supervisor only ever sees summaries and measurements.
+
+*Apprentice* is **Çırak** in Turkish. The master watches, the apprentice works.
+
+## Why this split (measured, not assumed)
+
+- Same worker, same task: asked to interpret its **own** raw measurement and fix itself, it never
+  converged (closest distance 1.15 → 0.01). Given the same measurement **summarised** — "this rule
+  does not hold, you need a hard constraint" — it solved it in two rounds.
+- Six-task code campaign with hidden supervisor checks (never shown to the worker): **34/36** on
+  round one, 36/36 after concrete supervisor feedback. One task that generic feedback ("the tests
+  fail") could not fix in 2×1000 s was fixed in **130 s** by a concrete one-paragraph diagnosis.
+- When the criteria are numbers from the start, the worker writes on its own the pattern that
+  otherwise has to be taught to it afterwards.
+
+Evidence and every experiment live in [apprentice-lab](https://github.com/malikkayaalp/apprentice-lab).
+
+## Install
+
+**Windows — no Python required.** Download `Apprentice-Setup.exe` from
+[Releases](https://github.com/malikkayaalp/apprentice/releases) and run it from anywhere. You pick
+the install folder; the setup then checks and completes, step by step: Python (downloads an embedded
+runtime if missing) → Ollama (starts it, or points you to the download) → the model (~20 GB, with a
+progress bar) → an `apprentice` MCP entry for every installed IDE (Cursor, VS Code, Windsurf; other
+entries are left untouched) → a self-test.
+
+![Apprentice Setup](docs/setup.png)
+
+**macOS / Linux / manual:** Python 3.10+ and `python kur.py` (same engine, no third-party packages).
+
+## Use
+
+Add the supervisor rule to your project (`python kur.py --kural <project>`), then simply describe the
+task in your IDE chat. The frontier model writes concrete criteria, calls `worker_run`, the local
+model writes and tests the code, and the frontier model verifies the result against the raw
+measurements. You never type a path: the worker is confined to the workspace root your IDE reports
+over MCP `roots`.
+
+Tools, return schema and rules: [server/README.md](server/README.md).
+Unity support is a separate, optional repo: [apprentice-unity](https://github.com/malikkayaalp/apprentice-unity).
+
+---
+
+# Türkçe
+
 Yerel bir kodlama modeli (Ollama, Qwen3-Coder-Next) işi yapar: dosya yazar, araç çağırır,
 test koşar, hatayı düzeltir. Büyük bir model (IDE'nizdeki Claude/GPT/Gemini ya da Claude Code)
 denetler: görevi kabul kriterleriyle verir, dönen ölçümü yorumlar, ne zaman durulacağına karar
