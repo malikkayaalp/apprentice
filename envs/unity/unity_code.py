@@ -442,6 +442,8 @@ return sb.ToString();
                                      int(args.get("limit") or 60))
             elif name == "add_component":
                 kod = A.add_component_cs(args.get("obje", ""), args.get("tip", ""))
+            elif name == "remove_missing_components":
+                kod = A.remove_missing_cs(args.get("obje", ""))
             elif name == "set_field":
                 kod = A.set_field_cs(args.get("obje", ""), args.get("bilesen", ""),
                                      args.get("alan", ""), str(args.get("deger", "")))
@@ -571,7 +573,7 @@ return sb.ToString();
         if name.startswith("sb_"):
             return kapali_alan(name, args)
         if name in ("list_assets", "inspect_asset", "hierarchy", "add_component",
-                    "set_field", "create_asset", "set_material",
+                    "remove_missing_components", "set_field", "create_asset", "set_material",
                     "list_animator_states", "add_animator_state",
                     "create_override_controller", "set_animator"):
             return varlik(name, args)
@@ -852,6 +854,10 @@ def compile_errors(srv):
             out.append(line)
     for m in SCRIPT_ERR.finditer(raw):
         line = re.sub(r"\s+", " ", m.group(0)).strip()[:220]
+        if "referenced script" in line.lower():
+            # Dosya yazarak duzelmez; isci 16 kez denedi (Cursor deneyi). Eylemi soyle.
+            line += (" [COZUM: sinif adi dosya adiyla ayni mi ve derleniyor mu kontrol et; "
+                     "script gercekten yoksa remove_missing_components(obje) ile kirik bileseni kaldir]")
         if line not in seen:
             seen.add(line)
             out.append(line)

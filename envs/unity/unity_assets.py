@@ -197,6 +197,22 @@ return "EKLENDI: " + Yol(g) + " -> " + t.Name;
 """ % (json.dumps(obje), json.dumps(obje), json.dumps(tip)))
 
 
+def remove_missing_cs(obje):
+    """YALNIZCA kirik (script'i kayip, 'Missing Script') bilesenleri kaldirir.
+
+    Neden var (olculdu, Cursor denetci deneyi): isci bir yardimci scripti "silmek" icin
+    dosyayi bosaltti; sinif kaybolunca objede kirik bilesen kaldi, 'The referenced script
+    is missing' hatasi cikti ve isci bunu 16 kez dosya yazarak duzeltmeye calisti.
+    Saglam hicbir bileseni kaldiramaz: Unity'nin kendi RemoveMonoBehavioursWithMissingScript'i."""
+    return _cs("""
+var g = Bul(%s);
+if (g == null) return "OBJE YOK: " + %s;
+int n = UnityEditor.GameObjectUtility.RemoveMonoBehavioursWithMissingScript(g);
+UnityEditor.EditorUtility.SetDirty(g);
+return "KALDIRILDI: " + n + " kirik bilesen (" + Yol(g) + ")";
+""" % (json.dumps(obje), json.dumps(obje)))
+
+
 def set_field_cs(obje, bilesen, alan, deger_json):
     """SerializedProperty ile alan yaz: sayi, bool, string, Vector3, obje referansi,
     ve obje referansi DIZISI. Eski deger raporlanir, Undo kaydedilir."""
@@ -591,6 +607,15 @@ def tanimlar():
                 "tip": {"type": "string", "description": "orn: 'Animator' veya "
                                                          "'WaveDefense.WaveManager'"}},
                 "required": ["obje", "tip"]}}},
+        {"type": "function", "function": {
+            "name": "remove_missing_components",
+            "description": "Bir objedeki KIRIK (script'i kayip, Inspector'da 'Missing Script') "
+                           "bilesenleri kaldirir. Saglam bilesenlere dokunmaz. 'The referenced "
+                           "script ... is missing' hatasinin tek cozumu budur; dosya yazarak "
+                           "duzelmez.",
+            "parameters": {"type": "object", "properties": {
+                "obje": {"type": "string", "description": "obje adi veya yolu"}},
+                "required": ["obje"]}}},
         {"type": "function", "function": {
             "name": "set_field",
             "description": "Inspector'da bir alani yazar. Sayi, bool, metin, renk "
