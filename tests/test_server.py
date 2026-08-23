@@ -85,7 +85,7 @@ def main() -> int:
         tools = c.call("tools/list")["tools"]
         names = [t["name"] for t in tools]
         print("tools:", names)
-        assert names == ["worker_run"], names
+        assert names == ["worker_run", "worker_status"], names
         sch = tools[0]["inputSchema"]
         assert sch["type"] == "object" and set(sch["required"]) == {"gorev", "kabul_kriterleri"}
 
@@ -138,6 +138,29 @@ def main() -> int:
         sema_kontrol(rep)
         assert rep["derleme_durumu"] == "zaman_asimi"
         print("fake/zaman_asimi: ok")
+
+        # bekle=false + worker_status
+        rep = c.tool("worker_run", {"gorev": "YAVAS", "ortam": "fake", "kabul_kriterleri": ["x"], "bekle": False})["structuredContent"]
+        assert rep["durum"] == "calisiyor"
+        time.sleep(7)
+        st = c.tool("worker_status", {"is_id": rep["is_id"]})["structuredContent"]
+        assert st["durum"] == "bitti" and st["derleme_durumu"] == "derlendi", st
+        print("bekle=false + worker_status: ok")
+
+        # iptal: istemci notifications/cancelled gonderince isci olmeli (Cursor zaman asimi dersi)
+        c._id += 1
+        rid = c._id
+        c.p.stdin.write((json.dumps({"jsonrpc": "2.0", "id": rid, "method": "tools/call", "params": {
+            "name": "worker_run", "arguments": {"gorev": "YAVAS", "kabul_kriterleri": ["x"], "ortam": "fake"}}}) + chr(10)).encode("utf-8"))
+        c.p.stdin.flush()
+        time.sleep(1.5)
+        c.notify("notifications/cancelled", {"requestId": rid})
+        msg = json.loads(c.p.stdout.readline().decode("utf-8"))
+        rep = msg["result"]["structuredContent"]
+        assert rep["derleme_durumu"] == "iptal", rep
+        ev = [json.loads(l) for l in open(os.path.join(rep["is_klasoru"], "events.jsonl"), encoding="utf-8") if l.strip()]
+        assert any(e.get("message") == "istemci iptal etti" for e in ev) and any(e["type"] == "exit" for e in ev)
+        print("iptal -> isci olduruldu: ok")
 
         if live:
             args = {"gorev": "Assets/Scripts/ApprenticeSmoke.cs adinda bir MonoBehaviour yaz.",

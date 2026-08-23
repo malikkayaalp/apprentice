@@ -3,7 +3,8 @@
 **A local model does the work, a frontier model supervises.**
 
 `server/apprentice_server.py` bağımlılıksız (stdlib) bir stdio MCP sunucusudur. Denetçi
-(IDE'nizdeki Claude / GPT / Gemini ya da Claude Code) buna bağlanır ve tek aracı çağırır;
+(IDE'nizdeki Claude / GPT / Gemini ya da Claude Code) buna bağlanır ve iş aracını çağırır
+(`worker_run`; yardımcı: `worker_status`);
 işi Ollama'daki yerel model yapar, sonucu derleyici/doğrulayıcı onaylar.
 
 ## Sözleşme
@@ -23,6 +24,7 @@ worker_run(gorev, kabul_kriterleri, ortam="unity", calisma_dizini?, oturum?, pla
 | `onarim` | int | azami derleme onarım turu (vars. 3) |
 | `araclar_kapali` | string[] | bu turda işçiden saklanacak araçlar, ör. `["play_observe"]` — ölçümü denetçi yapar, işçi ölçüm-düzeltme döngüsüne giremez (ölçüldü: talimatla söylenince işçi iki turda yine ölçtü, ~400 s/tur) |
 | `zaman_asimi_s` | number | üst sınır (vars. 1800); aşılırsa işçi durdurulur |
+| `bekle` | bool | `false`: hemen `is_id` ile dön, `worker_status(is_id)` ile yokla. **Cursor için gerekli** (ölçüldü: Cursor'ın araç zaman aşımı ~2.5 dk, bir Unity turu 2–8 dk) |
 
 Dönüş:
 
@@ -52,7 +54,10 @@ Kurallar:
   diye verilince 2 turda çözdü. Bu yüzden denetçi özetler, aynı `oturum` ile yeni
   `worker_run` çağırır.
 - Bir tur 60–300 s sürer; `play` ile daha uzun. İstemcinin araç zaman aşımını buna göre
-  ayarla (Claude Code: `MCP_TOOL_TIMEOUT` ms cinsinden, ör. `1800000`).
+  ayarla (Claude Code: `MCP_TOOL_TIMEOUT` ms cinsinden, ör. `1800000`). Ayarlanamıyorsa (Cursor)
+  `bekle=false` + `worker_status`. İstemci çağrıyı iptal ederse (`notifications/cancelled`) sunucu
+  işçiyi öldürür — ölçüldü: iptal dinlenmeyince işçi zombi olarak devam edip ikinci çağrıyla aynı
+  dosyaya paralel yazdı.
 - İş dosyaları: `~/.apprentice/jobs/<id>/` → `prompt.txt` (işçinin gördüğü tam metin),
   `events.jsonl` (ham olay akışı), `stderr.txt`, `job.json`. Sohbet bağlamı
   `~/.apprentice/sessions/<ortam>/<oturum>.json`. Ev `APPRENTICE_HOME` ile değişir.

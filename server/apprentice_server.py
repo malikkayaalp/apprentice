@@ -232,6 +232,11 @@ class Job:
 
 
 JOBS: dict[str, Job] = {}
+# MCP istek id'si -> is (iptal bildirimi gelince isciyi oldurmek icin). OLCULDU (Cursor):
+# istemcinin arac zaman asimi (~2.5 dk) turdan kisa; iptal dinlenmeyince isci ZOMBI
+# olarak devam etti ve ikinci cagriyla ayni dosyaya paralel yazdi.
+REQ_JOBS: dict = {}
+_CUR_REQ = threading.local()
 
 
 # ----------------------------------------------------------------------- on kosul
@@ -290,11 +295,25 @@ def tool_worker_run(a: dict) -> dict:
               config.env_or("UNITY_MCP_URL", "unity.mcp_url"), workdir,
               a.get("araclar_kapali") or [])
     JOBS[job.id] = job
+    rid = getattr(_CUR_REQ, "id", None)
+    if rid is not None:
+        REQ_JOBS[rid] = job
     job.start()
+    if not a.get("bekle", True):
+        rep = job.report()
+        rep["hatalar"].append("bekle=false: is arka planda; worker_status(is_id) ile sor")
+        return rep
     limit = float(a.get("zaman_asimi_s") or DEFAULT_TIMEOUT_S)
     while not job.done and time.time() - job.t0 < limit:
         time.sleep(0.5)
+        if getattr(job, "iptal", False):
+            break
     rep = job.report()
+    if getattr(job, "iptal", False):
+        rep["derleme_durumu"] = "iptal"
+        rep["hatalar"].append("istemci cagriyi iptal etti (zaman asimi?); isci durduruldu. "
+                              "Uzun turlar icin bekle=false + worker_status kullan.")
+        return rep
     if not job.done:
         job.kill()
         msg = "zaman asimi (%.0f s): isci durduruldu; olaylar %s" % (limit, job.events_path)
@@ -341,7 +360,29 @@ TOOLS = [
          "required": ["gorev", "kabul_kriterleri"],
      }},
 ]
-HANDLERS = {"worker_run": tool_worker_run}
+def tool_worker_status(a: dict) -> dict:
+    jid = str(a.get("is_id") or "")
+    job = JOBS.get(jid)
+    if job is None:
+        return {"hata": "bilinmeyen is_id %r (bu surecte: %s)" % (jid, list(JOBS)[-5:])}
+    if a.get("durdur"):
+        job.kill()
+    return job.report()
+
+
+TOOLS.append(
+    {"name": "worker_status",
+     "description": ("bekle=false ile baslatilan ya da istemci zaman asimina ugrayan bir worker_run "
+                     "isinin raporu (calisiyor/bitti). durdur=true isciyi oldurur. Olculdu: Cursor'in "
+                     "arac zaman asimi bir turdan kisa; orada worker_run(bekle=false) + bu aracla yokla."),
+     "inputSchema": {"type": "object",
+                     "properties": {"is_id": {"type": "string"}, "durdur": {"type": "boolean", "default": False}},
+                     "required": ["is_id"]}})
+TOOLS[0]["inputSchema"]["properties"]["bekle"] = {
+    "type": "boolean", "default": True,
+    "description": "false: hemen is_id ile don, worker_status ile sor (istemci zaman asimi kisaysa)."}
+
+HANDLERS = {"worker_run": tool_worker_run, "worker_status": tool_worker_status}
 
 
 # ------------------------------------------------------------------ JSON-RPC/stdio
@@ -366,7 +407,19 @@ def handle(req: dict) -> dict | None:
         return {"jsonrpc": "2.0", "id": rid, "result": {
             "protocolVersion": p.get("protocolVersion") or PROTOCOL,
             "capabilities": {"tools": {}}, "serverInfo": SERVER_INFO}}
-    if m in ("notifications/initialized", "notifications/cancelled"):
+    if m == "notifications/cancelled":
+        job = REQ_JOBS.pop(p.get("requestId"), None)
+        if job is not None and not job.done:
+            job.iptal = True
+            job.kill()
+            _log("iptal: is %s olduruldu (istek %s)" % (job.id, p.get("requestId")))
+            try:
+                with open(job.events_path, "a", encoding="utf-8") as f:
+                    f.write(json.dumps({"type": "error", "message": "istemci iptal etti"}) + "\n")
+            except Exception:
+                pass
+        return None
+    if m == "notifications/initialized":
         return None
     if m == "ping":
         return {"jsonrpc": "2.0", "id": rid, "result": {}}
@@ -409,7 +462,9 @@ def serve():
             continue
 
         def run(r=req):
+            _CUR_REQ.id = r.get("id")
             resp = handle(r)
+            REQ_JOBS.pop(r.get("id"), None)
             if resp is not None:
                 _send(resp)
         # Uzun suren tools/call, ping gibi istekleri bloklamasin.
