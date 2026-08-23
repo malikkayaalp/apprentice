@@ -8,7 +8,7 @@ from __future__ import annotations
 import argparse, json, os, sys, time
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))  # apprentice koku (mcpbridge)
 from mcpbridge.http_client import MCPHttpServer  # noqa: E402
 
 SNIPPET_SEND = r'''

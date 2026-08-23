@@ -7,9 +7,12 @@ Sonuc: tests/devriye_olc.son.json (satir basina bir kosu, etiketli).
 from __future__ import annotations
 import argparse, json, math, os, sys, time
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, ROOT)
-sys.path.insert(0, os.path.join(ROOT, "envs", "unity"))
+BURASI = os.path.dirname(os.path.abspath(__file__))
+UNITY = os.path.dirname(BURASI)                      # apprentice-unity koku (= apprentice/envs/unity)
+KOK = os.path.dirname(os.path.dirname(UNITY))        # apprentice koku (core/, mcpbridge/, server/)
+for _p in (KOK, UNITY, os.path.join(KOK, "tests")):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 from mcpbridge.http_client import MCPHttpServer  # noqa: E402
 import unity_code as UC  # noqa: E402
@@ -91,7 +94,7 @@ def main() -> int:
         and abs(tur - 12) <= 1 and yon == "saat_yonu"
     print(json.dumps(say, ensure_ascii=False))
     print("SONUC:", "GECTI" if gecti else "KALDI")
-    with open(os.path.join(ROOT, "tests", "devriye_olc.son.json"), "a", encoding="utf-8", newline="\n") as f:
+    with open(os.path.join(BURASI, "devriye_olc.son.json"), "a", encoding="utf-8", newline="\n") as f:
         f.write(json.dumps({"zaman": time.strftime("%Y-%m-%d %H:%M:%S"), "ozet": say, "gecti": gecti,
                             "ham": r.get("ornekler")}, ensure_ascii=False) + "\n")
     return 0 if gecti else 1

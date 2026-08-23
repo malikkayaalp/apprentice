@@ -120,7 +120,7 @@ dosya > şablon > kod).
 
 | ortam | araçlar | doğrulayıcı | koşucu |
 |---|---|---|---|
-| `unity` | read/write_script, list_scripts, scene_objects, inspect_object, hierarchy, add_component, set_field, play_observe… | Unity derleyicisi (+ play, play_observe) | `envs/unity/panel_runner.py` |
+| `unity` (eklenti: apprentice-unity, `envs/unity` olarak klonlanır) | read/write_script, scene_objects, inspect_object, add_component, set_field, play_observe… | Unity derleyicisi (+ play, play_observe) | `envs/unity/panel_runner.py` |
 | `code` | read_file, write_file, list_files, run_shell, run_tests | `compile()` + pytest (yoksa stdlib unittest) | `envs/code/code_runner.py` |
 
 `code` ortamında silme aracı yoktur; `run_shell` içinde `git push` ve özyinelemeli silme komutları reddedilir. Git okuma/commit `run_shell` üzerinden serbesttir.

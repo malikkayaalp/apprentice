@@ -20,10 +20,12 @@ play modundan cikilir (play_observe bunu kendisi yapar).
 from __future__ import annotations
 import argparse, json, os, sys, time
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, ROOT)
-sys.path.insert(0, os.path.join(ROOT, "envs", "unity"))
-sys.path.insert(0, os.path.join(ROOT, "tests"))
+BURASI = os.path.dirname(os.path.abspath(__file__))
+UNITY = os.path.dirname(BURASI)                      # apprentice-unity koku (= apprentice/envs/unity)
+KOK = os.path.dirname(os.path.dirname(UNITY))        # apprentice koku (core/, mcpbridge/, server/)
+for _p in (KOK, UNITY, os.path.join(KOK, "tests")):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 from test_server import Client  # noqa: E402
@@ -126,7 +128,7 @@ def main() -> int:
 
     rapor = {"baslangic": time.strftime("%Y-%m-%d %H:%M:%S"), "gorev": GOREV,
              "kriterler": KRITERLER, "turlar": []}
-    yol = os.path.join(ROOT, "tests", "suru_kabul.son.json")
+    yol = os.path.join(BURASI, "suru_kabul.son.json")
 
     print("0) baslangic olcumu (script yokken)")
     d0 = degerlendir(olc(min(5, a.saniye)))

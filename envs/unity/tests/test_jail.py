@@ -5,7 +5,7 @@ yetkisi verilmeden once hapishanenin tutugu KANITLANMALI.
 """
 import os, sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "envs", "unity"))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # apprentice-unity koku
 import unity_sandbox as S
 
 KACISLAR = [

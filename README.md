@@ -22,10 +22,9 @@ deneyler [apprentice-lab](https://github.com/malikkayaalp/apprentice-lab) deposu
 ```
 core/            Ollama istemcisi, şema koruması, araç döngüsü — ortamdan bağımsız
 mcpbridge/       MCP taşıma (stdio + Streamable HTTP), bağımlılıksız
-envs/unity/      Unity ortamı: araçlar, derleme/play doğrulama, play_observe, sandbox hapsi
+envs/unity/      (eklenti, ayrı depo: apprentice-unity) Unity araçları + Q3CNFU paneli
 envs/code/       genel kod ortamı (taslak): dosya oku/yaz, shell, test; hapis + unittest/pytest doğrulayıcı
 server/          MCP sunucusu: tek araç worker_run(görev, kabul_kriterleri, ortam) — bkz. server/README.md
-clients/unity/   Q3CNFU — Unity Editor paneli (UPM paketi)
 clients/web/     canlı izleme sayfası: `python clients/web/monitor.py` → http://127.0.0.1:8765 (jobs klasörünü okur)
 tests/           hapis öz-testi
 ```
@@ -34,8 +33,7 @@ tests/           hapis öz-testi
 
 - Python 3.10+ (ek paket yok, stdlib)
 - [Ollama](https://ollama.com) + `hf.co/unsloth/Qwen3-Coder-Next-GGUF:UD-Q4_K_XL` (~20 GB)
-- Unity ortamı için: Unity 6000.0.x + [MCP for Unity](https://github.com/CoplayDev/unity-mcp) **v10.1.2**
-  (bu sürüme karşı test edildi; sunucunun kendi dokümanı var olmayan API'ler tarif ediyor — şemaya güvenin)
+- Unity için: apprentice-unity eklentisi (aşağıda)
 
 ## Denetçi olarak bağlanmak (MCP sunucusu)
 
@@ -61,23 +59,11 @@ olaylar, stderr), sohbet bağlamı `~/.apprentice/sessions/<ortam>/`.
 
 Test: `python tests/test_server.py` (Unity/Ollama gerekmez), `tests/test_code_env.py`, `tests/suru_kabul.py` (kabul testi). Ayrıntı: [server/README.md](server/README.md).
 
-## Unity paneli (Q3CNFU)
+## Unity (eklenti)
 
-Geliştirme kurulumu:
-
-1. `clients/unity/Editor/` → projenin `Assets/Editor/Q3CNFU/` altına kopyala.
-2. Aynı klasörde `Agent~` adında bir junction oluştur, bu depoya baksın:
-   `mklink /J Agent~ C:\yol\Apprentice` (sondaki `~` Unity'nin klasörü yok saymasını sağlar).
-3. Window > Q3CNFU (Ctrl+Shift+Q). Pencere Python / ajan / Ollama / model / MCP köprüsünü
-   kendisi kontrol eder, eksik adımı söyler.
-
-Komut satırından:
-
-```
-cd envs/unity
-python unity_code.py "Player objesine WASD ile hareket eden bir script yaz"
-python unity_code.py --play "dusman spawner'i yaz"      # play modda çalışma zamanı doğrulaması
-```
+Unity desteği ayrı depodadır: [apprentice-unity](https://github.com/malikkayaalp/apprentice-unity)
+(çırağın Unity araç seti + Q3CNFU Editor paneli). Kurulum: o depoyu `envs/unity` olarak klonla;
+`worker_run`'da `ortam="unity"` belirir. Cursor/Claude Code ile yalnızca kod işi yapanlar bunu atlar.
 
 ## Ölçülmüş tasarım kararları
 
