@@ -39,6 +39,7 @@ PYTHON = os.environ.get("APPRENTICE_PYTHON") or sys.executable
 # Bir tur 60-300 s; play_observe'lu isler daha uzun. Varsayilan ust sinir 30 dk.
 DEFAULT_TIMEOUT_S = float(os.environ.get("APPRENTICE_TIMEOUT_S", "1800"))
 
+ICERIK_SINIRI = int(os.environ.get("APPRENTICE_ICERIK_SINIRI", "12000"))   # dosya icerigi/karakter
 # Olcum sayilan araclar: sonuclari ham olarak denetciye tasinir.
 MEASURE_TOOLS = {"play_observe", "read_console", "scene_objects", "inspect_object"}
 
@@ -189,10 +190,13 @@ class Job:
                                         "sure_s": e.get("sure")})
             elif t == "write":
                 ek, sil = _diff_stat(e.get("before"), e.get("after") or "")
+                icerik = e.get("after") or ""
                 rep["yazilan_dosyalar"].append({
                     "yol": e.get("path"), "yeni": e.get("before") is None,
                     "eklendi": ek, "silindi": sil,
-                    "satir": len((e.get("after") or "").splitlines())})
+                    "satir": len(icerik.splitlines()),
+                    # Denetci (ve Cursor'daki insan) ne yazildigini arac sonucunda gorsun.
+                    "icerik": icerik if len(icerik) <= ICERIK_SINIRI else icerik[:ICERIK_SINIRI] + chr(10) + "… [kirpildi]"})
             elif t == "assistant":
                 rep["ozet"] = e.get("text", "")
             elif t == "result":
@@ -304,8 +308,18 @@ def tool_worker_run(a: dict) -> dict:
         rep["hatalar"].append("bekle=false: is arka planda; worker_status(is_id) ile sor")
         return rep
     limit = float(a.get("zaman_asimi_s") or DEFAULT_TIMEOUT_S)
+    token = getattr(_CUR_REQ, "progress", None)
+    gonderilen = 0
     while not job.done and time.time() - job.t0 < limit:
         time.sleep(0.5)
+        # Canli akis: yeni olaylari notifications/progress (+ logging) ile istemciye gonder.
+        ev = job.events()
+        if len(ev) > gonderilen:
+            for e in ev[gonderilen:]:
+                msg = _olay_metni(e)
+                if msg:
+                    _progress(token, len(ev), msg)
+            gonderilen = len(ev)
         if getattr(job, "iptal", False):
             break
     rep = job.report()
@@ -360,6 +374,34 @@ TOOLS = [
          "required": ["gorev", "kabul_kriterleri"],
      }},
 ]
+def _olay_metni(e: dict) -> str:
+    t = e.get("type")
+    if t == "tool":
+        return "arac: %s %s" % (e.get("name"), (e.get("detail") or "")[:80])
+    if t == "write":
+        icerik = e.get("after") or ""
+        return "yazdi: %s (%d satir)%s" % (e.get("path"), len(icerik.splitlines()),
+                                          "" if e.get("before") is None else " [degisti]")
+    if t == "tool_result" and e.get("name") in ("run_tests", "validate_script", "play_observe", "read_console"):
+        return "%s -> %s" % (e.get("name"), (e.get("text") or "")[:200].replace(chr(10), " "))
+    if t == "assistant":
+        return "isci ozeti: " + (e.get("text") or "")[:300].replace(chr(10), " ")
+    if t == "result":
+        return "sonuc: %s, onarim turu %s, %s s" % ("derlendi" if e.get("ok") else "hata", e.get("rounds"), e.get("wall"))
+    if t == "error":
+        return "hata: " + (e.get("message") or "")[:200]
+    return ""
+
+
+def _progress(token, n: int, msg: str):
+    """MCP ilerleme + log bildirimi. Cursor/Claude Code arac kutusunda canli gosterir."""
+    if token is not None:
+        _send({"jsonrpc": "2.0", "method": "notifications/progress",
+               "params": {"progressToken": token, "progress": n, "message": msg}})
+    _send({"jsonrpc": "2.0", "method": "notifications/message",
+           "params": {"level": "info", "logger": "apprentice", "data": msg}})
+
+
 def tool_worker_status(a: dict) -> dict:
     jid = str(a.get("is_id") or "")
     job = JOBS.get(jid)
@@ -406,7 +448,7 @@ def handle(req: dict) -> dict | None:
     if m == "initialize":
         return {"jsonrpc": "2.0", "id": rid, "result": {
             "protocolVersion": p.get("protocolVersion") or PROTOCOL,
-            "capabilities": {"tools": {}}, "serverInfo": SERVER_INFO}}
+            "capabilities": {"tools": {}, "logging": {}}, "serverInfo": SERVER_INFO}}
     if m == "notifications/cancelled":
         job = REQ_JOBS.pop(p.get("requestId"), None)
         if job is not None and not job.done:
@@ -421,7 +463,7 @@ def handle(req: dict) -> dict | None:
         return None
     if m == "notifications/initialized":
         return None
-    if m == "ping":
+    if m in ("ping", "logging/setLevel"):
         return {"jsonrpc": "2.0", "id": rid, "result": {}}
     if m == "tools/list":
         return {"jsonrpc": "2.0", "id": rid, "result": {"tools": TOOLS}}
@@ -463,6 +505,7 @@ def serve():
 
         def run(r=req):
             _CUR_REQ.id = r.get("id")
+            _CUR_REQ.progress = ((r.get("params") or {}).get("_meta") or {}).get("progressToken")
             resp = handle(r)
             REQ_JOBS.pop(r.get("id"), None)
             if resp is not None:

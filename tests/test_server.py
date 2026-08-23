@@ -118,6 +118,7 @@ def main() -> int:
         with open(os.path.join(home, "jobs", rep["is_id"], "prompt.txt"), encoding="utf-8") as f:
             pt = f.read()
         assert "KABUL KRITERLERI" in pt and "- derlenir" in pt and "- Start'ta log" in pt
+        assert "icerik" in rep["yazilan_dosyalar"][0] and "FakeSmoke" in rep["yazilan_dosyalar"][0]["icerik"]
         print("fake/basari: ok  (%s, %.1fs)" % (rep["derleme_durumu"], rep["sure"]))
 
         rep = c.tool("worker_run", {"gorev": "HATA_URET", "ortam": "fake", "kabul_kriterleri": ["x"]},
@@ -155,7 +156,13 @@ def main() -> int:
         c.p.stdin.flush()
         time.sleep(1.5)
         c.notify("notifications/cancelled", {"requestId": rid})
-        msg = json.loads(c.p.stdout.readline().decode("utf-8"))
+        bildirim = 0
+        while True:   # notifications/progress + message satirlari araya girer
+            msg = json.loads(c.p.stdout.readline().decode("utf-8"))
+            if msg.get("id") == rid:
+                break
+            assert msg.get("method", "").startswith("notifications/"), msg
+            bildirim += 1
         rep = msg["result"]["structuredContent"]
         assert rep["derleme_durumu"] == "iptal", rep
         ev = [json.loads(l) for l in open(os.path.join(rep["is_klasoru"], "events.jsonl"), encoding="utf-8") if l.strip()]

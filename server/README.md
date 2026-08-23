@@ -30,7 +30,7 @@ Dönüş:
 
 ```json
 {
-  "yazilan_dosyalar": [{"yol": "Assets/Scripts/X.cs", "yeni": true, "eklendi": 41, "silindi": 0, "satir": 41}],
+  "yazilan_dosyalar": [{"yol": "Assets/Scripts/X.cs", "yeni": true, "eklendi": 41, "silindi": 0, "satir": 41, "icerik": "dosyanin son hali (12k karaktere kadar)"}],
   "derleme_durumu": "derlendi | derleme_hatasi | calistirilamadi | zaman_asimi",
   "hatalar": ["...derleyici / çalışma zamanı / altyapı..."],
   "tur_sayisi": 1,
@@ -61,6 +61,13 @@ Kurallar:
 - İş dosyaları: `~/.apprentice/jobs/<id>/` → `prompt.txt` (işçinin gördüğü tam metin),
   `events.jsonl` (ham olay akışı), `stderr.txt`, `job.json`. Sohbet bağlamı
   `~/.apprentice/sessions/<ortam>/<oturum>.json`. Ev `APPRENTICE_HOME` ile değişir.
+
+## Canlı akış
+
+Tur sürerken sunucu her olay için `notifications/progress` (istek `_meta.progressToken` taşıyorsa) ve
+`notifications/message` (log) gönderir: "arac: write_file app.py", "yazdi: app.py (88 satir)",
+"run_tests -> …", "isci ozeti: …". Cursor ve Claude Code bunları araç kutusunda gösterir; dönüşteki
+`yazilan_dosyalar[].icerik` ise yazılan dosyanın son halidir.
 
 ## Örnek çağrı
 
