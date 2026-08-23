@@ -240,6 +240,56 @@ JOBS: dict[str, Job] = {}
 # istemcinin arac zaman asimi (~2.5 dk) turdan kisa; iptal dinlenmeyince isci ZOMBI
 # olarak devam etti ve ikinci cagriyla ayni dosyaya paralel yazdi.
 REQ_JOBS: dict = {}
+
+# Calisma koku (dagitilabilir tasarim: sabit yol YOK). Oncelik:
+#   1. MCP roots: istemci (Cursor, Claude Code, VS Code) acik workspace'ini roots/list ile
+#      bildirir - kullanici hicbir yol yazmaz.
+#   2. APPRENTICE_WORKDIR_ROOT ortam degiskeni (roots desteklemeyen istemciler icin).
+#   3. Sunucunun calisma dizini (istemci sunucuyu workspace icinde baslattiysa) - depo
+#      kokunun kendisiyse sayilmaz.
+# calisma_dizini istege bagli ve koke GORELI; kok disina cikilamaz.
+ROOTS: list = []
+CLIENT_CAPS: dict = {}
+_PENDING: dict = {}          # sunucu->istemci istekleri (roots/list) icin id -> yanit isleyici
+_SRV_ID = [1000]
+
+
+def _uri_to_path(uri: str) -> str:
+    from urllib.parse import urlparse, unquote
+    u = urlparse(uri)
+    if u.scheme != "file":
+        return ""
+    p = unquote(u.path)
+    if os.name == "nt" and p.startswith("/") and len(p) > 2 and p[2] == ":":
+        p = p[1:]
+    return os.path.realpath(p)
+
+
+def calisma_koku() -> str:
+    for r in ROOTS:
+        if r and os.path.isdir(r):
+            return r
+    env = os.environ.get("APPRENTICE_WORKDIR_ROOT", "")
+    if env and os.path.isdir(env):
+        return os.path.realpath(env)
+    cwd = os.path.realpath(os.getcwd())
+    if cwd != os.path.realpath(ROOT):
+        return cwd
+    return ""
+
+
+def roots_iste():
+    """Istemci roots destekliyorsa roots/list iste; yanit serve() icinde _PENDING ile islenir."""
+    if not (CLIENT_CAPS.get("roots") is not None):
+        return
+    _SRV_ID[0] += 1
+    rid = _SRV_ID[0]
+
+    def al(res: dict):
+        ROOTS[:] = [_uri_to_path(r.get("uri", "")) for r in (res or {}).get("roots", [])]
+        _log("roots: %s" % ROOTS)
+    _PENDING[rid] = al
+    _send({"jsonrpc": "2.0", "id": rid, "method": "roots/list", "params": {}})
 _CUR_REQ = threading.local()
 
 
@@ -285,17 +335,20 @@ def tool_worker_run(a: dict) -> dict:
         return {"hata": "ortam %r planli, henuz yok" % ortam}
     workdir = str(a.get("calisma_dizini") or "")
     if ortam == "code":
-        if not workdir or not os.path.isdir(workdir):
-            return {"hata": "ortam 'code' icin calisma_dizini (var olan klasor) zorunlu: %r" % workdir}
+        kok = calisma_koku()
+        if not workdir:
+            workdir = kok
+        elif not os.path.isabs(workdir) and kok:
+            workdir = os.path.join(kok, workdir)
+        if not workdir:
+            return {"hata": "calisma koku bilinmiyor: istemci roots bildirmedi, APPRENTICE_WORKDIR_ROOT "
+                            "yok; calisma_dizini (mutlak yol) ver"}
+        if not os.path.isdir(workdir):
+            return {"hata": "calisma_dizini yok: %s" % workdir}
         workdir = os.path.realpath(workdir)
-        # Kok siniri: IDE'nin acik klasoru sunucuyu SINIRLAMAZ (olculdu: Cursor CursorTest'i
-        # acmisken prompt'taki yol deneme/ idi, isci oraya yazdi). APPRENTICE_WORKDIR_ROOT
-        # verilirse onun disindaki calisma_dizini reddedilir.
-        kok = os.environ.get("APPRENTICE_WORKDIR_ROOT", "")
-        if kok:
-            kok = os.path.realpath(kok)
-            if workdir != kok and not workdir.startswith(kok + os.sep):
-                return {"hata": "calisma_dizini izin verilen kokun disinda: %s (kok: %s)" % (workdir, kok)}
+        # Olculdu: IDE'nin acik klasoru sunucuyu kendiliginden SINIRLAMAZ; sinir burada.
+        if kok and workdir != kok and not workdir.startswith(kok + os.sep):
+            return {"hata": "calisma_dizini workspace kokunun disinda: %s (kok: %s)" % (workdir, kok)}
     sebep = _precheck(ortam)
     if sebep:
         return {"hata": sebep, "derleme_durumu": "calistirilamadi", "yazilan_dosyalar": [],
@@ -370,7 +423,7 @@ TOOLS = [
              "kabul_kriterleri": {"type": "array", "items": {"type": "string"},
                                   "description": "Denetcinin yazdigi somut kriterler, her biri tek cumle."},
              "ortam": {"type": "string", "enum": list(ENVS), "default": "unity"},
-             "calisma_dizini": {"type": "string", "description": "code ortami icin zorunlu: iscinin hapsedildigi klasor (mutlak yol)."},
+             "calisma_dizini": {"type": "string", "description": "code ortami: workspace kokune GORELI alt klasor (bos = kokun kendisi). Kok, istemcinin bildirdigi workspace'tir (MCP roots); disina cikilamaz."},
              "araclar_kapali": {"type": "array", "items": {"type": "string"},
                                 "description": "Bu turda isciden saklanacak arac adlari (orn. [\"play_observe\"]: olcumu denetci yapar, isci olcum-duzeltme dongusune giremez)."},
              "oturum": {"type": "string", "description": "Onceki worker_run'in 'oturum' degeri: isci ayni baglamla devam eder. Bos = yeni oturum."},
@@ -454,6 +507,8 @@ def _log(msg: str):
 def handle(req: dict) -> dict | None:
     m, rid, p = req.get("method"), req.get("id"), req.get("params") or {}
     if m == "initialize":
+        CLIENT_CAPS.clear()
+        CLIENT_CAPS.update(p.get("capabilities") or {})
         return {"jsonrpc": "2.0", "id": rid, "result": {
             "protocolVersion": p.get("protocolVersion") or PROTOCOL,
             "capabilities": {"tools": {}, "logging": {}}, "serverInfo": SERVER_INFO}}
@@ -470,6 +525,10 @@ def handle(req: dict) -> dict | None:
                 pass
         return None
     if m == "notifications/initialized":
+        roots_iste()
+        return None
+    if m == "notifications/roots/list_changed":
+        roots_iste()
         return None
     if m in ("ping", "logging/setLevel"):
         return {"jsonrpc": "2.0", "id": rid, "result": {}}
@@ -509,6 +568,14 @@ def serve():
             req = json.loads(line.decode("utf-8"))
         except Exception:
             _send({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "parse error"}})
+            continue
+
+        # Sunucunun kendi istegine (roots/list) gelen YANIT: method yok, id bizde kayitli.
+        if "method" not in req and req.get("id") in _PENDING:
+            try:
+                _PENDING.pop(req["id"])(req.get("result") or {})
+            except Exception as e:
+                _log("roots yaniti islenemedi: %s" % e)
             continue
 
         def run(r=req):

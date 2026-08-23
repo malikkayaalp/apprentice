@@ -18,7 +18,7 @@ worker_run(gorev, kabul_kriterleri, ortam="unity", calisma_dizini?, oturum?, pla
 | `gorev` | string | ne yapılacak, düz dille; dosya/obje adlarını ver |
 | `kabul_kriterleri` | string[] | **denetçi yazar**, somut ve ölçülebilir; göreve metin olarak eklenir |
 | `ortam` | `unity` \| `code` \| `fake` | araç seti + doğrulayıcı. `code` = genel kod (taslak), `fake` = Unity/Ollama'sız duman testi |
-| `calisma_dizini` | string | `code` için zorunlu: işçinin hapsedildiği klasör (dışına okuyamaz/yazamaz, silemez) |
+| `calisma_dizini` | string | `code`: workspace köküne **göreli** alt klasör; boş = kökün kendisi. Kök, IDE'nin bildirdiği workspace'tir (MCP `roots`); dışına çıkılamaz |
 | `oturum` | string | önceki çağrının `oturum`u verilirse işçi aynı bağlamla devam eder |
 | `play` | bool | unity: derlemeden sonra play moda girip çalışma zamanı hatası ara (vars. false) |
 | `onarim` | int | azami derleme onarım turu (vars. 3) |
@@ -106,8 +106,10 @@ claude mcp add apprentice -- python C:/yol/Apprentice/server/apprentice_server.p
 
 **VS Code (Copilot)** — `.vscode/mcp.json`, aynı `command`/`args` ile `"servers"` altında.
 
-**Dikkat:** IDE'nin açık klasörü sunucuyu sınırlamaz; işçi yalnızca `calisma_dizini`'ne hapsedilir. Yanlış yol
-riskini kapatmak için MCP ayarına `APPRENTICE_WORKDIR_ROOT` ekleyin — onun dışındaki `calisma_dizini` reddedilir.
+**Çalışma kökü (dağıtılabilir, sabit yol yok):** sunucu `initialize` sonrası istemciden `roots/list` ister;
+Cursor / Claude Code / VS Code açık workspace'ini bildirir, kök o olur. Kullanıcı prompt'a yol yazmaz.
+Roots desteklemeyen istemci için `APPRENTICE_WORKDIR_ROOT`; o da yoksa sunucunun çalışma dizini.
+Ölçüldü: IDE'nin açık klasörü sunucuyu kendiliğinden sınırlamaz — sınır bu mekanizmadır.
 
 Ortam değişkenleri: `APPRENTICE_WORKDIR_ROOT`, `APPRENTICE_HOME`, `APPRENTICE_TIMEOUT_S`, `APPRENTICE_PYTHON`
 (işçi için ayrı yorumlayıcı), `UNITY_CODE_MODEL`, `UNITY_MCP_URL`. Diğer ayarlar

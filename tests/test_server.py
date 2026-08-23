@@ -95,7 +95,7 @@ def main() -> int:
         r = c.tool("worker_run", {"gorev": "x", "kabul_kriterleri": [], "ortam": "yok"})
         assert r["isError"] and "bilinmeyen ortam" in r["structuredContent"]["hata"]
         r = c.tool("worker_run", {"gorev": "x", "kabul_kriterleri": [], "ortam": "code"})
-        assert r["isError"] and "calisma_dizini" in r["structuredContent"]["hata"]
+        assert r["isError"] and "calisma koku bilinmiyor" in r["structuredContent"]["hata"], r
         try:
             c.tool("yok", {})
             raise AssertionError("bilinmeyen arac hata vermedi")
@@ -168,6 +168,33 @@ def main() -> int:
         ev = [json.loads(l) for l in open(os.path.join(rep["is_klasoru"], "events.jsonl"), encoding="utf-8") if l.strip()]
         assert any(e.get("message") == "istemci iptal etti" for e in ev) and any(e["type"] == "exit" for e in ev)
         print("iptal -> isci olduruldu: ok")
+
+        # MCP roots: istemci workspace'ini bildirir, calisma_dizini goreli olur, disari cikilamaz
+        ws = os.path.join(home, "ws")
+        os.makedirs(os.path.join(ws, "alt"), exist_ok=True)
+        # UNITY_CODE_MODEL=yok: on kosul "model yuklu degil" ile hemen doner, gercek isci kosmaz
+        c2 = Client({"APPRENTICE_HOME": home, "UNITY_CODE_MODEL": "yok:model"})
+        c2.call("initialize", {"protocolVersion": "2024-11-05", "capabilities": {"roots": {"listChanged": True}},
+                               "clientInfo": {"name": "test", "version": "0"}})
+        c2.notify("notifications/initialized")
+        req = json.loads(c2.p.stdout.readline().decode("utf-8"))      # sunucunun roots/list istegi
+        assert req.get("method") == "roots/list", req
+        uri = "file:///" + ws.replace("\\", "/")
+        c2.p.stdin.write((json.dumps({"jsonrpc": "2.0", "id": req["id"], "result": {"roots": [{"uri": uri, "name": "ws"}]}}) + chr(10)).encode("utf-8"))
+        c2.p.stdin.flush()
+        time.sleep(0.5)
+        r = c2.tool("worker_run", {"gorev": "x", "kabul_kriterleri": [], "ortam": "code",
+                                   "calisma_dizini": os.path.join(ROOT, "tests")})
+        assert r["isError"] and "disinda" in r["structuredContent"]["hata"], r
+        r = c2.tool("worker_run", {"gorev": "x", "kabul_kriterleri": [], "ortam": "code", "calisma_dizini": "yok_boyle"})
+        assert r["isError"] and "calisma_dizini yok" in r["structuredContent"]["hata"], r
+        # goreli alt klasor ve bos (kok): on kosul asamasina gecer (Ollama kapali olabilir; hata metni farkli olmali)
+        for cd in ("alt", ""):
+            r = c2.tool("worker_run", {"gorev": "x", "kabul_kriterleri": [], "ortam": "code", "calisma_dizini": cd}, timeout=60)["structuredContent"]
+            h = " ".join(r.get("hatalar", [])) + (r.get("hata") or "")
+            assert "model yuklu degil" in h or "Ollama" in h, r
+        c2.close()
+        print("roots: ok")
 
         if live:
             args = {"gorev": "Assets/Scripts/ApprenticeSmoke.cs adinda bir MonoBehaviour yaz.",
