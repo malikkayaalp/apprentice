@@ -66,11 +66,18 @@ def main() -> int:
     # tur suresi ve yon: ilk kurenin acisinin zamana gore degisimi
     tur = yon = None
     if len(rows) >= 2:
-        (t0, p0), (t1, p1) = rows[0], rows[-1]
-        a0 = math.degrees(math.atan2(p0[0][2], p0[0][0]))
-        a1 = math.degrees(math.atan2(p1[0][2], p1[0][0]))
-        da = (a1 - a0 + 180) % 360 - 180
-        hiz = da / (t1 - t0) if t1 > t0 else 0  # derece/sn, + = saat yonunun tersi (matematiksel)
+        # Ardisik orneklerle sarmasiz birikim (ilk/son farki 180 dereceyi asinca sarar -
+        # olculdu: 450 derecelik donus 38 sn/tur ve ters yon diye okundu).
+        toplam = 0.0
+        for (ta, pa), (tb, pb) in zip(rows, rows[1:]):
+            a0 = math.degrees(math.atan2(pa[0][2], pa[0][0]))
+            a1 = math.degrees(math.atan2(pb[0][2], pb[0][0]))
+            toplam += (a1 - a0 + 180) % 360 - 180
+        dt = rows[-1][0] - rows[0][0]
+        hiz = toplam / dt if dt > 0 else 0  # derece/sn
+        # Unity sol-elli, Y yukari: ustten bakinca +X sag, +Z yukari -> atan2(z,x) ARTISI saat
+        # yonunun tersi, AZALISI saat yonu (Rotate(0,+90,0) +Z'yi +X'e cevirir = saat yonu).
+        # Ilk surum tersini varsaydi; Cursor'daki denetci de ayni hatayi yapip 2 tur harcadi.
         if abs(hiz) > 1e-3:
             tur = 360 / abs(hiz)
             yon = "saat_yonu" if hiz < 0 else "saat_yonu_tersi"
