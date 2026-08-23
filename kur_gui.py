@@ -182,8 +182,11 @@ class Sihirbaz(tk.Tk):
         alt = ttk.Frame(self, padding=(16, 8))
         alt.pack(fill="x")
         self.btn_ollama = ttk.Button(alt, text="Ollama'yı indir", command=lambda: webbrowser.open("https://ollama.com/download"))
-        self.btn_kural = ttk.Button(alt, text="Projeye denetçi kuralı ekle…", command=self._kural, state="disabled")
+        self.btn_kural = ttk.Button(alt, text="Projeye denetçi kuralı ekle…", command=self._kural)
         self.btn_kural.pack(side="left")
+        ttk.Label(alt, text="Proje klasörüne .cursor/rules/apprentice.mdc + APPRENTICE.md yazar; IDE o projede\n"
+                            "usta rolünü otomatik uygular (kodu kendisi yazmaz, worker_run'a verir).",
+                  style="Alt.TLabel", font=(FONT, 8)).pack(side="left", padx=(10, 0))
         self.btn_kapat = ttk.Button(alt, text="Kapat", command=self.destroy)
         self.btn_kapat.pack(side="right")
         self.btn_kur = ttk.Button(alt, text="Kur", command=self._baslat, style="Vurgu.TButton")
@@ -304,7 +307,6 @@ class Sihirbaz(tk.Tk):
             self.after(500, self.destroy)
             return
         self.btn_kur.configure(state="normal", text="Tekrar dene")
-        self.btn_kural.configure(state="normal")
         if self.ollama_eksik:
             self.btn_ollama.pack(side="left", padx=(8, 0))
         if all(sonuc.get(k) for k, _ in ADIMLAR):
@@ -317,11 +319,21 @@ class Sihirbaz(tk.Tk):
             self.ilerle(0, "Eksik: " + ", ".join(eksik) + " — ayrıntı panelindeki [X] satırlarına bak.")
 
     def _kural(self):
-        d = filedialog.askdirectory(title="Proje klasörü")
+        kur = sys.modules.get("kur")
+        if kur is None:
+            kok = self.kok_var.get().strip()
+            if not os.path.isfile(os.path.join(kok, "kur.py")):
+                messagebox.showinfo("Apprentice", "Önce 'Kur' ile kurulumu tamamla; sonra bir proje klasörü seçip "
+                                    "kural dosyasını ekleyebilirsin.")
+                return
+            sys.path.insert(0, kok)
+            import importlib
+            kur = importlib.import_module("kur")
+            kur.set_root(kok); kur.log = self.log
+        d = filedialog.askdirectory(title="Kural eklenecek proje klasörü")
         if not d:
             return
         try:
-            kur = sys.modules["kur"]
             kur.kural_yaz(d)
             messagebox.showinfo("Apprentice", "Kural dosyaları yazıldı:\n%s\\.cursor\\rules\\apprentice.mdc\n%s\\APPRENTICE.md" % (d, d))
         except Exception as e:  # noqa: BLE001
