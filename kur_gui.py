@@ -142,6 +142,11 @@ class Sihirbaz(tk.Tk):
     # ---------------------------------------------------------------- log / durum (is parcacigindan)
     def log(self, metin: str):
         self.kuyruk.put(("log", metin))
+        try:                                    # pencere kipinde stderr yok: gunluk dosyaya da
+            with open(os.path.join(self.kok_var.get() or BURASI, "kurulum.log"), "a", encoding="utf-8") as f:
+                f.write(metin.rstrip() + chr(10))
+        except Exception:
+            pass
 
     def ilerle(self, yuzde, metin):
         self.kuyruk.put(("ilerleme", (yuzde, metin)))
@@ -232,7 +237,9 @@ class Sihirbaz(tk.Tk):
             calistir("ide", lambda: (kur.kontrol_ideler(""), kur.mcp_json_guncelle())[0])
             calistir("test", kur.oz_test)
         except Exception as e:  # noqa: BLE001
+            import traceback
             self.log("[X]   %s" % e)
+            self.log(traceback.format_exc())
         self.kuyruk.put(("bitti", sonuc))
 
     def _bitti(self, sonuc: dict):

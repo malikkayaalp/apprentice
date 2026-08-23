@@ -26,6 +26,12 @@ cmd = [sys.executable, "-m", "PyInstaller", "--onefile", "--windowed", "--name",
        "--add-data", payload + sep + ".",
        "--exclude-module", "core", "--exclude-module", "tests", "--exclude-module", "test_server",
        "--exclude-module", "kur",
+       # kur.py ve core/config.py exe DISINDA (kurulum klasorunden yuklenir); onlarin stdlib
+       # bagimliliklari analiz edilmez, burada acikca paketlenir.
+       "--hidden-import", "platform", "--hidden-import", "argparse", "--hidden-import", "urllib.request",
+       "--hidden-import", "urllib.error", "--hidden-import", "zipfile", "--hidden-import", "io",
+       "--hidden-import", "subprocess", "--hidden-import", "shutil", "--hidden-import", "json",
+       "--hidden-import", "importlib", "--hidden-import", "traceback", "--hidden-import", "time",
        "--distpath", os.path.join(ROOT, "dist"), "--workpath", BUILD, "--specpath", BUILD,
        os.path.join(ROOT, "kur_gui.py")]
 r = subprocess.run(cmd)
