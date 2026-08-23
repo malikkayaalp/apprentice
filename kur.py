@@ -21,29 +21,49 @@ Adimlar:
 from __future__ import annotations
 import argparse, json, os, platform, shutil, subprocess, sys, time, urllib.request, urllib.error
 
-# exe (PyInstaller --onefile) icinden: __file__ gecici klasoru gosterir; depo = exe'nin yanindaki klasor.
-ROOT = os.path.dirname(os.path.abspath(sys.executable if getattr(sys, "frozen", False) else __file__))
-sys.path.insert(0, ROOT)
-if not os.path.isdir(os.path.join(ROOT, "server")):
-    print("Bu dosya Apprentice deposunun KOKUNDE calistirilmali (server/ klasorunun yaninda). Su an: %s" % ROOT)
-    sys.exit(1)
 for _s in (sys.stdout, sys.stderr):
     try:
         _s.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
         pass
-from core import config  # noqa: E402
 
 OK, HATA, UYARI, BILGI = "[ok]  ", "[X]   ", "[!]   ", "      "
 DEGISTIR = True
+ROOT = ""                 # kurulu Apprentice klasoru; set_root ile verilir
+GOMULU_DIR = ""
+log = print               # GUI bunu kendi kaydedicisiyle degistirir
+ilerleme = None           # GUI: ilerleme(yuzde 0-100 | None, metin)
+
+
+def set_root(path: str):
+    """Kurulum klasorunu sec; core/ buradan import edilir (exe icinde core yoktur)."""
+    global ROOT, GOMULU_DIR
+    ROOT = os.path.abspath(path)
+    GOMULU_DIR = os.path.join(ROOT, "runtime", "python")
+    if ROOT not in sys.path:
+        sys.path.insert(0, ROOT)
+    for m in [k for k in sys.modules if k == "core" or k.startswith("core.")]:
+        del sys.modules[m]
+
+
+def _cfg():
+    from core import config
+    return config
+
+
+def depo_mu(path: str) -> bool:
+    return os.path.isfile(os.path.join(path, "server", "apprentice_server.py"))
 
 
 def adim(n, baslik):
-    print("\n%d) %s" % (n, baslik))
+    log("\n%d) %s" % (n, baslik))
 
 
 def ollama_url() -> str:
-    return (config.get("ollama.url") or "http://localhost:11434").rstrip("/")
+    try:
+        return (_cfg().get("ollama.url") or "http://localhost:11434").rstrip("/")
+    except Exception:
+        return "http://localhost:11434"
 
 
 def ollama_tags():
@@ -54,7 +74,6 @@ def ollama_tags():
 # ------------------------------------------------------------------ 1 python
 DONMUS = getattr(sys, "frozen", False)          # PyInstaller exe icinden mi calisiyoruz
 GOMULU_SURUM = "3.12.8"
-GOMULU_DIR = os.path.join(ROOT, "runtime", "python")
 
 
 def sistem_python() -> str:
@@ -84,10 +103,19 @@ def gomulu_python_indir() -> bool:
         return False
     import zipfile, io
     url = "https://www.python.org/ftp/python/%s/python-%s-embed-amd64.zip" % (GOMULU_SURUM, GOMULU_SURUM)
-    print(BILGI + "Gomulu Python indiriliyor: %s" % url)
+    log(BILGI + "Gomulu Python indiriliyor: %s" % url)
     try:
         with urllib.request.urlopen(url, timeout=120) as r:
-            veri = r.read()
+            toplam = int(r.headers.get("Content-Length") or 0)
+            parcalar, alinan = [], 0
+            while True:
+                b = r.read(256 * 1024)
+                if not b:
+                    break
+                parcalar.append(b); alinan += len(b)
+                if ilerleme and toplam:
+                    ilerleme(100.0 * alinan / toplam, "Gomulu Python %.1f / %.1f MB" % (alinan / 1e6, toplam / 1e6))
+            veri = b"".join(parcalar)
         os.makedirs(GOMULU_DIR, exist_ok=True)
         zipfile.ZipFile(io.BytesIO(veri)).extractall(GOMULU_DIR)
         # ._pth dosyasi: depo kokunu de yola ekle ki 'core', 'mcpbridge' bulunsun
@@ -97,10 +125,10 @@ def gomulu_python_indir() -> bool:
                     f.write("\n..\\..\n")
         ok = subprocess.run([os.path.join(GOMULU_DIR, "python.exe"), "-c", "import json, urllib.request; print('ok')"],
                             capture_output=True, text=True, timeout=30).stdout.strip() == "ok"
-        print((OK if ok else HATA) + "Gomulu Python %s: %s" % (GOMULU_SURUM, GOMULU_DIR))
+        log((OK if ok else HATA) + "Gomulu Python %s: %s" % (GOMULU_SURUM, GOMULU_DIR))
         return ok
     except Exception as e:
-        print(HATA + "gomulu Python indirilemedi: %s" % str(e)[:200])
+        log(HATA + "gomulu Python indirilemedi: %s" % str(e)[:200])
         return False
 
 
@@ -112,14 +140,14 @@ def kontrol_python() -> bool:
                                capture_output=True, text=True, timeout=10).stdout.strip()
         except Exception:
             v = "?"
-        print(OK + "Python %s  (%s)" % (v, exe))
+        log(OK + "Python %s  (%s)" % (v, exe))
         return True
-    print(UYARI + "Python 3.10+ bulunamadi.")
+    log(UYARI + "Python 3.10+ bulunamadi.")
     if not DEGISTIR:
         return False
     if gomulu_python_indir():
         return True
-    print(HATA + "Python kur: https://www.python.org/downloads/  (kurunca tekrar calistir)")
+    log(HATA + "Python kur: https://www.python.org/downloads/  (kurunca tekrar calistir)")
     return False
 
 
@@ -127,54 +155,54 @@ def kontrol_python() -> bool:
 def kontrol_ollama() -> bool:
     exe = shutil.which("ollama")
     if not exe:
-        print(HATA + "Ollama kurulu degil. Indir: https://ollama.com/download  (kurunca bu betigi tekrar calistir)")
+        log(HATA + "Ollama kurulu degil. Indir: https://ollama.com/download  (kurunca bu betigi tekrar calistir)")
         return False
-    print(OK + "Ollama kurulu: %s" % exe)
+    log(OK + "Ollama kurulu: %s" % exe)
     try:
         ollama_tags()
-        print(OK + "Ollama calisiyor (%s)" % ollama_url())
+        log(OK + "Ollama calisiyor (%s)" % ollama_url())
         return True
     except Exception:
         pass
     if not DEGISTIR:
-        print(HATA + "Ollama calismiyor (%s)." % ollama_url())
+        log(HATA + "Ollama calismiyor (%s)." % ollama_url())
         return False
-    print(BILGI + "Ollama calismiyor, baslatiliyor...")
+    log(BILGI + "Ollama calismiyor, baslatiliyor...")
     try:
         kw = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL, "stdin": subprocess.DEVNULL}
         if os.name == "nt":
             kw["creationflags"] = 0x00000008 | 0x00000200   # DETACHED_PROCESS | NEW_PROCESS_GROUP
         subprocess.Popen([exe, "serve"], **kw)
     except Exception as e:
-        print(HATA + "baslatilamadi: %s" % e)
+        log(HATA + "baslatilamadi: %s" % e)
         return False
     for _ in range(20):
         time.sleep(1)
         try:
             ollama_tags()
-            print(OK + "Ollama basladi")
+            log(OK + "Ollama basladi")
             return True
         except Exception:
             continue
-    print(HATA + "Ollama 20 sn icinde cevap vermedi. Elle baslat: ollama serve")
+    log(HATA + "Ollama 20 sn icinde cevap vermedi. Elle baslat: ollama serve")
     return False
 
 
 # ------------------------------------------------------------------ 3 model
 def kontrol_model() -> bool:
-    model = config.env_or(["APPRENTICE_MODEL", "UNITY_CODE_MODEL"], "ollama.model")
+    model = _cfg().env_or(["APPRENTICE_MODEL", "UNITY_CODE_MODEL"], "ollama.model")
     try:
         adlar = ollama_tags()
     except Exception:
-        print(HATA + "Ollama'ya ulasilamadi, model kontrol edilemedi")
+        log(HATA + "Ollama'ya ulasilamadi, model kontrol edilemedi")
         return False
     if model in adlar:
-        print(OK + "Model yuklu: %s" % model)
+        log(OK + "Model yuklu: %s" % model)
         return True
-    print(UYARI + "Model yok: %s" % model)
+    log(UYARI + "Model yok: %s" % model)
     if not DEGISTIR:
         return False
-    print(BILGI + "Indiriliyor (~20 GB, baglantiya gore 10-60 dk)...")
+    log(BILGI + "Indiriliyor (~20 GB, baglantiya gore 10-60 dk)...")
     req = urllib.request.Request(ollama_url() + "/api/pull",
                                  json.dumps({"name": model, "stream": True}).encode("utf-8"),
                                  {"Content-Type": "application/json"})
@@ -187,7 +215,7 @@ def kontrol_model() -> bool:
                 except Exception:
                     continue
                 if d.get("error"):
-                    print("\n" + HATA + d["error"])
+                    log(HATA + d["error"])
                     return False
                 durum = d.get("status", "")
                 t, c = d.get("total"), d.get("completed")
@@ -197,20 +225,24 @@ def kontrol_model() -> bool:
                 else:
                     msg = durum
                 if msg != son:
-                    sys.stdout.write("\r" + BILGI + msg.ljust(70))
-                    sys.stdout.flush()
+                    if ilerleme:
+                        ilerleme((100.0 * c / t) if (t and c is not None) else None, msg)
+                    elif log is print:
+                        sys.stdout.write("\r" + BILGI + msg.ljust(70))
+                        sys.stdout.flush()
                     son = msg
-        print()
+        if log is print:
+            log()
     except Exception as e:
-        print("\n" + HATA + "indirme hatasi: %s" % str(e)[:200])
+        log(HATA + "indirme hatasi: %s" % str(e)[:200])
         return False
     try:
         if model in ollama_tags():
-            print(OK + "Model indirildi: %s" % model)
+            log(OK + "Model indirildi: %s" % model)
             return True
     except Exception:
         pass
-    print(HATA + "indirme bitti ama model listede yok; 'ollama pull %s' ile elle dene" % model)
+    log(HATA + "indirme bitti ama model listede yok; 'ollama pull %s' ile elle dene" % model)
     return False
 
 
@@ -260,20 +292,20 @@ def ide_ayarla(ad: str, yol: str, anahtar: str, kurulu_dir: str) -> bool:
             with open(yol, encoding="utf-8") as f:
                 cfg = json.load(f)
         except Exception as e:
-            print(UYARI + "%s ayar dosyasi okunamadi (%s): %s" % (ad, yol, e))
+            log(UYARI + "%s ayar dosyasi okunamadi (%s): %s" % (ad, yol, e))
             return False
     mevcut = (cfg.get(anahtar) or {}).get("apprentice")
     if mevcut and mevcut.get("args") == istenen["args"] and mevcut.get("command") == istenen["command"]:
-        print(OK + "%s: apprentice kayitli (%s)" % (ad, yol))
+        log(OK + "%s: apprentice kayitli (%s)" % (ad, yol))
         return True
     if not DEGISTIR:
-        print(UYARI + "%s: apprentice kayitli degil ya da yolu farkli (%s)" % (ad, yol))
+        log(UYARI + "%s: apprentice kayitli degil ya da yolu farkli (%s)" % (ad, yol))
         return False
     cfg.setdefault(anahtar, {})["apprentice"] = istenen
     os.makedirs(os.path.dirname(yol), exist_ok=True)
     with open(yol, "w", encoding="utf-8", newline="\n") as f:
         json.dump(cfg, f, ensure_ascii=False, indent=2)
-    print(OK + "%s: yazildi -> %s  (IDE aciksa MCP listesini yenile)" % (ad, yol))
+    log(OK + "%s: yazildi -> %s  (IDE aciksa MCP listesini yenile)" % (ad, yol))
     return True
 
 
@@ -290,11 +322,11 @@ def mcp_json_guncelle():
                 g["command"] = py.replace("\\", "/")
                 with open(p, "w", encoding="utf-8", newline=chr(10)) as f:
                     json.dump(cfg, f, ensure_ascii=False, indent=2)
-                print(OK + "Claude Code: .mcp.json komutu gomulu Python'a cevrildi")
+                log(OK + "Claude Code: .mcp.json komutu gomulu Python'a cevrildi")
                 return
-        print(OK + "Claude Code: depodaki .mcp.json ile otomatik (bu klasorde 'claude' ac)")
+        log(OK + "Claude Code: depodaki .mcp.json ile otomatik (bu klasorde 'claude' ac)")
     except Exception as e:
-        print(UYARI + ".mcp.json guncellenemedi: %s" % e)
+        log(UYARI + ".mcp.json guncellenemedi: %s" % e)
 
 
 def kontrol_ideler(secim: str = "") -> bool:
@@ -312,7 +344,7 @@ def kontrol_ideler(secim: str = "") -> bool:
         bulundu += 1
         hepsi_ok = ide_ayarla(ad, yol, anahtar, kurulu_dir) and hepsi_ok
     if not bulundu:
-        print(UYARI + "Kurulu IDE bulunamadi (cursor / vscode / windsurf / claude-desktop). "
+        log(UYARI + "Kurulu IDE bulunamadi (cursor / vscode / windsurf / claude-desktop). "
                       "--ide <ad> ile zorla ya da Claude Code kullan.")
     return hepsi_ok
 
@@ -323,7 +355,7 @@ def oz_test() -> bool:
     try:
         from test_server import Client
     except Exception as e:
-        print(HATA + "test istemcisi yuklenemedi: %s" % e)
+        log(HATA + "test istemcisi yuklenemedi: %s" % e)
         return False
     home = os.path.join(ROOT, ".apprentice_test_home")
     import test_server as _ts
@@ -337,10 +369,10 @@ def oz_test() -> bool:
         rep = c.tool("worker_run", {"gorev": "kurulum duman testi", "ortam": "fake",
                                     "kabul_kriterleri": ["x"]}, timeout=60)["structuredContent"]
         ok = rep.get("derleme_durumu") == "derlendi"
-        print((OK if ok else HATA) + "Sunucu el sikisti, araclar: %s, fake tur: %s" % (araclar, rep.get("derleme_durumu")))
+        log((OK if ok else HATA) + "Sunucu el sikisti, araclar: %s, fake tur: %s" % (araclar, rep.get("derleme_durumu")))
         return ok
     except Exception as e:
-        print(HATA + "oz-test basarisiz: %s" % str(e)[:300])
+        log(HATA + "oz-test basarisiz: %s" % str(e)[:300])
         return False
     finally:
         c.close()
@@ -371,12 +403,12 @@ def kural_yaz(proje: str) -> bool:
     p = os.path.join(d, "apprentice.mdc")
     with open(p, "w", encoding="utf-8", newline="\n") as f:
         f.write(KURAL)
-    print(OK + "Cursor kurali yazildi: %s" % p)
+    log(OK + "Cursor kurali yazildi: %s" % p)
     govde = KURAL.split("---")[-1].strip() + "\n"
     p2 = os.path.join(proje, "APPRENTICE.md")
     with open(p2, "w", encoding="utf-8", newline="\n") as f:
         f.write("# Apprentice denetci kurali\n\n" + govde)
-    print(OK + "Genel kural yazildi: %s  (VS Code/Copilot: .github/copilot-instructions.md'ye ekle)" % p2)
+    log(OK + "Genel kural yazildi: %s  (VS Code/Copilot: .github/copilot-instructions.md'ye ekle)" % p2)
     return True
 
 
@@ -388,13 +420,18 @@ def main() -> int:
     ap.add_argument("--olc", action="store_true", help="num_batch olcumu yap ve yaz")
     ap.add_argument("--kural", metavar="PROJE", help="denetci kural dosyasini bu projeye yaz")
     ap.add_argument("--ide", default="", help="virgulle: cursor,vscode,windsurf,claude-desktop (bos = kurulu olanlar)")
+    ap.add_argument("--kok", default="", help="Apprentice kurulum klasoru (varsayilan: bu betigin klasoru)")
     a = ap.parse_args()
     DEGISTIR = not a.kontrol
 
+    set_root(a.kok or os.path.dirname(os.path.abspath(sys.executable if DONMUS else __file__)))
     if a.kural:
         return 0 if kural_yaz(a.kural) else 1
+    if not depo_mu(ROOT):
+        log("Apprentice dosyalari bulunamadi: %s  (--kok <kurulum_klasoru> ver ya da Apprentice-Setup.exe kullan)" % ROOT)
+        return 1
 
-    print("Apprentice kurulum  (%s, %s)" % (platform.system(), ROOT))
+    log("Apprentice kurulum  (%s, %s)" % (platform.system(), ROOT))
     sonuc = []
     adim(1, "Python");        sonuc.append(kontrol_python())
     adim(2, "Ollama");        sonuc.append(kontrol_ollama())
@@ -408,12 +445,12 @@ def main() -> int:
         r = subprocess.run([sistem_python() or sys.executable, os.path.join(ROOT, "core", "olcum.py"), "--yaz"])
         sonuc.append(r.returncode == 0)
 
-    print()
+    log()
     if all(sonuc):
-        print("HAZIR. IDE'ni ac, MCP listesinde 'apprentice' yesil olsun (gerekirse yenile).")
-        print("Proje icin kural dosyasi: python kur.py --kural <proje_klasoru>  (denetci rolu otomatik uygulanir)")
+        log("HAZIR. IDE'ni ac, MCP listesinde 'apprentice' yesil olsun (gerekirse yenile).")
+        log("Proje icin kural dosyasi: python kur.py --kural <proje_klasoru>  (denetci rolu otomatik uygulanir)")
         return 0
-    print("EKSIK ADIM VAR - yukaridaki [X] satirlarini tamamlayip tekrar calistir.")
+    log("EKSIK ADIM VAR - yukaridaki [X] satirlarini tamamlayip tekrar calistir.")
     return 1
 
 
