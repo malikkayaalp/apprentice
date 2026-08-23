@@ -260,9 +260,18 @@ REQ_JOBS: dict = {}
 #   1. MCP roots: istemci (Cursor, Claude Code, VS Code) acik workspace'ini roots/list ile
 #      bildirir - kullanici hicbir yol yazmaz.
 #   2. APPRENTICE_WORKDIR_ROOT ortam degiskeni (roots desteklemeyen istemciler icin).
-#   3. Sunucunun calisma dizini (istemci sunucuyu workspace icinde baslattiysa) - depo
-#      kokunun kendisiyse sayilmaz.
+#   3. Sunucunun calisma dizini - YALNIZCA depo kokunun ALTINDAysa.
 # calisma_dizini istege bagli ve koke GORELI; kok disina cikilamaz.
+#
+# OLCULDU (2026-08-23, Cursor + taklit istemci, uc senaryo):
+#   A) roots var, hizli yanit          -> kok dogru (Desktop\Apprentice)
+#   B) roots var, 3 sn gecikmeli yanit -> kok EV DIZINI   <- yaris
+#   C) roots yok                       -> kok EV DIZINI   <- sessiz yedekleme
+# Iki hata da hapishane kokunu tum ev dizini yapiyordu. B icin roots yaniti artik
+# KISA SURE BEKLENIR; C icin cwd yedeklemesi kaldirildi - kok bilinmiyorsa istek
+# REDDEDILIR ve hata denetciye "mutlak yol ver" der (denetci workspace yolunu bilir;
+# Cursor olcumde tam bunu yapti). Sessizce ev dizinini kok yapmak, bu projede bir kez
+# gercek zarar veren silme kazasinin ayni sinifi.
 ROOTS: list = []
 CLIENT_CAPS: dict = {}
 _PENDING: dict = {}          # sunucu->istemci istekleri (roots/list) icin id -> yanit isleyici
@@ -280,15 +289,26 @@ def _uri_to_path(uri: str) -> str:
     return os.path.realpath(p)
 
 
-def calisma_koku() -> str:
+ROOTS_BEKLE_S = float(os.environ.get("APPRENTICE_ROOTS_BEKLE_S", "5"))
+_ROOTS_HAZIR = threading.Event()
+
+
+def calisma_koku(bekle: bool = True) -> str:
+    """Workspace kokunu coz. bekle=True ise istemci roots bildirdiyse yanitini kisa
+    sure bekler (yaris: istek gonderilip yanit beklenmeyince kok ev dizinine dusuyordu)."""
+    if bekle and not ROOTS and CLIENT_CAPS.get("roots") is not None:
+        _ROOTS_HAZIR.wait(ROOTS_BEKLE_S)
     for r in ROOTS:
         if r and os.path.isdir(r):
             return r
     env = os.environ.get("APPRENTICE_WORKDIR_ROOT", "")
     if env and os.path.isdir(env):
         return os.path.realpath(env)
+    # cwd YEDEKLEMESI YOK: IDE sunucuyu ev dizininden baslatiyor (olculdu), o zaman
+    # hapishane kokunu tum ev dizini yapardi. Yalnizca depo icindeysek kabul edilir.
     cwd = os.path.realpath(os.getcwd())
-    if cwd != os.path.realpath(ROOT):
+    kok_r = os.path.realpath(ROOT)
+    if cwd != kok_r and cwd.startswith(kok_r + os.sep):
         return cwd
     return ""
 
@@ -296,13 +316,16 @@ def calisma_koku() -> str:
 def roots_iste():
     """Istemci roots destekliyorsa roots/list iste; yanit serve() icinde _PENDING ile islenir."""
     if not (CLIENT_CAPS.get("roots") is not None):
+        _ROOTS_HAZIR.set()          # beklenecek bir sey yok
         return
+    _ROOTS_HAZIR.clear()
     _SRV_ID[0] += 1
     rid = _SRV_ID[0]
 
     def al(res: dict):
         ROOTS[:] = [_uri_to_path(r.get("uri", "")) for r in (res or {}).get("roots", [])]
         _log("roots: %s" % ROOTS)
+        _ROOTS_HAZIR.set()
     _PENDING[rid] = al
     _send({"jsonrpc": "2.0", "id": rid, "method": "roots/list", "params": {}})
 _CUR_REQ = threading.local()
@@ -358,13 +381,17 @@ def tool_worker_run(a: dict) -> dict:
     workdir = str(a.get("calisma_dizini") or "")
     if ENVS.get(ortam, {}).get("kosucu") == "code_runner.py" or ortam == "code":
         kok = calisma_koku()
+        # Kok bilinmiyorsa GORELI yol cozulemez. Eskiden cwd'ye dusuluyordu ve hapishane
+        # kokunu tum ev dizini yapiyordu; artik reddedip denetciden mutlak yol istiyoruz.
+        if not kok and not os.path.isabs(workdir):
+            return {"hata": "Calisma koku belirlenemedi: istemcin acik workspace'ini MCP 'roots' "
+                            "ile bildirmedi. Bu cagriyi 'calisma_dizini' alanina workspace'in "
+                            "MUTLAK yolunu vererek tekrarla (sen bu yolu biliyorsun). "
+                            "Kalici cozum: istemcide roots destegi ya da APPRENTICE_WORKDIR_ROOT."}
         if not workdir:
             workdir = kok
-        elif not os.path.isabs(workdir) and kok:
+        elif not os.path.isabs(workdir):
             workdir = os.path.join(kok, workdir)
-        if not workdir:
-            return {"hata": "calisma koku bilinmiyor: istemci roots bildirmedi, APPRENTICE_WORKDIR_ROOT "
-                            "yok; calisma_dizini (mutlak yol) ver"}
         if not os.path.isdir(workdir):
             return {"hata": "calisma_dizini yok: %s" % workdir}
         workdir = os.path.realpath(workdir)
