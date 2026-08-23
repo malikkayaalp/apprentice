@@ -225,6 +225,13 @@ def _run(jail: Jail, written: list, em, name: str, a: dict):
                 sonuc["derleme"] = "temiz - bu dosyada yapacak is kalmadiysa tekrar yazma"
             except SyntaxError as e:
                 sonuc["derleme"] = "HATA %s satir %s: %s" % (rel, e.lineno, e.msg)
+            # RUFF KANITI (2026-08-24): compile() yalniz sozdizimi gorur; F-sinifi hatalar
+            # (tanimsiz isim, kullanilmayan/eksik import) derlenir ama calisirken patlar.
+            # ruff bunlari milisaniyede "dosya:satir: kod mesaj" formatinda verir - isciye
+            # giden sinyal hata-izi kivaminda kalir. Yoksa/patlarsa sessizce atlanir.
+            uyarilar = ruff_uyarilari(jail, rel)
+            if uyarilar:
+                sonuc["ruff"] = uyarilar
         return sonuc
     if name == "list_files":
         pat = a.get("pattern") or "**/*"
@@ -284,6 +291,33 @@ def _test_cmd(args: str) -> list:
 
 
 # ----------------------------------------------------------------- dogrulayici
+RUFF_KAPALI = os.environ.get("APPRENTICE_RUFF", "1") == "0"     # olcum icin kapatilabilir
+
+
+def ruff_uyarilari(jail: Jail, rel: str, sinir: int = 8) -> list:
+    """Yazilan dosyada F-sinifi (pyflakes) + E9 bulgulari. ruff yoksa bos doner.
+
+    Yalniz F ve E9 secilir: uslup kurallari (E/W geri kalani) bilerek DISARIDA -
+    olculdu: uslup geri bildirimi modele islemiyor, gurultu olarak baglami sisirir.
+    """
+    if RUFF_KAPALI:
+        return []
+    try:
+        r = subprocess.run([sys.executable, "-m", "ruff", "check", "--select", "F,E9",
+                            "--output-format", "concise", "--no-cache", rel],
+                           cwd=jail.root, capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=20)
+    except Exception:                                            # noqa: BLE001 - ruff yok/patladi
+        return []
+    if r.returncode not in (0, 1):                               # 2 = kullanim hatasi
+        return []
+    out = [s.strip() for s in (r.stdout or "").splitlines()
+           if s.strip() and not s.startswith(("Found ", "All checks passed"))]
+    if len(out) > sinir:
+        out = out[:sinir] + ["... ve %d uyari daha" % (len(out) - sinir)]
+    return out
+
+
 def compile_errors(jail: Jail, written: list) -> list:
     errs = []
     for rel in dict.fromkeys(written):
