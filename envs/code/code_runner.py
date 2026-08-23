@@ -105,6 +105,15 @@ TOOLS = [
         "parameters": {"type": "object", "properties": {
             "cmd": {"type": "string"}}, "required": ["cmd"]}}},
     {"type": "function", "function": {
+        "name": "ara",
+        "description": "Kod tabaninda anlamsal arama: ne aradigini duz dille yaz (orn 'kupon "
+                       "indirimi nerede uygulaniyor'), en yakin kod parcalarini dosya+satir "
+                       "araligiyla doner. Buyuk projede dosyalari korlemesine OKUMADAN once bunu "
+                       "kullan; sonra yalnizca ilgili dosyayi read_file ile oku.",
+        "parameters": {"type": "object", "properties": {
+            "sorgu": {"type": "string", "description": "aranan davranis/kavram, duz dille"}},
+            "required": ["sorgu"]}}},
+    {"type": "function", "function": {
         "name": "run_tests",
         "description": "Testleri calistir (%s); sonucu ve cikis kodunu doner." % TEST_ADI,
         "parameters": {"type": "object", "properties": {
@@ -190,6 +199,12 @@ def _run(jail: Jail, written: list, em, name: str, a: dict):
             if os.path.isfile(p) and not any(x in p for x in ("__pycache__", os.sep + ".git" + os.sep, ".pytest_cache")):
                 out.append(os.path.relpath(p, jail.root).replace("\\", "/"))
         return {"files": sorted(out)[:500], "sayi": len(out)}
+    if name == "ara":
+        from core import rag
+        try:
+            return rag.ara(jail.root, str(a.get("sorgu") or ""))
+        except RuntimeError as e:
+            return {"error": str(e)}
     if name == "run_shell":
         cmd = str(a.get("cmd") or "")
         # Silme yasagi shell uzerinden delinmesin; push disariya cikistir.
@@ -358,6 +373,16 @@ def main() -> int:
         jail = Jail(a.workdir)
         em.emit("system", subtype="init", model=a.model, session_id=a.session, workdir=jail.root)
 
+        # Proje hafizasi: calisma dizinindeki HAFIZA.md (usta yazar: proje kurallari, gecmis
+        # dersler). Varsa sistem istemine eklenir, 3000 karakterle kirpilir.
+        hafiza = ""
+        hp = os.path.join(jail.root, "HAFIZA.md")
+        if os.path.isfile(hp):
+            try:
+                with open(hp, encoding="utf-8", errors="replace") as f:
+                    hafiza = f.read().strip()[:3000]
+            except OSError:
+                pass
         written: list = []
         kapali = [k.strip() for k in os.environ.get("APPRENTICE_TOOLS_OFF", "").split(",") if k.strip()]
         tools = [t for t in TOOLS if t["function"]["name"] not in kapali]
@@ -366,8 +391,11 @@ def main() -> int:
         dispatch = guarded_dispatch(tools, make_dispatch(jail, written, em))
         msgs = load_session(a.session_dir, a.session)
         if not msgs:
-            msgs = [{"role": "system", "content": SYSTEM.format(dir=jail.root, test=TEST_ADI,
-                test_satiri=(TEST_SATIRI_TAM.format(test=TEST_ADI) if DOGRULAMA == "tam" else TEST_SATIRI_DERLEME))}]
+            sistem = SYSTEM.format(dir=jail.root, test=TEST_ADI,
+                test_satiri=(TEST_SATIRI_TAM.format(test=TEST_ADI) if DOGRULAMA == "tam" else TEST_SATIRI_DERLEME))
+            if hafiza:
+                sistem += "\n\nPROJE HAFIZASI (bu projenin kurallari ve gecmis dersleri; UY):\n" + hafiza
+            msgs = [{"role": "system", "content": sistem}]
         r = one_request(jail, dispatch, written, msgs, request, a.model, a.repairs, tools)
         save_session(a.session_dir, a.session, msgs, a.model)
         if r["text"]:

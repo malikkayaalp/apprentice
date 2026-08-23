@@ -414,7 +414,12 @@ Dongu, olcumle secildi: cirak yazar -> usta CALISTIRARAK dogrular -> duzeltme bu
    - kucukse (<~20 satir, tek dosya): KENDIN duzelt; cirak turu bekleme, yanlis anlama riski alma.
    - buyukse/cok dosyaliysa: ayni 'oturum' ile ciraga don. Genel konusma ("testler tutmuyor" YASAK);
      her hata icin: hangi dosya, hangi fonksiyon, hangi girdi, ne geldi, ne gelmeliydi.
-4) En fazla 4 tur. Bitince raporla: tur sayisi, sure, her kriter NASIL dogrulandi (hangi komut/cikti).
+4) HAFIZA - kalici bir ders cikarsa (proje kurali, tekrarlanan hata, sozlesme karari) workspace
+   kokundeki HAFIZA.md dosyasina KISA bir madde ekle/guncelle; cirak her iste bunu sistem
+   isteminde gorur (ilk 3000 karakter). Gecici seyleri yazma.
+5) BUYUK PROJE - cok dosyali depoda gorevde ciraga soyle: "once ara('...') ile ilgili yeri bul,
+   sonra yalnizca o dosyalari oku". ara araci anlamsal arama yapar (bge-m3), korlemesine okumayi onler.
+6) En fazla 4 tur. Bitince raporla: tur sayisi, sure, her kriter NASIL dogrulandi (hangi komut/cikti).
 """
 
 

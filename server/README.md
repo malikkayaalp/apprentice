@@ -119,7 +119,12 @@ dosya > şablon > kod).
 
 | ortam | araçlar | doğrulayıcı | koşucu |
 |---|---|---|---|
-| `code` | read_file, write_file, list_files, run_shell, run_tests | `compile()` + pytest (yoksa stdlib unittest) | `envs/code/code_runner.py` |
+| `code` | read_file, write_file, list_files, run_shell, run_tests, **ara** (anlamsal kod araması, bge-m3) | `compile()` + pytest (yoksa stdlib unittest) | `envs/code/code_runner.py` |
+
+`code` ortamı ayrıca: **proje hafızası** — workspace kökünde `HAFIZA.md` varsa içeriği (3000 karaktere kadar)
+işçinin sistem istemine eklenir; ustanın kalıcı dersleri yazdığı yerdir. **`ara` araci** — çalışma dizinini
+parçalayıp bge-m3 ile gömer (`ollama pull bge-m3`), indeks `~/.apprentice/rag/` altında, dosya değişince
+yalnızca değişen yeniden gömülür; işçi "neyi okuyacağını" körlemesine okumadan bulur.
 | `fake` | — | — | `envs/fake/fake_runner.py` (olay şemasını taklit eder, model gerektirmez) |
 | eklentiler | ortamın kendi seti | ortamın kendi doğrulayıcısı (ör. derleyici + play) | `envs/<ad>/` — `env.json` ile tanımlanır, klonlanınca belirir |
 
