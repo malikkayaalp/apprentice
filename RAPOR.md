@@ -205,4 +205,27 @@ eski bileşenler kaldırılmadan kapatılsın. Ölçüm: `tests/devriye_olc.py` 
 5. Cursor `oturum` parametresini hiç kullanmadı (her tur yeni bağlam); görevleri kendi kendine yeterli yazdığı
    için iş yine yürüdü ama işçi her turda dosyaları baştan okudu.
 
-**B (Cursor tek başına, unityMCP ile) henüz koşmadı** — kullanıcı dönünce.
+## B: usta tek başına (Claude Code, çırak yok, Unity köprüsüyle doğrudan)
+
+Cursor'ı dışarıdan süremediğim için B'yi kendim koştum: aynı görev, `SuruDevriyeB.cs`, denetçi=işçi=ben.
+
+| tur | süre | ne oldu |
+|---|---|---|
+| 1 | 22 s | yazdı, ekledi, derlendi; ölçüm: dönüş YOK — Awake kırık bileşenin `null` girdisinde NRE attı (A'nın bıraktığı çöp) |
+| 2 | 18 s | `b != null` kontrolü; ölçüm: **GEÇTİ** (r 3.999–4.001, 45.0°, y=0.5, tur 12.0 sn, saat yönü) |
+
+Toplam ≈ 40 s yazma + 3 ölçüm (≈3 dk). A (Cursor→çırak): 6 iş, ≈28 dk, 5 iptal; sonuç aynı ölçümle GEÇTİ ama
+sahne hijyeni bozuk kaldı.
+
+## Cursor'ın kendi raporu (kullanıcı iletti)
+Cursor 6. kriteri "KALDI: ters yön, 37.8 sn" diye değerlendirdi — **benim `devriye_olc.py`'nin hatalı ilk sürümüyle**
+(açı sarması + saat yönü uzlaşımı). Düzeltilmiş ölçüm 12.0 sn / saat yönü. 2. kriter (SuruYoneticisi
+açık, kırık bileşen) tespiti doğru. Cursor'ın özeti: "script gövdesi doğru, blokaj sahne hijyeni" — isabetli.
+
+## A/B yorumu
+- Bu görevde (küçük, tek dosya, deterministik geometri) **usta tek başına 10× hızlı**. Çırağın değeri bu
+  boyutta görünmüyor; değer, usta-token'ının pahalı/kotalı olduğu ve işin uzun-çok dosyalı olduğu yerde.
+- A'nın süresinin çoğu altyapı kaybı: zaman aşımı iptalleri (5/6) ve kırık bileşen döngüsü (33 yazma). İkisi de
+  düzeltildi (iptal desteği, `remove_missing_components`); aynı deney tekrarlanırsa A'nın ≈10 dk'ya inmesi beklenir.
+- Denetçinin ölçüm aracı yanlışsa denetçi yanlış karar verir (Cursor + benim betiğim). "Sayıyla kriter"
+  bunu görünür kıldı; ölçüm betikleri artık sarmasız ve Unity uzlaşımıyla.
