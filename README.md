@@ -24,6 +24,7 @@ Kanıtlar ve bütün deneyler [apprentice-lab](https://github.com/malikkayaalp/a
 
 ```
 server/          MCP sunucusu: worker_run(görev, kabul_kriterleri, ortam) — bkz. server/README.md
+kur.py           kurulum motoru (Windows'ta Apprentice-Setup.exe olarak paketlenir)
 core/            Ollama istemcisi, şema koruması, ayar yükleyici, ilk-çalıştırma ölçümü
 mcpbridge/       MCP taşıma (stdio + Streamable HTTP), bağımlılıksız; test için fake_server
 envs/code/       kod ortamı: dosya oku/yaz, shell, test; workspace'e hapis; compile()+unittest/pytest doğrulayıcı
@@ -35,26 +36,34 @@ tests/           sözleşme testleri, kod ortamı testi, ölçüm kampanyası
 
 ## Gereksinimler
 
-- Python 3.10+ (ek paket yok, stdlib)
-- [Ollama](https://ollama.com) + `ollama pull hf.co/unsloth/Qwen3-Coder-Next-GGUF:UD-Q4_K_XL` (~20 GB)
+- [Ollama](https://ollama.com) (kurulum betiği modeli kendisi indirir; elle: `ollama pull hf.co/unsloth/Qwen3-Coder-Next-GGUF:UD-Q4_K_XL`, ~20 GB)
+- Python 3.10+ — Windows'ta gerekmez (kurulum gömülü Python indirir); ek paket yok
 
-## Kurulum (Cursor / Claude Code / VS Code)
+## Kurulum
+
+**Windows (Python gerekmez):** depoyu indir (zip ya da `git clone`), içindeki **`Apprentice-Setup.exe`**'yi
+çalıştır ([Releases](https://github.com/malikkayaalp/apprentice/releases) sayfasından, depo köküne koy).
+Adım adım: Python (yoksa gömülü Python'u indirir) → Ollama (yoksa yönlendirir, kapalıysa başlatır) → model
+(yoksa ilerleme yüzdesiyle indirir, ~20 GB) → kurulu IDE'lerin MCP ayarına `apprentice` girdisi
+(Cursor, VS Code, Windsurf; diğer girdilere dokunmaz) → öz-test.
+
+**macOS / Linux / elle:** Python 3.10+ ile aynı betik:
 
 ```bash
-git clone https://github.com/malikkayaalp/apprentice
+python kur.py            # kurulum
+python kur.py --kontrol  # yalnızca durum
+python kur.py --ide cursor,vscode,windsurf,claude-desktop
+python kur.py --olc      # + makineye özel num_batch ölçümü (2–3 dk; ölçüldü: 512 → 4096 arası +%342 prefill)
+python kur.py --kural <proje>   # projeye denetçi kuralı (.cursor/rules/apprentice.mdc + APPRENTICE.md)
 ```
 
-Claude Code: depodaki `.mcp.json` otomatik görülür. Cursor: `~/.cursor/mcp.json`'a ekle:
+Claude Code: depodaki `.mcp.json` otomatik görülür. Kurulumdan sonra IDE'nin MCP listesinde `apprentice`
+yeşil olmalı; araçlar `worker_run`, `worker_status`.
 
-```json
-{ "mcpServers": { "apprentice": { "command": "python", "args": ["<depo>/server/apprentice_server.py"] } } }
-```
-
-Yol yazmanız gerekmez: işçi, IDE'nin bildirdiği workspace köküne hapsedilir (MCP `roots`).
-Sohbette: *"Sen denetçisin; kodu kendin yazma, apprentice.worker_run'a ver. Kabul kriterlerini
-sayıyla yaz, dönen sonucu kendin doğrula."* Araçlar, dönüş şeması ve kurallar: [server/README.md](server/README.md).
-
-İlk çalıştırmada makineye özel hız ayarı için `python core/olcum.py --yaz` (num_batch; ölçüldü: 512 → 4096 arası +%342 prefill).
+Kullanım: projene kural dosyasını yaz (`--kural`), sohbette görevi ver — usta model kriter yazar,
+`worker_run`'ı çağırır, yerel model yazar/test eder, usta sonucu doğrular. Yol yazmana gerek yok:
+işçi IDE'nin bildirdiği workspace köküne hapsedilir (MCP `roots`). Araçlar, dönüş şeması ve kurallar:
+[server/README.md](server/README.md).
 
 ## Eklentiler
 

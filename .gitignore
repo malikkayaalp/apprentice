@@ -10,3 +10,7 @@ mcpbridge/servers.json
 deneme/
 # apprentice-unity eklentisi buraya klonlanir (ayri depo)
 envs/unity/
+runtime/
+build/
+dist/
+*.spec
