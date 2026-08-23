@@ -288,6 +288,14 @@ def tool_worker_run(a: dict) -> dict:
         if not workdir or not os.path.isdir(workdir):
             return {"hata": "ortam 'code' icin calisma_dizini (var olan klasor) zorunlu: %r" % workdir}
         workdir = os.path.realpath(workdir)
+        # Kok siniri: IDE'nin acik klasoru sunucuyu SINIRLAMAZ (olculdu: Cursor CursorTest'i
+        # acmisken prompt'taki yol deneme/ idi, isci oraya yazdi). APPRENTICE_WORKDIR_ROOT
+        # verilirse onun disindaki calisma_dizini reddedilir.
+        kok = os.environ.get("APPRENTICE_WORKDIR_ROOT", "")
+        if kok:
+            kok = os.path.realpath(kok)
+            if workdir != kok and not workdir.startswith(kok + os.sep):
+                return {"hata": "calisma_dizini izin verilen kokun disinda: %s (kok: %s)" % (workdir, kok)}
     sebep = _precheck(ortam)
     if sebep:
         return {"hata": sebep, "derleme_durumu": "calistirilamadi", "yazilan_dosyalar": [],

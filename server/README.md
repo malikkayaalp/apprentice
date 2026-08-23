@@ -106,7 +106,10 @@ claude mcp add apprentice -- python C:/yol/Apprentice/server/apprentice_server.p
 
 **VS Code (Copilot)** — `.vscode/mcp.json`, aynı `command`/`args` ile `"servers"` altında.
 
-Ortam değişkenleri: `APPRENTICE_HOME`, `APPRENTICE_TIMEOUT_S`, `APPRENTICE_PYTHON`
+**Dikkat:** IDE'nin açık klasörü sunucuyu sınırlamaz; işçi yalnızca `calisma_dizini`'ne hapsedilir. Yanlış yol
+riskini kapatmak için MCP ayarına `APPRENTICE_WORKDIR_ROOT` ekleyin — onun dışındaki `calisma_dizini` reddedilir.
+
+Ortam değişkenleri: `APPRENTICE_WORKDIR_ROOT`, `APPRENTICE_HOME`, `APPRENTICE_TIMEOUT_S`, `APPRENTICE_PYTHON`
 (işçi için ayrı yorumlayıcı), `UNITY_CODE_MODEL`, `UNITY_MCP_URL`. Diğer ayarlar
 `apprentice.config.json` (şablon: `apprentice.config.template.json`; öncelik env >
 dosya > şablon > kod).
