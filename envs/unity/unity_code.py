@@ -126,7 +126,9 @@ SYSTEM = (
     "sayi, renk '#RRGGBB', Vector3 '1,2,3', obje referansi, ve DIZI - dizi icin "
     "degerleri \\u0001 ile ayir), create_asset (Material/AnimatorController uret).\n"
     "- set_field yanlis alan adinda mevcut alanlari listeler; o listeden dogrusunu "
-    "sec, ad UYDURMA. Silme araci YOK; hicbir seyi silemezsin.\n"
+    "sec, ad UYDURMA. Silme araci YOK; hicbir seyi silemezsin - bir scripti 'silmek' icin "
+    "dosyayi BOSALTMA (kirik bilesen kalir), gereksiz scripti denetciye bildir. Tek istisna: "
+    "remove_missing_components yalnizca KIRIK (script'i kayip) bilesenleri kaldirir.\n"
     "- Tur basina tek arac cagir. Bittiginde tek cumleyle Turkce ozetle."
 )
 
