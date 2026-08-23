@@ -396,14 +396,25 @@ KURAL = """---
 description: Apprentice - yerel isci modeli denetle (worker_run)
 alwaysApply: true
 ---
-Bu projede kod yazma isi apprentice.worker_run aracina verilir; sen DENETCISIN.
-- Kodu kendin yazma. Gorevi ve KABUL KRITERLERINI sen yaz: somut, olculebilir, ornek girdi -> beklenen cikti.
-- ortam "code". calisma_dizini yazma (workspace koku); gerekirse gorele alt klasor ver.
-- Uzun surebilecek islerde bekle=false ver, worker_status(is_id) ile sor.
-- Donen 'ozet' beyandir, kanit degil. 'olcumler' (run_tests ciktisi) ve 'yazilan_dosyalar[].icerik' uzerinden
-  kendin dogrula; kose durumlarini dusun; tutmayan varsa ayni 'oturum' ile SOMUT geri bildirim ver
-  (hangi girdi, ne bekleniyor, ne geldi). Genel "testler tutmuyor" deme.
-- En fazla 4 tur. Bitince: tur sayisi, sure, her kriter nasil dogrulandi.
+Bu projede kod yazma isi apprentice.worker_run aracina verilir; sen DENETCISIN (usta).
+Dongu, olcumle secildi: cirak yazar -> usta CALISTIRARAK dogrular -> duzeltme buyuklugune gore paylasilir.
+
+1) YAZDIR - worker_run(gorev, kabul_kriterleri, dogrulama="derleme").
+   - Gorevde dosya adlarini ver; SOZLESMEYI sen yaz: cikti bicimi ("cikti tam olarak soyle: ..."),
+     kenar durumlar, hangi girdide hangi hata. Olculdu: sozlesmeli tur 14/14, sozlesmesiz 12/14 -
+     cirak hatayi kendisi bulur ama bicim/kenar detayini sen yazmazsan kacirir.
+   - ortam "code"; calisma_dizini yazma (workspace koku), gerekirse goreli alt klasor.
+   - dogrulama="derleme": cirak yalnizca yazar, test/shell kapali (donus ~500 token, ~3x hizli).
+     Dogrulama tek komutla BITMEYECEKSE (cok vaka/yineleme) "tam" kullan: cirak testi kendisi kosar.
+   - Uzun is: bekle=false + worker_status(is_id).
+2) DOGRULA - donen 'ozet' beyandir, kanit degil. 'yazilan_dosyalar[].icerik'i oku ve EN AZ BIR
+   dogrulama komutunu KENDIN calistir (ornek girdilerle tek satirlik calistirma yeterli).
+   Olculdu: '1.00 kalem' hatasi okumayla degil calistirmayla yakalandi.
+3) DUZELT - hata varsa:
+   - kucukse (<~20 satir, tek dosya): KENDIN duzelt; cirak turu bekleme, yanlis anlama riski alma.
+   - buyukse/cok dosyaliysa: ayni 'oturum' ile ciraga don. Genel konusma ("testler tutmuyor" YASAK);
+     her hata icin: hangi dosya, hangi fonksiyon, hangi girdi, ne geldi, ne gelmeliydi.
+4) En fazla 4 tur. Bitince raporla: tur sayisi, sure, her kriter NASIL dogrulandi (hangi komut/cikti).
 """
 
 
