@@ -167,9 +167,22 @@ def kontrol_ollama() -> bool:
     if not DEGISTIR:
         log(HATA + "Ollama calismiyor (%s)." % ollama_url())
         return False
+    # Ollama sureci VARSA ikinci bir 'serve' baslatma: ikinci sunucu portu alamaz, ama bazi
+    # kurulumlarda iki sunucu iki AYRI model ornegi yukler -> 80B modelde ~78 GB RAM (olculdu).
+    try:
+        cikti = subprocess.run(["tasklist" if os.name == "nt" else "ps", "-ax"] if os.name != "nt"
+                               else ["tasklist", "/FI", "IMAGENAME eq ollama.exe"],
+                               capture_output=True, text=True, timeout=10).stdout.lower()
+        if "ollama" in cikti and "no tasks" not in cikti:
+            log(UYARI + "Ollama sureci var ama cevap vermiyor. Ikinci sunucu BASLATILMADI "
+                        "(cift model yuklemesini onlemek icin). Ollama uygulamasini yeniden baslat.")
+            return False
+    except Exception:
+        pass
     log(BILGI + "Ollama calismiyor, baslatiliyor...")
     try:
-        kw = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL, "stdin": subprocess.DEVNULL}
+        kw = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL, "stdin": subprocess.DEVNULL,
+              "env": dict(os.environ, OLLAMA_MAX_LOADED_MODELS=os.environ.get("OLLAMA_MAX_LOADED_MODELS", "1"))}
         if os.name == "nt":
             kw["creationflags"] = 0x00000008 | 0x00000200   # DETACHED_PROCESS | NEW_PROCESS_GROUP
         subprocess.Popen([exe, "serve"], **kw)
