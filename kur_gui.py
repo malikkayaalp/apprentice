@@ -18,6 +18,12 @@ PAYLOAD = os.path.join(getattr(sys, "_MEIPASS", BURASI), "payload.zip")
 VARSAYILAN_KOK = os.path.join(os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"), "Apprentice") \
     if os.name == "nt" else os.path.join(os.path.expanduser("~"), "apprentice")
 
+# Tema: koyu, sicak (Claude paleti). Kil vurgu, kemik metin.
+T = {"bg": "#1f1d1a", "panel": "#2a2724", "panel2": "#33302c", "cizgi": "#3f3b36",
+     "metin": "#f1ede6", "soluk": "#a39d94", "vurgu": "#d97757", "vurgu2": "#e8956f",
+     "ok": "#6fc28a", "hata": "#ee6b5b", "uyari": "#e9b85c"}
+FONT = "Segoe UI" if os.name == "nt" else "Helvetica"
+
 ADIMLAR = [("dosyalar", "Apprentice dosyaları"), ("python", "Python"), ("ollama", "Ollama"),
            ("model", "Yerel model (Qwen3-Coder-Next, ~20 GB)"), ("ide", "IDE bağlantıları"),
            ("test", "Öz-test")]
@@ -59,20 +65,68 @@ class Sihirbaz(tk.Tk):
         self.durum = {k: "bekliyor" for k, _ in ADIMLAR}
         self.ollama_eksik = False
         self._kur_ui()
+        self.after(50, self._koyu_baslik)
         self.after(100, self._kuyruk_isle)
 
-    # ---------------------------------------------------------------- UI
-    def _kur_ui(self):
-        st = ttk.Style(self)
+    def _koyu_baslik(self):
+        """Windows 10/11 baslik cubugunu koyu yap (DWMWA_USE_IMMERSIVE_DARK_MODE); diger sistemlerde sessiz."""
+        if os.name != "nt":
+            return
         try:
-            st.theme_use("vista" if os.name == "nt" else "clam")
+            import ctypes
+            h = ctypes.windll.user32.GetParent(self.winfo_id())
+            deger = ctypes.c_int(1)
+            for attr in (20, 19):
+                if ctypes.windll.dwmapi.DwmSetWindowAttribute(h, attr, ctypes.byref(deger), ctypes.sizeof(deger)) == 0:
+                    break
+            # yeniden cizim icin boyutu bir tik oynat
+            g = self.geometry(); self.geometry(g)
         except Exception:
             pass
-        ust = ttk.Frame(self, padding=(16, 12))
+
+    # ---------------------------------------------------------------- UI
+    def _tema(self):
+        st = ttk.Style(self)
+        try:
+            st.theme_use("clam")
+        except Exception:
+            pass
+        self.configure(bg=T["bg"])
+        st.configure(".", background=T["bg"], foreground=T["metin"], font=(FONT, 10), bordercolor=T["cizgi"],
+                     lightcolor=T["panel"], darkcolor=T["bg"], troughcolor=T["panel2"], fieldbackground=T["panel2"])
+        st.configure("TFrame", background=T["bg"])
+        st.configure("Panel.TFrame", background=T["panel"])
+        st.configure("TLabel", background=T["bg"], foreground=T["metin"])
+        st.configure("Panel.TLabel", background=T["panel"], foreground=T["metin"])
+        st.configure("Soluk.TLabel", background=T["panel"], foreground=T["soluk"])
+        st.configure("Baslik.TLabel", background=T["bg"], foreground=T["metin"], font=(FONT, 20, "bold"))
+        st.configure("Alt.TLabel", background=T["bg"], foreground=T["soluk"], font=(FONT, 10))
+        st.configure("TLabelframe", background=T["panel"], bordercolor=T["cizgi"], relief="flat")
+        st.configure("TLabelframe.Label", background=T["panel"], foreground=T["soluk"], font=(FONT, 9, "bold"))
+        st.configure("TEntry", fieldbackground=T["panel2"], foreground=T["metin"], insertcolor=T["metin"],
+                     bordercolor=T["cizgi"], lightcolor=T["cizgi"], darkcolor=T["cizgi"])
+        st.configure("TButton", background=T["panel2"], foreground=T["metin"], bordercolor=T["cizgi"],
+                     focuscolor=T["panel2"], padding=(12, 6), font=(FONT, 10))
+        st.map("TButton", background=[("active", T["cizgi"]), ("disabled", T["panel"])],
+               foreground=[("disabled", T["soluk"])])
+        st.configure("Vurgu.TButton", background=T["vurgu"], foreground="#1a1512", bordercolor=T["vurgu"],
+                     font=(FONT, 10, "bold"))
+        st.map("Vurgu.TButton", background=[("active", T["vurgu2"]), ("disabled", T["panel2"])],
+               foreground=[("disabled", T["soluk"])])
+        st.configure("TProgressbar", background=T["vurgu"], troughcolor=T["panel2"], bordercolor=T["panel2"],
+                     lightcolor=T["vurgu"], darkcolor=T["vurgu"])
+        st.configure("Vertical.TScrollbar", background=T["panel2"], troughcolor=T["panel"], bordercolor=T["panel"],
+                     arrowcolor=T["soluk"])
+
+    def _kur_ui(self):
+        self._tema()
+        ust = ttk.Frame(self, padding=(20, 16, 20, 8))
         ust.pack(fill="x")
-        ttk.Label(ust, text="Apprentice", font=("Segoe UI", 18, "bold")).pack(anchor="w")
+        sat = ttk.Frame(ust); sat.pack(anchor="w")
+        tk.Label(sat, text="✦", bg=T["bg"], fg=T["vurgu"], font=(FONT, 18)).pack(side="left", padx=(0, 8))
+        ttk.Label(sat, text="Apprentice", style="Baslik.TLabel").pack(side="left")
         ttk.Label(ust, text="A local model does the work, a frontier model supervises.",
-                  foreground="#666").pack(anchor="w")
+                  style="Alt.TLabel").pack(anchor="w", pady=(2, 0))
 
         govde = ttk.Frame(self, padding=(16, 4))
         govde.pack(fill="both", expand=True)
@@ -84,8 +138,8 @@ class Sihirbaz(tk.Tk):
         sol.grid(row=0, column=0, rowspan=3, sticky="nsw", padx=(0, 12))
         self.adim_etiket = {}
         for k, ad in ADIMLAR:
-            e = ttk.Label(sol, text="○  " + ad, font=("Segoe UI", 10))
-            e.pack(anchor="w", pady=3)
+            e = ttk.Label(sol, text="○  " + ad, style="Panel.TLabel", font=(FONT, 10))
+            e.pack(anchor="w", pady=4)
             self.adim_etiket[k] = (e, ad)
 
         # sag ust: klasor
@@ -96,8 +150,8 @@ class Sihirbaz(tk.Tk):
         ttk.Entry(kl, textvariable=self.kok_var).grid(row=0, column=0, sticky="ew")
         ttk.Button(kl, text="Gözat…", command=self._gozat).grid(row=0, column=1, padx=(8, 0))
         ttk.Label(kl, text="Dosyalar bu klasöre açılır; IDE'ler sunucuyu buradan çalıştırır. "
-                           "Python yoksa gömülü Python da buraya iner.", foreground="#666",
-                  wraplength=520).grid(row=1, column=0, columnspan=2, sticky="w", pady=(6, 0))
+                           "Python yoksa gömülü Python da buraya iner.", style="Soluk.TLabel",
+                  wraplength=440).grid(row=1, column=0, columnspan=2, sticky="w", pady=(6, 0))
 
         # sag orta: ilerleme
         il = ttk.Frame(govde)
@@ -106,7 +160,7 @@ class Sihirbaz(tk.Tk):
         self.ilerleme_var = tk.DoubleVar(value=0)
         self.ilerleme = ttk.Progressbar(il, variable=self.ilerleme_var, maximum=100)
         self.ilerleme.grid(row=0, column=0, sticky="ew")
-        self.ilerleme_metin = ttk.Label(il, text="Hazır.", foreground="#444")
+        self.ilerleme_metin = ttk.Label(il, text="Hazır.", foreground=T["soluk"])
         self.ilerleme_metin.grid(row=1, column=0, sticky="w", pady=(4, 0))
 
         # sag alt: log
@@ -114,14 +168,15 @@ class Sihirbaz(tk.Tk):
         lg.grid(row=2, column=1, sticky="nsew")
         lg.rowconfigure(0, weight=1); lg.columnconfigure(0, weight=1)
         self.log_kutu = tk.Text(lg, height=10, wrap="word", font=("Consolas", 9), state="disabled",
-                                background="#fafafa", relief="flat")
+                                background=T["panel2"], foreground=T["metin"], insertbackground=T["metin"],
+                                relief="flat", highlightthickness=0, padx=8, pady=6)
         self.log_kutu.grid(row=0, column=0, sticky="nsew")
         sb = ttk.Scrollbar(lg, command=self.log_kutu.yview)
         sb.grid(row=0, column=1, sticky="ns")
         self.log_kutu.configure(yscrollcommand=sb.set)
-        self.log_kutu.tag_configure("ok", foreground="#1a7f37")
-        self.log_kutu.tag_configure("hata", foreground="#b42318")
-        self.log_kutu.tag_configure("uyari", foreground="#b54708")
+        self.log_kutu.tag_configure("ok", foreground=T["ok"])
+        self.log_kutu.tag_configure("hata", foreground=T["hata"])
+        self.log_kutu.tag_configure("uyari", foreground=T["uyari"])
 
         # alt: dugmeler
         alt = ttk.Frame(self, padding=(16, 8))
@@ -131,7 +186,7 @@ class Sihirbaz(tk.Tk):
         self.btn_kural.pack(side="left")
         self.btn_kapat = ttk.Button(alt, text="Kapat", command=self.destroy)
         self.btn_kapat.pack(side="right")
-        self.btn_kur = ttk.Button(alt, text="Kur", command=self._baslat)
+        self.btn_kur = ttk.Button(alt, text="Kur", command=self._baslat, style="Vurgu.TButton")
         self.btn_kur.pack(side="right", padx=(0, 8))
 
     def _gozat(self):
@@ -171,7 +226,7 @@ class Sihirbaz(tk.Tk):
                     k, d = veri
                     e, ad = self.adim_etiket[k]
                     sim = {"bekliyor": "○", "calisiyor": "⟳", "ok": "✓", "hata": "✗", "uyari": "!"}[d]
-                    renk = {"ok": "#1a7f37", "hata": "#b42318", "uyari": "#b54708"}.get(d, "#000")
+                    renk = {"ok": T["ok"], "hata": T["hata"], "uyari": T["uyari"], "calisiyor": T["vurgu"]}.get(d, T["metin"])
                     e.configure(text="%s  %s" % (sim, ad), foreground=renk)
                 elif tur == "bitti":
                     self._bitti(veri)

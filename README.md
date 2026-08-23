@@ -41,8 +41,12 @@ tests/           sözleşme testleri, kod ortamı testi, ölçüm kampanyası
 
 ## Kurulum
 
-**Windows (Python gerekmez):** depoyu indir (zip ya da `git clone`), içindeki **`Apprentice-Setup.exe`**'yi
-çalıştır ([Releases](https://github.com/malikkayaalp/apprentice/releases) sayfasından, depo köküne koy).
+**Windows (Python gerekmez):** [Releases](https://github.com/malikkayaalp/apprentice/releases) sayfasından
+**`Apprentice-Setup.exe`**'yi indir ve çalıştır — her yerden çalışır, depoyu ayrıca indirmen gerekmez
+(dosyalar exe'nin içinde; kurulum klasörünü sen seçersin, varsayılan `%LOCALAPPDATA%\Apprentice`).
+
+![Apprentice Setup](docs/setup.png)
+
 Adım adım: Python (yoksa gömülü Python'u indirir) → Ollama (yoksa yönlendirir, kapalıysa başlatır) → model
 (yoksa ilerleme yüzdesiyle indirir, ~20 GB) → kurulu IDE'lerin MCP ayarına `apprentice` girdisi
 (Cursor, VS Code, Windsurf; diğer girdilere dokunmaz) → öz-test.
