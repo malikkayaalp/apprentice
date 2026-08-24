@@ -201,7 +201,9 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
 <body>
 <div id="ust">
   <div id="logo">APPRENTICE</div>
-  <div class="pill"><span class="nokta" id="modelNokta"></span><span id="modelAd">—</span></div>
+  <div class="pill"><span class="nokta" id="modelNokta"></span><span id="modelAd">—</span>
+    <span id="eject" title="modeli RAM/VRAM'den boşalt (sonraki iş yeniden yükler ~1 dk)"
+      style="cursor:pointer;margin-left:4px">⏏</span></div>
   <div class="pill">VRAM <b id="vramT">—</b><div class="olcekbar"><i id="vramBar"></i></div></div>
   <div class="pill">GPU <b id="gpuT">—</b><div class="olcekbar"><i id="gpuBar"></i></div></div>
   <div class="bosluk"></div>
@@ -255,11 +257,34 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
         <option value="usta">🧠 Usta (Claude CLI — Max kotasından harcar)</option>
       </select>
       <div id="ustaForm" style="display:none;flex-direction:column;gap:7px">
-        <label>CLAUDE'A PROMPT</label>
+        <div class="ksatir">
+          <div><label>CLI</label><select id="uCli">
+            <option value="claude">claude</option>
+            <option value="ozel">özel komut</option></select></div>
+          <div id="uModelKap"><label>MODEL</label><select id="uModel">
+            <option value="">varsayılan</option>
+            <option value="claude-fable-5">Fable 5</option>
+            <option value="claude-opus-5">Opus 5</option>
+            <option value="claude-sonnet-5">Sonnet 5</option>
+            <option value="claude-haiku-4-5">Haiku 4.5</option></select></div>
+          <div id="uEffortKap"><label>EFFORT</label><select id="uEffort">
+            <option value="">varsayılan</option>
+            <option value="low">low</option><option value="medium">medium</option>
+            <option value="high">high</option></select></div>
+        </div>
+        <div id="uSablonKap" style="display:none">
+          <label>KOMUT ŞABLONU ({prompt} yerine istem konur)</label>
+          <input id="uSablon" placeholder='gemini -p {prompt}'>
+        </div>
+        <label>PROMPT</label>
         <textarea id="uPrompt" rows="4" placeholder="ör: son işi worker_status ile incele ve değerlendir... ya da herhangi bir soru"></textarea>
-        <label class="kutucuk"><input type="checkbox" id="uAraclar"> araç izni (Claude worker_run/worker_status kullanabilir — tam döngü)</label>
+        <label class="kutucuk"><input type="checkbox" id="uAraclar"> araç izni (worker_run/worker_status — tam döngü)</label>
       </div>
       <div id="cirakForm" style="display:flex;flex-direction:column;gap:7px">
+      <div class="ksatir">
+        <div><label>ÇIRAK MODELİ</label><select id="kModel"><option value="">varsayılan</option></select></div>
+      </div>
+      <div id="kModelKart" style="font-size:.72em;color:var(--soluk);line-height:1.5"></div>
       <label>BAŞLIK (listede görünür)</label>
       <input id="kBaslik" placeholder="kalman filtresi">
       <label>GÖREV</label>
@@ -302,7 +327,11 @@ const ASAMALAR=[["tumu","TÜMÜ"],["baslama","BAŞLANGIÇ"],["uretim","ÜRETİM"
 const IKON={arac:"⚙",yazim:"▣",hata:"✖",sonuc:"◈",bilgi:"·",kanit:"✓"};
 let seciliIs=null, imlecN=0, filtre="tumu", takip=true, olaylar=[], t0=null;
 let daktiloHedef="", daktiloCiz=0, dosyalar={}, seciliDosya=null, dosyaElle=false;
-let girisKartlariEklendi=false, sonOzet={};
+let girisKartlariEklendi=false, sonOzet={}, girisSonH="";
+const KAYNAK={tool:["ÇIRAK","yesil"],tool_result:["ÇIRAK","yesil"],write:["ÇIRAK","yesil"],
+  assistant:["ÇIRAK","yesil"],onarim:["USTA→","cyan"],usta_rapor:["→USTA","cyan"],
+  baglam:["SİSTEM","soluk"],system:["SİSTEM","soluk"],result:["HARNESS","mavi"],
+  error:["HARNESS","kirmizi"],exit:["HARNESS","mavi"],duraganlik:["HARNESS","kirmizi"]};
 
 /* --------------- akilli izgara yerlesimi (gridstack-mini) ---------------
    24 sutunluk gorunmez izgara: tasima/boyutlandirma hucreye SNAP eder; cakisan panel
@@ -496,7 +525,9 @@ function girisKartlari(){
     kacir(sonOzet.sistem_metin)+'</pre></details></div></div>';
   let gk=$("#girisKap");
   if(!gk){gk=document.createElement("div");gk.id="girisKap";kap.insertAdjacentElement("afterbegin",gk);}
-  if(gk.innerHTML!==h)gk.innerHTML=h;      // mukerrer degil: sabit kapsayici GUNCELLENIR
+  // innerHTML ile KIYASLAMA yapma: tarayici normalize eder, hep "farkli" cikar ve her
+  // yoklamada yeniden cizilir - aciklarin (details) kendiliginden kapanma hatasi buydu.
+  if(girisSonH!==h){gk.innerHTML=h;girisSonH=h;}
 }
 function ekleOlay(o){
   if(filtre!=="tumu"&&o.asama!==filtre)return;
@@ -504,7 +535,11 @@ function ekleOlay(o){
   const kap=$("#akis"); const div=document.createElement("div");
   const sinif=o.metin&&o.metin.startsWith("KANIT")?"kanit":o.etiket;
   div.className="olay "+sinif;
-  let ic='<span class="ikon">'+(IKON[sinif]||"·")+'</span><div class="icerik">'+kacir(o.metin||"");
+  const ky=KAYNAK[o.tip]||["ÇIRAK","yesil"];
+  let ic='<span class="ikon">'+(IKON[sinif]||"·")+'</span><div class="icerik">'+
+    '<span style="font-size:.7em;font-weight:700;letter-spacing:.5px;color:var(--'+ky[1]+
+    ');border:1px solid var(--cizgi2);border-radius:5px;padding:0 5px;margin-right:7px;vertical-align:1px">'+
+    ky[0]+'</span>'+kacir(o.metin||"");
   if(o.kod)ic+=kodBlok(o.yol,o.kod,50);
   if(o.ham&&["tool","tool_result","result","usta_rapor","baglam"].includes(o.tip)){
     const ham={...o.ham}; delete ham.sistem_metin;
@@ -651,7 +686,44 @@ $("#kHedef").onchange=e=>{
   const u=e.target.value==="usta";
   $("#ustaForm").style.display=u?"flex":"none";
   $("#cirakForm").style.display=u?"none":"flex";
-  $("#gonder").textContent=u?"CLAUDE'A GÖNDER":"ÇIRAĞI ÇALIŞTIR";
+  $("#gonder").textContent=u?"USTAYA GÖNDER":"ÇIRAĞI ÇALIŞTIR";
+};
+$("#uCli").onchange=e=>{
+  const ozel=e.target.value==="ozel";
+  $("#uSablonKap").style.display=ozel?"":"none";
+  $("#uModelKap").style.display=ozel?"none":"";
+  $("#uEffortKap").style.display=ozel?"none":"";
+};
+async function modelleriYukle(){
+  try{
+    const r=await(await fetch("/api/modeller")).json();
+    const s=$("#kModel");
+    s.innerHTML='<option value="">varsayılan ('+
+      ((r.varsayilan||"").split("/").pop().slice(0,30)||"?")+')</option>'+
+      (r.modeller||[]).map(m=>'<option value="'+m.ad+'">'+m.ad.split("/").pop().slice(0,40)+
+        ' · '+m.gb+' GB</option>').join("");
+  }catch(e){}
+}
+$("#kModel").onchange=async e=>{
+  const kap=$("#kModelKart"); kap.textContent="";
+  const ad=e.target.value; if(!ad)return;
+  try{
+    const k=await(await fetch("/api/model_kart?ad="+encodeURIComponent(ad))).json();
+    const p=k.parametreler||{};
+    kap.innerHTML="kart: aile <b>"+(k.aile||"?")+"</b> · ctx <b>"+(k.ctx||"?")+
+      "</b> · yetenekler: "+(k.yetenekler||[]).join(",")+
+      (Object.keys(p).length?"<br>önerilen: "+Object.entries(p).map(([a,b])=>a+"="+b).join(" · "):"")+
+      "<br><span style='color:var(--sari)'>not: işçi koşusunda temperature=0 (determinizm, ölçüldü); ctx karta göre sınırlanır</span>";
+  }catch(e){}
+};
+$("#eject").onclick=async()=>{
+  try{
+    const r=await(await fetch("/api/eject",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:"{}"})).json();
+    const t=$("#tost");
+    t.textContent=r.hata?("HATA: "+r.hata):("⏏ boşaltıldı: "+((r.bosaltilan||[]).map(x=>x.split("/").pop()).join(", ")||"yüklü model yoktu"));
+    t.style.display="block"; setTimeout(()=>t.style.display="none",5000);
+  }catch(e){}
 };
 async function ustaListeCek(){
   try{
@@ -684,7 +756,9 @@ $("#gonder").onclick=async()=>{
     try{
       const r=await(await fetch("/api/usta",{method:"POST",
         headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({prompt:$("#uPrompt").value,araclar:$("#uAraclar").checked})})).json();
+        body:JSON.stringify({prompt:$("#uPrompt").value,araclar:$("#uAraclar").checked,
+          cli:$("#uCli").value,sablon:$("#uSablon").value,
+          model:$("#uModel").value,effort:$("#uEffort").value})})).json();
       if(r.hata){$("#kNot").textContent="HATA: "+r.hata;}
       else{
         $("#kNot").textContent=""; $("#uPrompt").value=""; seciliUsta=r.id;
@@ -698,6 +772,7 @@ $("#gonder").onclick=async()=>{
   const b=$("#gonder"); b.disabled=true; $("#kNot").textContent="gönderiliyor...";
   try{
     const veri={baslik:$("#kBaslik").value, gorev:$("#kGorev").value,
+      model:$("#kModel").value,
       kriterler:$("#kKriter").value.split("\n"),
       calisma_dizini:$("#kDizin").value.trim(), dogrulama:$("#kDog").value,
       yazilabilir:$("#kYaz").value.split(",").map(s=>s.trim()).filter(Boolean),
@@ -721,6 +796,7 @@ $("#akis").addEventListener("wheel",()=>{const a=$("#akis");
   takip=a.scrollTop+a.clientHeight>=a.scrollHeight-60;});
 
 boruCiz(); uygula(); filtreSec("tumu"); isleriCek(); olaylariCek(); daktiloAdim(); ustaListeCek();
+modelleriYukle();
 </script>
 </body>
 </html>

@@ -44,8 +44,46 @@ def _sistem() -> dict:
     return out
 
 
+_USTA_TAMAM: set = set()
+
+
+def _usta_rapor_tamamla(jid: str):
+    """Panelden baslatilan islerde usta_rapor olayini MCP yolu yazmaz (o yol worker_status'ta);
+    is bitince panel kendisi isler - kullanici geri bildirimi: 'usta raporunu hic gormedim'."""
+    if jid in _USTA_TAMAM:
+        return
+    yol = os.path.join(DEPO.jobs_dir, jid, "events.jsonl")
+    try:
+        metin = open(yol, encoding="utf-8", errors="replace").read()
+    except OSError:
+        return
+    if '"usta_rapor"' in metin or '"exit"' not in metin:
+        if '"usta_rapor"' in metin:
+            _USTA_TAMAM.add(jid)
+        return
+    try:
+        os.environ.setdefault("APPRENTICE_HOME", HOME)
+        import importlib
+        srv = importlib.import_module("server.apprentice_server")
+        rep = srv.rapor_diskten(jid) or {}
+        with open(yol, "a", encoding="utf-8") as f:
+            f.write(json.dumps({"type": "usta_rapor", "t": time.time(),
+                                "derleme_durumu": rep.get("derleme_durumu"),
+                                "dosya": [d["yol"] for d in rep.get("yazilan_dosyalar", [])],
+                                "hata_sayisi": len(rep.get("hatalar", [])),
+                                "uyarilar": [k for k in ("duragan", "ruff_uyarilari",
+                                                         "butce_uyarisi", "hafiza_uyarisi",
+                                                         "durum_uyarisi") if rep.get(k)],
+                                "kullanim": rep.get("kullanim") or {}},
+                               ensure_ascii=False) + "\n")
+        _USTA_TAMAM.add(jid)
+    except Exception:
+        pass
+
+
 def _olaylar(jid: str, n: int) -> dict:
     with KILIT:
+        _usta_rapor_tamamla(jid)
         DEPO.tazele(jid)
         s = dict(DEPO.durumlar.get(jid) or {})
         ev = DEPO.olaylar.get(jid) or []
@@ -112,12 +150,27 @@ def _gorev_baslat(veri: dict) -> dict:
         return {"hata": "calisma_dizini eve goreli olmali"}
     tam_dizin = os.path.join(HOME, dizin)
     os.makedirs(tam_dizin, exist_ok=True)
-    job = srv.Job(ortam, gorev, kriterler, "", False, 3,
-                  srv.config.env_or(["APPRENTICE_MODEL", "UNITY_CODE_MODEL"], "ollama.model"),
+    model = str(veri.get("model") or "").strip() or \
+        srv.config.env_or(["APPRENTICE_MODEL", "UNITY_CODE_MODEL"], "ollama.model")
+    # MODEL UYUMU: secilen modelin kartindan ctx siniri alinir - config ctx karttan buyukse
+    # kisilir (olculdu: Ollama pencereyi asan istegi reddediyor; kucuk modelde 128k istemek hata).
+    eski_ctx = os.environ.get("APPRENTICE_CTX")
+    try:
+        kart = _model_kart(model)
+        cfg_ctx = int(srv.config.env_or("APPRENTICE_CTX", "ollama.num_ctx", 131072) or 131072)
+        if kart.get("ctx") and int(kart["ctx"]) < cfg_ctx:
+            os.environ["APPRENTICE_CTX"] = str(int(kart["ctx"]))
+    except Exception:
+        kart = {}
+    job = srv.Job(ortam, gorev, kriterler, "", False, 3, model,
                   "", tam_dizin, kapali_ek, dogrulama,
                   [str(x).strip() for x in (veri.get("yazilabilir") or []) if str(x).strip()],
                   bool(veri.get("harita")), bool(veri.get("canli", True)))
     job.start()
+    if eski_ctx is None:
+        os.environ.pop("APPRENTICE_CTX", None)
+    else:
+        os.environ["APPRENTICE_CTX"] = eski_ctx
     srv.JOBS[job.id] = job
     # ZAMAN ASIMI BEKCISI (Kalman olayinda fark edildi): MCP'deki bekleme dongusu isciyi
     # sinirda oldurur ama panel isleri o donguden gecmez - bekci olmadan sahipsiz kalirlardi.
@@ -157,6 +210,70 @@ def _gorev_baslat(veri: dict) -> dict:
     return {"is_id": job.id, "baslik": baslik}
 
 
+def _ollama_get(yol: str, govde: dict | None = None):
+    import urllib.request
+    url = "http://localhost:11434" + yol
+    if govde is None:
+        r = urllib.request.urlopen(url, timeout=6)
+    else:
+        r = urllib.request.urlopen(urllib.request.Request(
+            url, json.dumps(govde).encode(), {"Content-Type": "application/json"}), timeout=30)
+    return json.load(r)
+
+
+def _modeller() -> dict:
+    """Ollama'daki secilebilir isci modelleri (gomme modelleri haric)."""
+    try:
+        tags = _ollama_get("/api/tags").get("models", [])
+    except Exception as e:  # noqa: BLE001
+        return {"hata": str(e)[:200], "modeller": []}
+    out = []
+    for m in tags:
+        ad = m.get("name", "")
+        if "bge" in ad.lower() or "embed" in ad.lower():
+            continue
+        out.append({"ad": ad, "gb": round(m.get("size", 0) / 1e9, 1)})
+    import importlib
+    varsayilan = ""
+    try:
+        os.environ.setdefault("APPRENTICE_HOME", HOME)
+        srv = importlib.import_module("server.apprentice_server")
+        varsayilan = srv.config.env_or(["APPRENTICE_MODEL", "UNITY_CODE_MODEL"], "ollama.model") or ""
+    except Exception:
+        pass
+    return {"modeller": out, "varsayilan": varsayilan}
+
+
+def _model_kart(ad: str) -> dict:
+    """Model kartindan tavsiye parametreler: /api/show -> parameters + context_length.
+    Isci kosarken temperature yine 0'dir (olculdu: determinizm); kart BILGI + ctx siniri icin."""
+    try:
+        d = _ollama_get("/api/show", {"model": ad})
+    except Exception as e:  # noqa: BLE001
+        return {"hata": str(e)[:200]}
+    kart = {"parametreler": {}, "ctx": None, "aile": (d.get("details") or {}).get("family", "")}
+    for satir in (d.get("parameters") or "").splitlines():
+        parca = satir.split(None, 1)
+        if len(parca) == 2:
+            kart["parametreler"][parca[0]] = parca[1].strip('"')
+    for k, v in (d.get("model_info") or {}).items():
+        if k.endswith("context_length"):
+            kart["ctx"] = v
+    kart["yetenekler"] = d.get("capabilities") or []
+    return kart
+
+
+def _model_bosalt() -> dict:
+    """Eject: yuklu modelleri RAM/VRAM'den indir (keep_alive: 0). Sonraki is yeniden yukler."""
+    try:
+        yuklu = [m.get("name") for m in _ollama_get("/api/ps").get("models", [])]
+        for ad in yuklu:
+            _ollama_get("/api/generate", {"model": ad, "keep_alive": 0})
+        return {"bosaltilan": yuklu}
+    except Exception as e:  # noqa: BLE001
+        return {"hata": str(e)[:200]}
+
+
 def _usta_istek(veri: dict) -> dict:
     """Panelden Claude CLI'ya BASSIZ istek (claude -p). Desktop gerekmez; kullanicinin
     girisiyle calisir. Her istek Max kotasindan harcar - o yuzden yalnizca kullanici
@@ -177,10 +294,24 @@ def _usta_istek(veri: dict) -> dict:
     with open(yol, "w", encoding="utf-8", newline="\n") as f:
         json.dump(kayit, f, ensure_ascii=False)
 
+    kayit["model"] = str(veri.get("model") or "")
+    kayit["effort"] = str(veri.get("effort") or "")
+    kayit["cli"] = str(veri.get("cli") or "claude")
+    sablon = str(veri.get("sablon") or "")
+
     def kos():
-        cmd = ["claude", "-p", prompt, "--output-format", "text"]
-        if kayit["araclar"]:
-            cmd += ["--allowedTools", "mcp__apprentice__worker_run,mcp__apprentice__worker_status"]
+        if kayit["cli"] == "ozel" and sablon:
+            # HER TURLU CLI: kullanicinin sablonu, {prompt} yerine istem konur.
+            # Yerel panel - komutu kullanici yazar, kullanici calistirir.
+            cmd = sablon.replace("{prompt}", '"' + prompt.replace('"', '\\"') + '"')
+        else:
+            cmd = ["claude", "-p", prompt, "--output-format", "text"]
+            if kayit["model"]:
+                cmd += ["--model", kayit["model"]]
+            if kayit["effort"]:
+                cmd += ["--effort", kayit["effort"]]
+            if kayit["araclar"]:
+                cmd += ["--allowedTools", "mcp__apprentice__worker_run,mcp__apprentice__worker_status"]
         env = dict(os.environ, APPRENTICE_HOME=HOME, APPRENTICE_IZLEYICI="0",
                    PYTHONIOENCODING="utf-8")
         try:
@@ -254,6 +385,10 @@ class Istek(BaseHTTPRequestHandler):
                 self._gonder({"istekler": _usta_liste()})
             elif yol.path == "/api/usta_cevap":
                 self._gonder(_usta_cevap(q.get("id", "")))
+            elif yol.path == "/api/modeller":
+                self._gonder(_modeller())
+            elif yol.path == "/api/model_kart":
+                self._gonder(_model_kart(q.get("ad", "")))
             else:
                 self._gonder({"hata": "yok"}, kod=404)
         except Exception as e:  # noqa: BLE001
@@ -268,6 +403,8 @@ class Istek(BaseHTTPRequestHandler):
                 self._gonder(_gorev_baslat(veri))
             elif yolu == "/api/usta":
                 self._gonder(_usta_istek(veri))
+            elif yolu == "/api/eject":
+                self._gonder(_model_bosalt())
             else:
                 self._gonder({"hata": "yok"}, kod=404)
         except Exception as e:  # noqa: BLE001
