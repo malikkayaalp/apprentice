@@ -459,6 +459,11 @@ internal sealed class AltPencere : Form
         if (uri.Contains("ustte=1")) TopMost = true;
         try { Icon = Icon.ExtractAssociatedIcon(Environment.ProcessPath ?? Application.ExecutablePath); }
         catch { }
+        // BOYUTLANDIRMA ICIN KENAR PAYI (yasandi: "ayri pencerede olceklendirme yok"):
+        // WebView2 tum istemci alanini kaplayinca fare olaylarini o yutar ve pencerenin
+        // WM_NCHITTEST'i hic tetiklenmez - kenarlardan tutulamaz. Formun kendisine KENAR
+        // kadar dolgu birakiyoruz; o serit forma ait kalir ve hit-test calisir.
+        Padding = new Padding(KENAR);
         _web.Dock = DockStyle.Fill;
         _web.DefaultBackgroundColor = Color.FromArgb(0x14, 0x12, 0x10);
         Controls.Add(_web);
@@ -515,12 +520,31 @@ internal sealed class AltPencere : Form
         }
     }
 
+    /// <summary>
+    /// CERCEVESIZ ama BOYUTLANDIRILABILIR pencere. FormBorderStyle.None, pencereden
+    /// WS_THICKFRAME (kalin/boyutlandirilabilir cerceve) bitini de kaldirir; o bit olmadan
+    /// Windows, hit-test HTBOTTOM/HTRIGHT dondurse bile boyutlandirmaz (yasandi: sag kenar
+    /// tesadufen calisiyor gorundu, alt kenar hic calismadi). Biti geri ekliyoruz - gorunum
+    /// yine cercevesiz kalir, cunku ciziim WS_CAPTION'a baglidir.
+    /// </summary>
+    protected override CreateParams CreateParams
+    {
+        get
+        {
+            var cp = base.CreateParams;
+            cp.Style |= 0x00040000;    // WS_THICKFRAME  - kenarlardan boyutlandirma
+            cp.Style |= 0x00020000;    // WS_MINIMIZEBOX - gorev cubugundan kucultme
+            return cp;
+        }
+    }
+
     protected override void WndProc(ref Message m)
     {
         base.WndProc(ref m);
         if (m.Msg != WM_NCHITTEST || (int)m.Result != HTCLIENT) return;
         // Kenarlardan boyutlandirma (cerceve olmadigi icin elle)
-        var n = PointToClient(new Point(m.LParam.ToInt32() & 0xFFFF, m.LParam.ToInt32() >> 16));
+        var ham = m.LParam.ToInt32();
+        var n = PointToClient(new Point((short)(ham & 0xFFFF), (short)(ham >> 16)));
         bool sol = n.X <= KENAR, sag = n.X >= ClientSize.Width - KENAR;
         bool ust = n.Y <= KENAR, altk = n.Y >= ClientSize.Height - KENAR;
         int kod = HTCLIENT;
