@@ -158,7 +158,14 @@ class Job:
                  # izleyiciler dogru gostersin (olculdu: alan yazilmayinca panel
                  # her ise "tam" diyordu - kullanici kipinden suphe etti)
                  "dogrulama": self.dogrulama, "canli": self.canli,
-                 "harita": self.harita, "yazilabilir": self.yazilabilir}
+                 "harita": self.harita, "yazilabilir": self.yazilabilir,
+                 # TEK YAZAR KURALI: is kaydina (events.jsonl) YALNIZ SAHIBI yazar.
+                 # Sahip = isi baslatan surec. Baskasi ancak OKUR. Yasandi: panel,
+                 # sahibi olmadigi MCP islerine de "usta_rapor" ekliyordu - hem iki
+                 # surec ayni dosyaya append ediyordu (Windows'ta satir yirtilabilir,
+                 # okuyucular bozuk satiri yuttugu icin sessizce kayboluyordu) hem de
+                 # yazilan sey "ustaya su gitti" iddiasiydi: usta hic bakmamis olabilir.
+                 "sahip": {"rol": "mcp", "pid": os.getpid()}}
         # istemciler (panel) kaynak/baslik gibi alanlari ISI BASLATMADAN once ekler; izleyiciler
         # job.json'u bir kez okuyup onbellege aldigi icin sonradan yamalanan alan kaybolur.
         kayit.update(getattr(self, "ek_alanlar", None) or {})

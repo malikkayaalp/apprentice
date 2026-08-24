@@ -64,6 +64,30 @@ def _net_fark(ilk_once: str, son_sonra: str) -> tuple:
     return ekle, sil
 
 
+def _sahiplik(is_kaydi: dict) -> dict:
+    """TEK YAZAR KURALI: is kaydina yalniz SAHIBI yazar; baskasi okur.
+
+    Sahip surec olduyse is OKSUZ kalir - kimse son halkayi yazmayacak demektir. Bunu
+    gizlemek yerine SOYLERIZ; panel eksik olani uydurmaz (yasandi: panel, sahibi olmadigi
+    MCP islerine "ustaya rapor gitti" olayi ekliyordu - usta hic bakmamis olabilir)."""
+    sahip = dict(is_kaydi.get("sahip") or {})
+    if not sahip:                      # eski kayit: kaynak alani ayni seyi soyler
+        # MCP yolu "kaynak" damgalamaz -> BOS olan MCP'dir. "web-panel" paneldir.
+        # Baska bir deger (ornegin "ornek") ne biri ne otekidir: "?" denir, uydurulmaz.
+        kaynak = is_kaydi.get("kaynak") or ""
+        sahip = {"rol": "panel" if kaynak == "web-panel" else ("mcp" if not kaynak else "?"),
+                 "pid": None}
+    pid, canli = sahip.get("pid"), None
+    if pid:
+        try:                            # Windows + POSIX: sinyal 0 varligi yoklar
+            os.kill(int(pid), 0)
+            canli = True
+        except (OSError, ValueError, TypeError):
+            canli = False
+    sahip["canli"] = canli              # None = bilinmiyor (pid kaydedilmemis)
+    return sahip
+
+
 def _kapsam(is_kaydi: dict) -> dict:
     """Cirak nereye yazabilir? Bos liste = calisma alaninin tamami (olculdu: liste
     verildiginde -%94 token; bu yuzden bos liste 'sinirsiz' demek ve GORUNUR olmali)."""
@@ -90,6 +114,7 @@ def inceleme(jobs_dir: str, jid: str) -> dict:
         return {"sema": SEMA, "hata": "is bulunamadi"}
     kayit = _is_kaydi(jobs_dir, jid)
     kapsam = _kapsam(kayit)
+    sahiplik = _sahiplik(kayit)
 
     dosyalar: dict = {}          # yol -> {ilk_once, son_sonra, surum}
     sonuc: dict = {}
@@ -198,6 +223,7 @@ def inceleme(jobs_dir: str, jid: str) -> dict:
         "model": kayit.get("model") or "",
         "calisma_dizini": kayit.get("calisma_dizini") or "",
         "yazma_kapsami": kapsam,
+        "sahiplik": sahiplik,
         "degisen_dosyalar": degisen,
         "dogrulama": dogrulama,
         "onarim_turu": onarim_turu,

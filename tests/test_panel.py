@@ -873,12 +873,91 @@ def vurgulayici_sozlesmesi() -> bool:
     return True
 
 
+def sahiplik_kurali() -> bool:
+    """TEK YAZAR KURALI: is kaydina yalniz SAHIBI yazar; baskasi OKUR.
+
+    YASANDI: panel, sahibi olmadigi MCP islerine de "usta_rapor" olayi ekliyordu.
+      1. Iki surec ayni dosyaya append ediyordu (panel'in korumasi oku-sonra-yaz, yani
+         TOCTOU; sunucununki kendi ornek bayragi). Windows'ta es zamanli append satiri
+         yirtabilir ve JSONL okuyucularimiz bozuk satiri sessizce yuttugu icin kayip
+         hic fark edilmiyordu.
+      2. Yazilan sey bir IDDIA'ydi: "ustaya su rapor gitti". MCP isinde usta
+         worker_status'u hic cagirmamis olabilir - o zaman kimseye bir sey gitmemistir.
+         Panel olmayan bir kaniti uydurmus olurdu.
+    Bu test: sahibi olmadigimiz isin olay dosyasina TEK BAYT yazilmadigini cakar."""
+    sys.path.insert(0, os.path.join(ROOT, "clients", "web"))
+    import panel as P
+    from core.inceleme import inceleme
+
+    ev = tempfile.mkdtemp()
+    jobs = os.path.join(ev, "jobs")
+    os.makedirs(jobs, exist_ok=True)
+
+    def is_yaz(jid, kayit):
+        jd = os.path.join(jobs, jid)
+        os.makedirs(jd, exist_ok=True)
+        with open(os.path.join(jd, "job.json"), "w", encoding="utf-8") as f:
+            json.dump(kayit, f, ensure_ascii=False)
+        with open(os.path.join(jd, "events.jsonl"), "w", encoding="utf-8") as f:
+            f.write(json.dumps({"type": "write", "path": "a.py", "before": "", "after": "x=1\n"}) + "\n")
+            f.write(json.dumps({"type": "result", "ok": True, "errors": [], "rounds": 0}) + "\n")
+            f.write(json.dumps({"type": "exit", "code": 0}) + "\n")
+        return os.path.join(jd, "events.jsonl")
+
+    eski_home, eski_depo = P.HOME, P.DEPO
+    P.HOME = ev
+    P.DEPO = P.IsDeposu(ev)
+    try:
+        # 1) BASKASININ isi (MCP): panel DOKUNMAMALI
+        yol = is_yaz("mcp_isi", {"id": "mcp_isi", "durum": "bitti",
+                                 "sahip": {"rol": "mcp", "pid": 999999}})
+        once = open(yol, "rb").read()
+        assert P._sahip_mi("mcp_isi") is False, "MCP isi panelin sanildi"
+        P._usta_rapor_tamamla("mcp_isi")
+        assert open(yol, "rb").read() == once, "PANEL BASKASININ IS KAYDINA YAZDI"
+
+        # 2) KENDI isi: panel yazabilir
+        yol2 = is_yaz("panel_isi", {"id": "panel_isi", "durum": "bitti", "kaynak": "web-panel",
+                                    "sahip": {"rol": "panel", "pid": os.getpid()}})
+        assert P._sahip_mi("panel_isi") is True, "kendi isini sahiplenmedi"
+        P._usta_rapor_tamamla("panel_isi")
+        assert '"usta_rapor"' in open(yol2, encoding="utf-8").read(), "kendi isine yazmadi"
+
+        # 3) ESKI kayit (sahip alani yok): kaynak alani ayni seyi soyler
+        is_yaz("eski_panel", {"id": "eski_panel", "durum": "bitti", "kaynak": "web-panel"})
+        is_yaz("eski_mcp", {"id": "eski_mcp", "durum": "bitti"})
+        assert P._sahip_mi("eski_panel") is True
+        assert P._sahip_mi("eski_mcp") is False
+        assert inceleme(jobs, "eski_panel")["sahiplik"]["rol"] == "panel"
+        assert inceleme(jobs, "eski_mcp")["sahiplik"]["rol"] == "mcp"
+        # ne biri ne oteki: UYDURULMAZ
+        is_yaz("ornek", {"id": "ornek", "durum": "bitti", "kaynak": "ornek"})
+        assert inceleme(jobs, "ornek")["sahiplik"]["rol"] == "?"
+
+        # 4) OKSUZ is: sahip surec olmus -> kimse son halkayi yazmayacak, SOYLENIR
+        oks = inceleme(jobs, "mcp_isi")["sahiplik"]
+        assert oks["rol"] == "mcp" and oks["canli"] is False, oks
+        canli = inceleme(jobs, "panel_isi")["sahiplik"]
+        assert canli["canli"] is True, canli
+        # pid kaydedilmemisse "bilinmiyor" denir, "olu" DENMEZ
+        assert inceleme(jobs, "eski_mcp")["sahiplik"]["canli"] is None
+
+        # 5) bozuk/eksik job.json: sahiplenme (guvenli taraf)
+        os.makedirs(os.path.join(jobs, "bozuk"), exist_ok=True)
+        open(os.path.join(jobs, "bozuk", "job.json"), "w").write("{bozuk")
+        assert P._sahip_mi("bozuk") is False
+    finally:
+        P.HOME, P.DEPO = eski_home, eski_depo
+    print("sahiplik kurali: ok (baskasinin kaydina yazilmiyor, oksuz sahip goruluyor)")
+    return True
+
+
 def main() -> int:
     ok = (js_sozdizimi() and metin_isleyicileri() and kaynak_denetimi() and id_butunlugu() and uc_sozlesmesi() and ust_bar_gorunur() and yerlesim_butun() and dizilimler_butun()
           and yerlesim_motoru() and sunucu_uclari() and calisma_dizini_kurallari() and sohbet_uclari()
           and goruntuleyici_sayfasi() and fark_gorunumu()
           and animasyon_tanimlari() and model_kapsulu()
-          and vurgulayici_sozlesmesi())
+          and vurgulayici_sozlesmesi() and sahiplik_kurali())
     print("SONUC:", "GECTI" if ok else "KALDI")
     return 0 if ok else 1
 

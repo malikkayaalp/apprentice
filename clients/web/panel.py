@@ -184,10 +184,39 @@ def _sistem_olc() -> dict:
 _USTA_TAMAM: set = set()
 
 
+def _sahip_mi(jid: str) -> bool:
+    """Bu isin olay gunlugune YAZMA hakki panelde mi? (TEK YAZAR KURALI)
+
+    Sahip = isi baslatan surec; job.json'daki "sahip" alani soyler. Eski kayitlarda o alan
+    yoktur, o zaman "kaynak" == "web-panel" ayni seyi soyler.
+
+    YASANDI: burada hic sahiplik denetimi yoktu; panel MCP'nin baslattigi islere de
+    usta_rapor ekliyordu. Iki zarari vardi:
+      1. Iki surec ayni dosyaya append ediyordu. Windows'ta bu satiri yirtabilir; JSONL
+         okuyucularimiz bozuk satiri sessizce yuttugu icin kayip fark edilmiyordu.
+      2. Yazilan sey bir IDDIA: "ustaya su rapor gitti". MCP isinde usta worker_status'u
+         hic cagirmamis olabilir - o zaman kimseye bir sey gitmemistir. Panel olmayan bir
+         kaniti uydurmus olur; bu projenin beyan/kanit ayrimina aykiri.
+    Artik sahibi olmadigimiz ise YAZMIYORUZ. Eksikse eksik gorunur - dogrusu budur."""
+    try:
+        with open(os.path.join(DEPO.jobs_dir, jid, "job.json"), encoding="utf-8") as f:
+            kayit = json.load(f)
+    except Exception:
+        return False
+    sahip = kayit.get("sahip") or {}
+    if sahip:
+        return sahip.get("rol") == "panel"
+    return kayit.get("kaynak") == "web-panel"      # eski kayitlar
+
+
 def _usta_rapor_tamamla(jid: str):
-    """Panelden baslatilan islerde usta_rapor olayini MCP yolu yazmaz (o yol worker_status'ta);
-    is bitince panel kendisi isler - kullanici geri bildirimi: 'usta raporunu hic gormedim'."""
+    """PANELIN KENDI baslattigi islerde usta_rapor olayini MCP yolu yazmaz (o yol
+    worker_status'ta calisir); is bitince panel kendisi isler - kullanici geri bildirimi:
+    'usta raporunu hic gormedim'. Baskasinin isine DOKUNMAZ (bkz. _sahip_mi)."""
     if jid in _USTA_TAMAM:
+        return
+    if not _sahip_mi(jid):
+        _USTA_TAMAM.add(jid)          # bir daha bakma; bu is bizim degil
         return
     yol = os.path.join(DEPO.jobs_dir, jid, "events.jsonl")
     try:
@@ -351,7 +380,9 @@ def _gorev_baslat(veri: dict) -> dict:
     # kaynak/baslik job.json'a BASLAMADAN once yazilir: izleyiciler job.json'u isin ilk
     # gorunumunde BIR KEZ okuyup onbellege aliyor - sonradan yamalanan alanlar (kaynak/baslik)
     # yarisi kaybedince is, panel oturumu boyunca rozetsiz/basliksiz kaliyordu.
-    job.ek_alanlar = {"kaynak": "web-panel",
+    # TEK YAZAR: bu isi panel baslatti, olay gunlugune yazma hakki PANELIN.
+    job.ek_alanlar = {"sahip": {"rol": "panel", "pid": os.getpid()},
+                      "kaynak": "web-panel",
                       "baslik": str(veri.get("baslik") or "").strip()
                       or " ".join(gorev.split()[:6])[:48]}
     job.start()
