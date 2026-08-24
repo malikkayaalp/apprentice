@@ -50,7 +50,11 @@ body::before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.5;
 #ust .bosluk{flex:1}
 #fontKontrol{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--soluk)}
 #fontKontrol input{width:90px;accent-color:var(--vurgu)}
-#dizilim,#panelEkle{padding:4px 8px;border-radius:8px;border:1px solid var(--cizgi2);
+#dizilim,.alanSatir{display:flex;align-items:center;gap:10px}
+.alanSatir .alanEt{flex:0 0 148px;font-size:.74em;color:var(--soluk);cursor:help;
+  border-bottom:1px dotted var(--cizgi2);padding-bottom:1px}
+.alanSatir input{flex:1;min-width:0}
+#panelEkle{padding:4px 8px;border-radius:8px;border:1px solid var(--cizgi2);
   background:var(--panel);color:var(--soluk);font-size:11px;outline:none;max-width:130px}
 #yerlesimSifirla{padding:4px 10px;border-radius:8px;border:1px solid var(--cizgi2);
   background:transparent;color:var(--soluk);cursor:pointer;font-size:11px}
@@ -255,12 +259,28 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
           <option value="tam">tam (testler)</option></select>
         <label class="kutucuk"><input type="checkbox" id="kCanli" checked> canlı akış</label>
         <label class="kutucuk"><input type="checkbox" id="kHarita"> harita</label>
-        <details><summary>▸ ayrıntı: dizin · yazılabilir · kriterler · başlık</summary>
-          <div class="icra">
-            <input type="text" id="kDizin" placeholder="alt klasör (boş = proje kökü)" style="width:170px" title="Boş bırak: çırak doğrudan çalışma alanının (📁) kökünde çalışır — proje dosyalarını okuyabilir. Bir ad yazarsan çırak yalnız o alt klasöre hapsolur.">
-            <input type="text" id="kYaz" placeholder="yazılabilir (virgülle)" style="width:170px">
-            <input type="text" id="kBaslik" placeholder="başlık" style="width:130px">
-            <input type="text" id="kKriter" placeholder="kriterler ( ; ile ayır)" style="flex:1;min-width:200px">
+        <details id="kAyrinti"><summary>▸ ayrıntı — nerede çalışsın · neye yazabilsin · nasıl doğrulansın</summary>
+          <div class="icra" style="flex-direction:column;align-items:stretch;gap:8px">
+            <div class="alanSatir">
+              <label class="alanEt" title="Çırak hangi klasörde çalışsın? Boş bırakırsan çalışma alanının (📁) kökü — yani projenin kendisi; mevcut dosyaları okuyabilir. Bir ad yazarsan yalnız o alt klasöre hapsolur.">
+                📂 nerede çalışsın</label>
+              <input type="text" id="kDizin" placeholder="boş = projenin kökü   ·   örn: src/oyun">
+            </div>
+            <div class="alanSatir">
+              <label class="alanEt" title="Çırağın DEĞİŞTİRMESİNE izin verilen dosyalar. Boş = sınır yok. Ölçüldü: 'yalnız X.py yaz' cümlesi kriterde yazsa bile model disiplini tutturamıyor; sınır araca konunca tutuyor.">
+                ✏ neye yazabilsin</label>
+              <input type="text" id="kYaz" placeholder="boş = sınır yok   ·   örn: oyun.py, testler/test_oyun.py">
+            </div>
+            <div class="alanSatir">
+              <label class="alanEt" title="Kabul kriterleri: işin BİTTİ sayılması için sağlanması gerekenler. Göreve eklenir; çırak bunları tek tek sağlamaya çalışır. Ölçüldü: sözleşmeli görev 14/14, sözleşmesiz 12/14.">
+                ✓ nasıl doğrulansın</label>
+              <input type="text" id="kKriter" placeholder="; ile ayır   ·   örn: topla(2,3)==5 ; boş listede 0 döner">
+            </div>
+            <div class="alanSatir">
+              <label class="alanEt" title="İŞLER listesinde görünecek kısa ad. Boş bırakırsan görevin ilk kelimelerinden üretilir.">
+                🏷 iş başlığı</label>
+              <input type="text" id="kBaslik" placeholder="boş = görevden üretilir   ·   örn: envanter modülü">
+            </div>
           </div></details>
         <div id="kModelKart" style="width:100%;font-size:.68em;color:var(--soluk);line-height:1.5">
         önerilen: <b style="color:var(--vurgu2)">Qwen3-Coder-Next (unsloth UD-Q4_K_XL)</b> + usta olarak Claude —
