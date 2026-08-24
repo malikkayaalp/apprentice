@@ -263,6 +263,30 @@ def _model_kart(ad: str) -> dict:
     return kart
 
 
+def _model_yukle() -> dict:
+    """On-isitma: varsayilan isci modelini simdiden RAM'e al (ilk isin ~1 dk yukleme
+    bedelini pesin oder). Ollama zaten tembel yukler; bu dugme yalnizca konfor."""
+    try:
+        import importlib, urllib.request
+        os.environ.setdefault("APPRENTICE_HOME", HOME)
+        srv = importlib.import_module("server.apprentice_server")
+        model = srv.config.env_or(["APPRENTICE_MODEL", "UNITY_CODE_MODEL"], "ollama.model")
+
+        def isit():
+            try:
+                # soguk yukleme ~1-2 dk: istek arka planda, genis zaman asimiyla
+                urllib.request.urlopen(urllib.request.Request(
+                    "http://localhost:11434/api/generate",
+                    json.dumps({"model": model, "keep_alive": "30m"}).encode(),
+                    {"Content-Type": "application/json"}), timeout=600).read()
+            except Exception:
+                pass
+        threading.Thread(target=isit, daemon=True).start()
+        return {"durum": "yukleniyor", "model": model}
+    except Exception as e:  # noqa: BLE001
+        return {"hata": str(e)[:200]}
+
+
 def _model_bosalt() -> dict:
     """Eject: yuklu modelleri RAM/VRAM'den indir (keep_alive: 0). Sonraki is yeniden yukler."""
     try:
@@ -405,6 +429,8 @@ class Istek(BaseHTTPRequestHandler):
                 self._gonder(_usta_istek(veri))
             elif yolu == "/api/eject":
                 self._gonder(_model_bosalt())
+            elif yolu == "/api/yukle":
+                self._gonder(_model_yukle())
             else:
                 self._gonder({"hata": "yok"}, kod=404)
         except Exception as e:  # noqa: BLE001

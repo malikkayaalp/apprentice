@@ -202,8 +202,10 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
 <div id="ust">
   <div id="logo">APPRENTICE</div>
   <div class="pill"><span class="nokta" id="modelNokta"></span><span id="modelAd">—</span>
-    <span id="eject" title="modeli RAM/VRAM'den boşalt (sonraki iş yeniden yükler ~1 dk)"
-      style="cursor:pointer;margin-left:4px">⏏</span></div>
+    <span id="yukle" title="çırağı önceden yükle (ısıt) — ilk işin ~1 dk yükleme bedelini peşin öder"
+      style="cursor:pointer;margin-left:4px">▶</span>
+    <span id="eject" title="modeli RAM/VRAM'den boşalt (sonraki iş kendiliğinden yeniden yükler ~1 dk)"
+      style="cursor:pointer;margin-left:2px">⏏</span></div>
   <div class="pill">VRAM <b id="vramT">—</b><div class="olcekbar"><i id="vramBar"></i></div></div>
   <div class="pill">GPU <b id="gpuT">—</b><div class="olcekbar"><i id="gpuBar"></i></div></div>
   <div class="bosluk"></div>
@@ -715,6 +717,17 @@ $("#kModel").onchange=async e=>{
       (Object.keys(p).length?"<br>önerilen: "+Object.entries(p).map(([a,b])=>a+"="+b).join(" · "):"")+
       "<br><span style='color:var(--sari)'>not: işçi koşusunda temperature=0 (determinizm, ölçüldü); ctx karta göre sınırlanır</span>";
   }catch(e){}
+};
+$("#yukle").onclick=async()=>{
+  const t=$("#tost"); t.textContent="▶ çırak yükleniyor (~1 dk)…";
+  t.style.display="block";
+  try{
+    const r=await(await fetch("/api/yukle",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:"{}"})).json();
+    t.textContent=r.hata?("HATA: "+r.hata):
+      ("▶ yükleniyor: "+(r.model||"").split("/").pop().slice(0,30)+" — üstteki nokta yeşile dönünce hazır");
+  }catch(e){t.textContent="HATA: "+e;}
+  setTimeout(()=>t.style.display="none",5000);
 };
 $("#eject").onclick=async()=>{
   try{
