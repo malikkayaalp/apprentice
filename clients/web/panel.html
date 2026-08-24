@@ -6,6 +6,10 @@
 <title>Apprentice — Canlı Panel</title>
 <style>
 :root{
+  /* YEREL denetimler (acilir liste, kaydirma cubugu, onay kutusu) CSS ile degil BUNUNLA
+     temalanir; verilmeyince Windows'un acik temasiyla beyaz aciliyordu - kullanici:
+     "burasi neden temadan farkli, acik renk kaldi". */
+  color-scheme: dark;
   --bg:#0c0a08; --panel:rgba(30,26,22,.88); --panel2:rgba(48,42,36,.85);
   --cizgi:rgba(217,119,87,.20); --cizgi2:rgba(255,255,255,.08);
   --metin:#f1ede6; --soluk:#9d968b; --vurgu:#d97757; --vurgu2:#ffb38a;
@@ -56,7 +60,10 @@ body::before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.5;
 .alanSatir .alanEt{flex:0 0 148px;font-size:.74em;color:var(--soluk);cursor:help;
   border-bottom:1px dotted var(--cizgi2);padding-bottom:1px}
 .alanSatir input{flex:1;min-width:0}
-#panelEkle{padding:4px 8px;border-radius:8px;border:1px solid var(--cizgi2);
+/* Acilir listedeki secenekler: bazi Chromium surumleri color-scheme'i tam uygulamiyor */
+select option,select optgroup{background:var(--panel);color:var(--metin)}
+select option:checked{background:var(--vurgu);color:#1a1512}
+#dizilim,#panelEkle{padding:4px 8px;border-radius:8px;border:1px solid var(--cizgi2);
   background:var(--panel);color:var(--soluk);font-size:11px;outline:none;max-width:130px}
 #yerlesimSifirla{padding:4px 10px;border-radius:8px;border:1px solid var(--cizgi2);
   background:transparent;color:var(--soluk);cursor:pointer;font-size:11px}

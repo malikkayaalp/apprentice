@@ -12,7 +12,7 @@ import json, os
 SAYFA = """<!doctype html><html lang="tr"><head><meta charset="utf-8">
 <title>{ad} - Apprentice</title>
 <style>
-:root{{--zemin:#141210;--panel:#1c1a17;--cizgi:#332f2a;--metin:#f1ede6;--soluk:#8f8880;
+:root{{color-scheme:dark;--zemin:#141210;--panel:#1c1a17;--cizgi:#332f2a;--metin:#f1ede6;--soluk:#8f8880;
  --vurgu:#d97757;--yesil:#6fc28a;--mavi:#7fb2e5;--sari:#e9b85c;--mor:#b99cd8;
  --mono:'JetBrains Mono','Cascadia Code',Consolas,monospace}}
 *{{box-sizing:border-box}}
