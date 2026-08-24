@@ -54,8 +54,11 @@ def _kok_sec() -> dict:
            "r = tkinter.Tk(); r.withdraw(); r.attributes('-topmost', 1)\n"
            "print(f.askdirectory(title='Apprentice calisma alani sec'))")
     try:
-        r = subprocess.run([sys.executable, "-c", kod], capture_output=True, text=True,
-                           encoding="utf-8", errors="replace", timeout=300)
+        pyw = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
+        r = subprocess.run([pyw if os.path.isfile(pyw) else sys.executable, "-c", kod],
+                           capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=300,
+                           creationflags=0x08000000 if os.name == "nt" else 0)
         yol = (r.stdout or "").strip()
         if yol and os.path.isdir(yol):
             AYAR["kok"] = os.path.abspath(yol)
@@ -504,7 +507,8 @@ def _usta_istek(veri: dict) -> dict:
                    PYTHONIOENCODING="utf-8")
         try:
             r = _sp.run(cmd, input=girdi, capture_output=True, text=True, encoding="utf-8",
-                        errors="replace", timeout=600, cwd=ROOT, env=env, shell=True)
+                        errors="replace", timeout=600, cwd=ROOT, env=env, shell=True,
+                        creationflags=0x08000000 if os.name == "nt" else 0)
             kayit["cevap"] = (r.stdout or "").strip() or ("HATA: " + (r.stderr or "")[-500:])
             kayit["durum"] = "bitti" if r.returncode == 0 else "hata"
         except Exception as e:  # noqa: BLE001

@@ -198,7 +198,7 @@ def kontrol_ollama() -> bool:
         kw = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL, "stdin": subprocess.DEVNULL,
               "env": dict(os.environ, OLLAMA_MAX_LOADED_MODELS=os.environ.get("OLLAMA_MAX_LOADED_MODELS", "1"))}
         if os.name == "nt":
-            kw["creationflags"] = 0x00000008 | 0x00000200   # DETACHED_PROCESS | NEW_PROCESS_GROUP
+            kw["creationflags"] = 0x00000008 | 0x00000200 | PENCERESIZ   # DETACHED | NEW_GROUP | NO_WINDOW
         subprocess.Popen([exe, "serve"], **kw)
     except Exception as e:
         log(HATA + "baslatilamadi: %s" % e)
