@@ -323,6 +323,7 @@ class Sihirbaz(tk.Tk):
             import traceback
             self.log("[X]   %s" % e)
             self.log(traceback.format_exc())
+            _cokme_gunlugu(type(e), e, e.__traceback__)
         self.kuyruk.put(("bitti", sonuc))
 
     def _bitti(self, sonuc: dict):
@@ -540,7 +541,23 @@ class Sihirbaz(tk.Tk):
                 "ÇIRAĞA verir, kendisi çalıştırarak doğrular. Sen her seferinde bunu anlatmak "
                 "zorunda kalmazsın.\n\nDevam edip proje klasörünü seçelim mi?"):
             return
-        d = filedialog.askdirectory(title="Kural eklenecek PROJE klasörü (Apprentice kurulumu değil)")
+        # Baslangic klasoru: SON BAGLANAN proje (panel_ayar.json). Verilmezse Windows kendi
+        # "son ziyaret edilenler" listesini kullanir - kullanici "nereden hatirladi?" diye
+        # sasiriyordu. Artik bizim bildigimiz yerden aciliyor ve basligi bunu soyluyor.
+        son = ""
+        try:
+            import json as _j
+            ev = os.environ.get("APPRENTICE_HOME") or os.path.join(os.path.expanduser("~"), ".apprentice")
+            with open(os.path.join(ev, "panel_ayar.json"), encoding="utf-8") as f:
+                aday = _j.load(f).get("kok", "")
+            if aday and os.path.isdir(aday) and os.path.realpath(aday) != os.path.realpath(ev):
+                son = aday
+        except Exception:
+            pass
+        d = filedialog.askdirectory(
+            initialdir=son or os.path.expanduser("~"),
+            title=("Kural eklenecek PROJE klasörü" +
+                   (" (son bağlanan: %s)" % os.path.basename(son) if son else "")))
         if not d:
             return
         try:
@@ -550,8 +567,42 @@ class Sihirbaz(tk.Tk):
             messagebox.showerror("Apprentice", str(e))
 
 
+def _cokme_gunlugu(tur, deger, iz):
+    """Yakalanmayan HER hata diske yazilir ve kullaniciya GOSTERILIR.
+    Pencereli exe'de konsol yoktur: eskiden bir hata olsa program sessizce kapaniyor ya da
+    anlamsiz bir Windows kutusu cikiyordu - kullanici sebebi goremiyordu."""
+    import traceback, tempfile, datetime
+    metin = "".join(traceback.format_exception(tur, deger, iz))
+    yol = os.path.join(tempfile.gettempdir(), "apprentice_setup_hata.log")
+    try:
+        with open(yol, "a", encoding="utf-8") as f:
+            f.write("\n===== %s =====\n%s" % (datetime.datetime.now().isoformat(timespec="seconds"), metin))
+    except Exception:
+        yol = "(gunluk yazilamadi)"
+    try:
+        import tkinter as _tk
+        from tkinter import messagebox as _mb
+        k = _tk.Tk(); k.withdraw(); k.attributes("-topmost", 1)
+        _mb.showerror("Apprentice Setup - beklenmeyen hata",
+                      "%s\n\nAyrinti dosyaya yazildi:\n%s\n\n"
+                      "NE YAPMALI:\n"
+                      "1) Kurulum klasoru olarak Belgeler altinda bir yer sec "
+                      "(Program Files gibi korumali klasorler izin hatasi verir).\n"
+                      "2) Guvenlik yazilimi engelliyor olabilir - exe'yi izin listesine ekle.\n"
+                      "3) Depoyu indirip 'python kur.py --tani' calistir: eksik neyse soyler."
+                      % (str(deger)[:300], yol))
+        k.destroy()
+    except Exception:
+        pass
+
+
 if __name__ == "__main__":
-    app = Sihirbaz()
+    sys.excepthook = _cokme_gunlugu          # sessiz cokme yok: sebep hep gorunur
+    try:
+        app = Sihirbaz()
+    except Exception:
+        _cokme_gunlugu(*sys.exc_info())
+        sys.exit(3)
     oto = os.environ.get("APPRENTICE_SETUP_AUTO")       # sessiz kurulum / test: klasoru ver, kendisi kurar ve kapanir
     if oto:
         app.kok_var.set(oto)

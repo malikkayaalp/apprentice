@@ -51,9 +51,15 @@ def _kok_sec() -> dict:
     """Yerel klasor secme diyalogu (panel yerelde kosar - gercek Windows penceresi).
     tkinter ana surecte sorun cikarmasin diye ayri Python surecinde acilir."""
     import subprocess
+    # Diyalog SON SECILEN calisma alanindan acilir; verilmezse Windows kendi "son ziyaret
+    # edilenler" listesini kullanir ve kullanici "bu klasoru nereden hatirladi?" diye sasirir.
+    baslangic = AYAR.get("kok", "") or ""
+    if not os.path.isdir(baslangic) or os.path.realpath(baslangic) == os.path.realpath(HOME):
+        baslangic = os.path.expanduser("~")
     kod = ("import tkinter, tkinter.filedialog as f\n"
            "r = tkinter.Tk(); r.withdraw(); r.attributes('-topmost', 1)\n"
-           "print(f.askdirectory(title='Apprentice calisma alani sec'))")
+           "print(f.askdirectory(title='Apprentice calisma alani sec', initialdir=%r))"
+           % baslangic)
     try:
         pyw = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
         r = subprocess.run([pyw if os.path.isfile(pyw) else sys.executable, "-c", kod],
