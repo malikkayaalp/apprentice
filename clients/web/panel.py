@@ -320,6 +320,18 @@ def _gorev_baslat(veri: dict) -> dict:
     if ek_yollar:
         gorev += ("\n\nEKLI DOSYALAR (calisma dizininde, gerekirse read_file/ara ile kullan): "
                   + ", ".join(os.path.basename(y) for y in ek_yollar))
+    # SOHBETI GOREVE TASI (istege bagli): sohbet kipi ile gorev kipi AYRI baglamdir; gorev her
+    # seferinde TEMIZ oturumla baslar (olculdu: oturum surekliligi +%59 token, kalite dusuk).
+    # Ama tasarimi sohbette konustuysan o baglam gerekir - o zaman SON ALISVERISLER goreve
+    # ozet olarak eklenir (butun gecmis degil: fatura kucuk kalsin).
+    if veri.get("sohbet_ekle"):
+        with SOHBET_KILIT:
+            son = list(SOHBET["mesajlar"])[-6:]
+        if son:
+            satirlar = ["%s: %s" % ("BEN" if m.get("role") == "user" else "SEN (cirak)",
+                                    str(m.get("content") or "")[:600]) for m in son]
+            gorev += ("\n\nONCEKI SOHBET (baglam - bu konusmayi surdurerek isi yap):\n"
+                      + "\n".join(satirlar))
     model = str(veri.get("model") or "").strip() or \
         srv.config.env_or(["APPRENTICE_MODEL", "UNITY_CODE_MODEL"], "ollama.model")
     # MODEL UYUMU: secilen modelin kartindan ctx siniri alinir - config ctx karttan buyukse

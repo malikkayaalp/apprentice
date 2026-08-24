@@ -320,6 +320,9 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
           <option value="tam">tam (testler)</option></select>
         <label class="kutucuk"><input type="checkbox" id="kCanli" checked> canlı akış</label>
         <label class="kutucuk"><input type="checkbox" id="kHarita"> harita</label>
+        <label class="kutucuk" id="kSohbetEtiket" style="display:none"
+          title="Sohbet kipinde konustuklarinizin son 6 mesaji goreve BAGLAM olarak eklenir. Kapaliyken görev temiz oturumla başlar (ölçüldü: oturum sürekliliği +%59 token).">
+          <input type="checkbox" id="kSohbetEkle"> 💬 sohbeti ekle</label>
         <details id="kAyrinti"><summary>▸ ayrıntı — nerede çalışsın · neye yazabilsin · nasıl doğrulansın</summary>
           <div class="icra" style="flex-direction:column;align-items:stretch;gap:8px">
             <div class="alanSatir">
@@ -1344,12 +1347,17 @@ $("#kMod").onchange=e=>{
     $("#cirakChat").innerHTML='<div class="balon karsi" style="opacity:.6">Sohbet kipi: '+
       'düz konuşuruz, kriter/doğrulama yok. İş yaptırmak için ⚙ görev kipine dön.</div>';
 };
+function sohbetKutucuguTazele(){
+  // Kutucuk yalnizca SOHBET VARSA gorunur: bos sohbette anlamsiz secenek gostermeyelim
+  const e=$("#kSohbetEtiket"); if(!e)return;
+  e.style.display=document.querySelectorAll("#cirakChat .balon").length?"":"none";
+}
 function cirakBalon(sinif,metin){
   const d=document.createElement("div"); d.className="balon "+sinif;
   d.textContent=metin; d.dataset.ham=metin||"";
   const k=document.createElement("span"); k.className="balonKopya"; k.textContent="⧉";
   k.title="mesajı kopyala"; d.appendChild(k);          // kopyala: her balonda (kullanici istegi)
-  $("#cirakChat").appendChild(d);
+  $("#cirakChat").appendChild(d); sohbetKutucuguTazele();
   $("#cirakChat").scrollTop=$("#cirakChat").scrollHeight; return d;
 }
 async function cirakSohbet(g){
@@ -1391,7 +1399,8 @@ async function cirakGonder(){
       kriterler:$("#kKriter").value.split(";").map(x=>x.trim()).filter(Boolean),
       calisma_dizini:$("#kDizin").value.trim(), dogrulama:$("#kDog").value,
       yazilabilir:$("#kYaz").value.split(",").map(x=>x.trim()).filter(Boolean),
-      canli:$("#kCanli").checked, harita:$("#kHarita").checked, ekler:kEkler};
+      canli:$("#kCanli").checked, harita:$("#kHarita").checked, ekler:kEkler,
+      sohbet_ekle:$("#kSohbetEkle").checked};
     const r=await(await fetch("/api/gorev",{method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify(veri)})).json();
     if(r.hata){tost("HATA: "+r.hata);}
