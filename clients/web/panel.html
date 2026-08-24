@@ -222,6 +222,9 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
   <div class="bosluk"></div>
   <div id="fontKontrol">yazı <input type="range" id="fontOlcek" min="0.75" max="1.5" step="0.05" value="1"></div>
   <select id="panelEkle"><option value="">➕ panel ekle</option></select>
+  <button id="yerlesimKaydet" title="şu anki düzeni kalıcı profilin yap" style="padding:4px 10px;
+    border-radius:8px;border:1px solid var(--cizgi2);background:transparent;color:var(--soluk);
+    cursor:pointer;font-size:11px">💾 düzenim</button>
   <button id="yerlesimSifirla">yerleşimi sıfırla</button>
 </div>
 
@@ -343,6 +346,13 @@ let gizliIsler=new Set();
 try{gizliIsler=new Set(JSON.parse(localStorage.getItem("apprentice_gizli_isler"))||[])}catch(e){}
 let yerlesim=null;
 try{yerlesim=JSON.parse(localStorage.getItem("apprentice_yerlesim_v4"))||null}catch(e){}
+// KULLANICI PROFILI: surum degisip aktif yerlesim sifirlansa bile 💾 ile kaydedilen duzen
+// geri gelir (yasandi: v3->v4 gecisi kullanicinin duzenini sifirladi - bir daha olmasin).
+if(!yerlesim||!yerlesim.isler){
+  try{const pr=JSON.parse(localStorage.getItem("apprentice_yerlesim_profil"));
+    if(pr&&pr.yerlesim&&pr.yerlesim.isler){yerlesim=pr.yerlesim;
+      if(pr.gizli)gizliPaneller=new Set(pr.gizli.filter(a=>PANEL_ADLARI[a]));}}catch(e){}
+}
 if(!yerlesim||!yerlesim.isler)yerlesim=JSON.parse(JSON.stringify(VARSAYILAN));
 for(const k in VARSAYILAN)
   if(!yerlesim[k]||yerlesim[k].gx===undefined)yerlesim[k]=JSON.parse(JSON.stringify(VARSAYILAN[k]));
@@ -397,6 +407,11 @@ function kaydet(){localStorage.setItem("apprentice_yerlesim_v4",JSON.stringify(y
 function panelKaydet(){localStorage.setItem("apprentice_gizli_paneller",JSON.stringify([...gizliPaneller]))}
 window.addEventListener("resize",uygula);
 $("#yerlesimSifirla").onclick=()=>{yerlesim=JSON.parse(JSON.stringify(VARSAYILAN));kaydet();duzenle()};
+$("#yerlesimKaydet").onclick=()=>{
+  localStorage.setItem("apprentice_yerlesim_profil",
+    JSON.stringify({yerlesim:yerlesim,gizli:[...gizliPaneller]}));
+  tost("💾 düzenin kalıcı profil olarak kaydedildi — sürüm değişse bile geri gelir");
+};
 $("#panelEkle").onchange=e=>{if(e.target.value){gizliPaneller.delete(e.target.value);
   panelKaydet();duzenle()}e.target.value=""};
 document.querySelectorAll(".kart").forEach(k=>{
@@ -681,7 +696,10 @@ async function ustaChatCek(){
     for(const x of ist){
       h+='<div class="balon ben">'+kacir(x.ozet)+(x.araclar?' <span class="bmeta">araç izinli</span>':"")+'</div>';
       if(x.durum==="calisiyor"){
-        h+='<div class="balon karsi dusunuyor">düşünüyor… '+(x.sure||0)+' sn'+
+        // saniye sayaci h'ye GIRMEZ: her tik degisip tum sohbeti yeniden cizdiriyordu
+        // (gidip-gelme titremesi). Sayac ayri span'da, asagida yerinde guncellenir.
+        h+='<div class="balon karsi dusunuyor">düşünüyor… <span class="sn" data-b="'+
+           (x.baslangic||0)+'"></span>'+
            (x.araclar?" (araçlı istekler 30-60 sn sürebilir)":"")+'</div>';
       }else{
         const c=await(await fetch("/api/usta_cevap?id="+x.id)).json();
@@ -699,6 +717,12 @@ async function ustaChatCek(){
   }catch(e){}
   setTimeout(ustaChatCek,2500);
 }
+setInterval(()=>{                          // dusunuyor sayaci: yerinde guncelle, ciz-dirme yok
+  document.querySelectorAll("#ustaChat .sn").forEach(e=>{
+    const b=parseFloat(e.dataset.b||0);
+    if(b)e.textContent=Math.max(0,Math.round(Date.now()/1000-b))+" sn";
+  });
+},1000);
 async function ustaGonder(){
   const p=$("#uPrompt").value.trim(); if(!p)return;
   const b=$("#uGonder"); b.disabled=true;

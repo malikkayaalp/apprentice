@@ -358,6 +358,21 @@ def _usta_istek(veri: dict) -> dict:
     return {"id": uid}
 
 
+def _sahipsiz_kontrol(k: dict, yol: str) -> dict:
+    """Panel yeniden baslarsa kosan istegin is parcacigi olur ama kayit 'calisiyor' kalir -
+    sonsuz 'dusunuyor' gorunumu (yasandi: 1016 sn). 700 sn ustu calisiyor = sahipsiz say."""
+    if k.get("durum") == "calisiyor" and time.time() - k.get("baslangic", 0) > 700:
+        k["durum"] = "hata"
+        k["cevap"] = "istek sahipsiz kaldi (panel yeniden baslatildi ya da 700 sn zaman asimi)"
+        k["sure"] = round(time.time() - k.get("baslangic", time.time()), 1)
+        try:
+            with open(yol, "w", encoding="utf-8", newline="\n") as f:
+                json.dump(k, f, ensure_ascii=False)
+        except OSError:
+            pass
+    return k
+
+
 def _usta_liste() -> list:
     kdir = os.path.join(HOME, "usta_istekler")
     out = []
@@ -366,8 +381,10 @@ def _usta_liste() -> list:
             try:
                 with open(os.path.join(kdir, ad), encoding="utf-8") as f:
                     k = json.load(f)
+                k = _sahipsiz_kontrol(k, os.path.join(kdir, ad))
                 out.append({"id": k["id"], "durum": k.get("durum"),
                             "ozet": k.get("prompt", "")[:60],
+                            "baslangic": k.get("baslangic"),
                             "sure": k.get("sure") if k.get("sure") is not None
                             else round(time.time() - k.get("baslangic", time.time()), 0),
                             "araclar": k.get("araclar")})
@@ -380,7 +397,7 @@ def _usta_cevap(uid: str) -> dict:
     yol = os.path.join(HOME, "usta_istekler", uid + ".json")
     try:
         with open(yol, encoding="utf-8") as f:
-            return json.load(f)
+            return _sahipsiz_kontrol(json.load(f), yol)
     except Exception:
         return {"hata": "istek yok"}
 
