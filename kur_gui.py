@@ -374,8 +374,10 @@ class Sihirbaz(tk.Tk):
                 if _d.get("loggedIn"):
                     y("   Claude oturumu: açık (%s)" % _d.get("email", "?"), "ok")
                 else:
-                    y("   ⚠ Claude KURULU ama GİRİŞ YAPILMAMIŞ — terminalde: claude auth login", "bas")
-                    y("     (çırak/yerel model girişsiz de çalışır; usta sohbeti giriş ister)", "soluk")
+                    y("   ⚠ Claude KURULU ama GİRİŞ YAPILMAMIŞ — aşağıdaki “Claude'a giriş yap”", "bas")
+                    y("     düğmesi (Claude Desktop girişi CLI'ya GEÇMEZ, ayrı oturumdur).", "soluk")
+                    y("     Çırak/yerel model girişsiz de çalışır; yalnızca usta sohbeti giriş ister.", "soluk")
+                    self._giris_gerek = True
             except Exception:
                 pass
         y("   Panelin USTA bölümü “claude”u başsız çağırır (model + effort seçilebilir);", "soluk")
@@ -396,7 +398,28 @@ class Sihirbaz(tk.Tk):
                    command=self._panel).pack(side="left")
         ttk.Button(alt, text="Bir projeye bağla…",
                    command=lambda: (w.destroy(), self._kural())).pack(side="left", padx=8)
+        if getattr(self, "_giris_gerek", False):
+            ttk.Button(alt, text="Claude'a giriş yap",
+                       command=self._claude_giris).pack(side="left", padx=(0, 8))
         ttk.Button(alt, text="Kapat", command=w.destroy).pack(side="right")
+
+    def _claude_giris(self):
+        """'claude auth login' akisini gorunur konsolda baslatir (etkilesim gerekir).
+        NOT: Claude Desktop girisi CLI'ya gecmez - ayri oturumlardir."""
+        try:
+            kur = sys.modules.get("kur")
+            if kur is None:
+                sys.path.insert(0, self.kok_var.get().strip())
+                import importlib
+                kur = importlib.import_module("kur"); kur.log = self.log
+            kur.claude_giris_baslat()
+            messagebox.showinfo("Claude girişi",
+                "Açılan pencerede/tarayıcıda Anthropic hesabınla giriş yap.\n\n"
+                "Bittiğinde bu pencereye dön; panelin USTA sohbeti çalışır hale gelir.\n"
+                "(Claude Desktop girişi CLI'ya geçmez — ayrı oturumlardır.)")
+        except Exception as e:  # noqa: BLE001
+            messagebox.showerror("Apprentice",
+                                 "Giriş başlatılamadı: %s\n\nElle: claude auth login" % e)
 
     def _panel(self):
         """Web panelini baslat + tarayiciyi ac (konsolsuz)."""

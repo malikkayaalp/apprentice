@@ -670,6 +670,23 @@ class Istek(BaseHTTPRequestHandler):
                 self._gonder(_usta_istek(veri))
             elif yolu == "/api/cirak_sohbet":
                 self._gonder(_cirak_sohbet(veri))
+            elif yolu == "/api/claude_login":
+                # 'claude auth login' GORUNUR konsolda: kullanici tarayicida giris yapar.
+                # Panel kimlik bilgisi ISTEMEZ/SAKLAMAZ - yalnizca resmi akisi baslatir.
+                import shutil as _sh2, subprocess as _sp2
+                exe = _sh2.which("claude")
+                if not exe:
+                    self._gonder({"hata": "claude CLI yok: npm i -g @anthropic-ai/claude-code"})
+                else:
+                    try:
+                        if os.name == "nt":
+                            _sp2.Popen(["cmd", "/c", "start", "Claude girisi", "cmd", "/k",
+                                        '"%s" auth login' % exe])
+                        else:
+                            _sp2.Popen([exe, "auth", "login"])
+                        self._gonder({"durum": "giris penceresi acildi"})
+                    except Exception as e:  # noqa: BLE001
+                        self._gonder({"hata": str(e)[:200]})
             elif yolu == "/api/eject":
                 self._gonder(_model_bosalt())
             elif yolu == "/api/yukle":
