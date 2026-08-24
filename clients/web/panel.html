@@ -641,9 +641,18 @@ async function olaylariCek(){
         if(!r.canli.startsWith(daktiloHedef)){daktiloCiz=0;$("#dmetin").innerHTML="";}
         daktiloHedef=r.canli; $("#daktiloDurum").textContent="● akıyor";
       }else{
-        $("#daktiloDurum").textContent=s.durum==="calisiyor"?"boşta":"";
-        if(s.durum!=="calisiyor"&&!daktiloHedef)
-          $("#dmetin").innerHTML='<span class="bekliyor">canlı kipte iş başlayınca token akışı burada…</span>';
+        if(s.durum==="calisiyor"&&s.canli===false){
+          $("#daktiloDurum").textContent="bu işte kapalı";
+          if(!daktiloHedef)$("#dmetin").innerHTML='<span class="bekliyor">bu iş CANLI KİP KAPALI '+
+            'başlatıldı (MCP/usta işlerinde varsayılan) — token akışı üretilmiyor.\n'+
+            'Kod yine yazılıyor: bittiği an OLAY AKIŞI\'na YAZDI bloğu olarak düşer.\n'+
+            'Akışı izlemek için işi canlı kutusu işaretli gönder (panel) ya da usta '+
+            'worker_run(canli=true) desin.</span>';
+        }else{
+          $("#daktiloDurum").textContent=s.durum==="calisiyor"?"boşta":"";
+          if(s.durum!=="calisiyor"&&!daktiloHedef)
+            $("#dmetin").innerHTML='<span class="bekliyor">canlı kipte iş başlayınca token akışı burada…</span>';
+        }
       }
       const aktif=s.asama||"baslama";
       ASAMALAR.forEach(([a])=>{if(a==="tumu")return;
