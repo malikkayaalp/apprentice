@@ -588,10 +588,66 @@ class Istek(BaseHTTPRequestHandler):
         except Exception as e:  # noqa: BLE001
             self._gonder({"hata": str(e)[:300]}, kod=500)
 
+    def _sohbet_akisi(self, veri: dict):
+        """Cirak sohbetini TOKEN TOKEN akit (Ollama stream -> chunked yanit).
+        Kullanici geri bildirimi: 'her sey bir anda geliyor, akis yok'."""
+        import importlib, urllib.request
+        prompt = str(veri.get("prompt") or "").strip()
+        if veri.get("sifirla"):
+            SOHBET["mesajlar"] = []
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Connection", "close")
+        self.end_headers()
+        if not prompt:
+            return
+        os.environ.setdefault("APPRENTICE_HOME", HOME)
+        srv = importlib.import_module("server.apprentice_server")
+        model = str(veri.get("model") or "").strip() or \
+            srv.config.env_or(["APPRENTICE_MODEL", "UNITY_CODE_MODEL"], "ollama.model")
+        SOHBET["mesajlar"].append({"role": "user", "content": prompt})
+        body = json.dumps({"model": model, "stream": True,
+                           "messages": [{"role": "system", "content":
+                                         "Sen Apprentice sisteminin yerel cirak modelisin (%s). "
+                                         "Turkce, kisa ve net cevap ver."
+                                         % model.split("/")[-1].split(":")[0]}]
+                           + SOHBET["mesajlar"][-20:],
+                           "options": {"num_ctx": 16384, "temperature": 0.7,
+                                       "num_predict": 1200},
+                           "keep_alive": "30m"}).encode()
+        parcalar = []
+        try:
+            with urllib.request.urlopen(urllib.request.Request(
+                    "http://localhost:11434/api/chat", body,
+                    {"Content-Type": "application/json"}), timeout=600) as r:
+                for ham in r:
+                    try:
+                        d = json.loads(ham)
+                    except Exception:
+                        continue
+                    p = (d.get("message") or {}).get("content") or ""
+                    if p:
+                        parcalar.append(p)
+                        self.wfile.write(p.encode("utf-8"))
+                        self.wfile.flush()
+        except Exception as e:  # noqa: BLE001
+            try:
+                self.wfile.write(("\n[HATA: %s]" % str(e)[:200]).encode("utf-8"))
+            except OSError:
+                pass
+        cevap = "".join(parcalar).strip()
+        if cevap:
+            SOHBET["mesajlar"].append({"role": "assistant", "content": cevap})
+        else:
+            SOHBET["mesajlar"].pop()
+
     def do_POST(self):
         try:
             n = int(self.headers.get("Content-Length") or 0)
             veri = json.loads(self.rfile.read(n).decode("utf-8") or "{}")
+            if urllib.parse.urlparse(self.path).path == "/api/cirak_sohbet_akis":
+                return self._sohbet_akisi(veri)
             yolu = urllib.parse.urlparse(self.path).path
             if yolu == "/api/gorev":
                 self._gonder(_gorev_baslat(veri))

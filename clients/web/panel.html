@@ -493,6 +493,23 @@ function renklendir(satir){
   return s.replace(/␁(\w+)␂/g,'<span class="tk-$1">').replace(/␃/g,'</span>');
 }
 function renklendir2(metin){return metin.split("\n").map(renklendir).join("\n")}
+function zenginMetin(m){
+  // sohbet balonlari icin markdown-isik: ```kod``` bloklari sozdizimi renkli,
+  // `satir ici kod` ve **kalin** desteklenir
+  const p=m.split(/```(\w*)\n?([\s\S]*?)```/g);
+  let h="";
+  for(let i=0;i<p.length;i++){
+    const kalan=i%3;
+    if(kalan===0){
+      h+=kacir(p[i])
+        .replace(/`([^`\n]+)`/g,'<code style="background:rgba(0,0,0,.35);padding:1px 5px;border-radius:5px;color:var(--vurgu2)">$1</code>')
+        .replace(/\*\*([^*\n]+)\*\*/g,'<b>$1</b>');
+    }else if(kalan===1){
+      h+=kodBlok(p[i]||"kod",(p[i+1]||"").replace(/\n$/,"")); i++;
+    }
+  }
+  return h;
+}
 function kodBlok(yol,icerik,sinir){
   const satirlar=icerik.split("\n"); const n=satirlar.length;
   const kes=sinir&&n>sinir?satirlar.slice(0,sinir):satirlar;
@@ -745,7 +762,7 @@ async function ustaChatCek(){
            (x.araclar?" (araçlı istekler 30-60 sn sürebilir)":"")+'</div>';
       }else{
         const c=await(await fetch("/api/usta_cevap?id="+x.id)).json();
-        h+='<div class="balon karsi">'+kacir((c.cevap||"—").slice(0,4000))+
+        h+='<div class="balon karsi">'+zenginMetin((c.cevap||"—").slice(0,6000))+
            '<span class="bmeta">'+(x.sure||"?")+' sn'+(x.araclar?" · araçlı":"")+'</span></div>';
       }
     }
@@ -823,13 +840,23 @@ function cirakBalon(sinif,metin){
 }
 async function cirakSohbet(g){
   cirakBalon("ben",g);
-  const dus=cirakBalon("karsi dusunuyor","düşünüyor…");
+  const dus=cirakBalon("karsi dusunuyor","");
+  let metin="";
   try{
-    const r=await(await fetch("/api/cirak_sohbet",{method:"POST",
+    // GERCEK AKIS: sunucu Ollama'dan token token aktarir, balon canli buyur
+    const res=await fetch("/api/cirak_sohbet_akis",{method:"POST",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({prompt:g,model:$("#kModel").value})})).json();
+      body:JSON.stringify({prompt:g,model:$("#kModel").value})});
+    const okuyucu=res.body.getReader(); const dec=new TextDecoder();
+    while(true){
+      const {done,value}=await okuyucu.read();
+      if(done)break;
+      metin+=dec.decode(value,{stream:true});
+      dus.textContent=metin+" ▌";
+      $("#cirakChat").scrollTop=$("#cirakChat").scrollHeight;
+    }
     dus.classList.remove("dusunuyor");
-    dus.textContent=r.hata?("HATA: "+r.hata):(r.cevap||"—");
+    dus.innerHTML=zenginMetin(metin||"—");            // bitince kod bloklari renklenir
   }catch(e){dus.textContent="HATA: "+e;}
   $("#cirakChat").scrollTop=$("#cirakChat").scrollHeight;
 }
