@@ -121,15 +121,21 @@ def toplu_olcum() -> bool:
         {"type": "result", "ok": False, "errors": ["a.py(1): SyntaxError: bad"], "rounds": 2,
          "wall": 50.0, "kullanim": {"prompt_tokens": 5000, "gen_tokens": 500}},
     ], {"id": "is9", "durum": "bitti", "model": "kotu", "kaynak": "mcp"})
-    # gosterim isi: OLCUME GIRMEMELI
+    # SAHTE VERI: gosterim isi ve duman testi (fake ortam) OLCUME GIRMEMELI.
+    # Yasandi: test evinde 186 fake is vardi, telemetri onlari sayip uydurma bir
+    # "%33 basari" uretti - tek bir gercek model kosusu bile yoktu.
     _is_yaz(d, "isX", [
         {"type": "result", "ok": False, "errors": ["uydurma"], "rounds": 9, "wall": 999.0},
     ], {"id": "isX", "durum": "bitti", "model": "sahte", "kaynak": "ornek"})
+    _is_yaz(d, "isY", [
+        {"type": "result", "ok": False, "errors": ["duman"], "rounds": 9, "wall": 1.0},
+    ], {"id": "isY", "durum": "bitti", "model": "sahte2", "ortam": "fake"})
 
     o = toplu(d)
     assert o["n"] == 5, o["n"]                       # ornek elendi
-    assert o["ornek_atlandi"] == 1, o
+    assert o["ornek_atlandi"] == 2, o          # ornek + fake
     assert "sahte" not in o["modeller"], "ornek is model kiyasina karismis"
+    assert "sahte2" not in o["modeller"], "fake ortam is model kiyasina karismis"
     assert o["ilk_tur_basari"] == 80.0, o["ilk_tur_basari"]
     assert o["onarim_sonrasi_basari"] == 80.0, o
     assert o["duraganlik"] == 20.0 and o["devir_onerisi"] == 20.0, o

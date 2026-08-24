@@ -106,6 +106,7 @@ def is_telemetri(jobs_dir: str, jid: str) -> dict:
     onarim = inc.get("onarim_turu") or 0
     return {
         "is_id": jid,
+        "ortam": inc.get("ortam") or "",
         "kaynak": inc.get("kaynak") or "",
         "model": inc.get("model") or kayit.get("model") or "",
         "ilk_tur_gecti": bool(sonuc) and bool(sonuc.get("ok")) and onarim == 0,
@@ -142,7 +143,11 @@ def toplu(jobs_dir: str, n: int = 100) -> dict:
         r = is_telemetri(jobs_dir, jid)
         if r.get("hata"):
             continue
-        if r.get("kaynak") == "ornek":   # elle uretilmis gosterim isi OLCUME GIRMEZ
+        # SAHTE VERI ELENIR. Iki kaynak: elle uretilmis gosterim isleri (kaynak="ornek")
+        # ve duman testi kosulari (ortam="fake" - model hic calismaz, 0 token / ~1 sn).
+        # YASANDI: test evinde 186 fake is vardi; telemetri "ilk tur basari %33" dedi,
+        # tamami uydurmaydi - gercek model kosusu tek bir tane bile yoktu.
+        if r.get("kaynak") == "ornek" or r.get("ortam") == "fake":
             atlanan += 1
             continue
         kayitlar.append(r)
