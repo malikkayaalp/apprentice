@@ -363,7 +363,9 @@ def _usta_liste() -> list:
                     k = json.load(f)
                 out.append({"id": k["id"], "durum": k.get("durum"),
                             "ozet": k.get("prompt", "")[:60],
-                            "sure": k.get("sure"), "araclar": k.get("araclar")})
+                            "sure": k.get("sure") if k.get("sure") is not None
+                            else round(time.time() - k.get("baslangic", time.time()), 0),
+                            "araclar": k.get("araclar")})
             except Exception:
                 pass
     return out

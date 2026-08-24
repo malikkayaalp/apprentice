@@ -758,7 +758,9 @@ async function ustaListeCek(){
     if(!seciliUsta&&ist.length)seciliUsta=ist[0].id;
     if(seciliUsta){
       const c=await(await fetch("/api/usta_cevap?id="+seciliUsta)).json();
-      $("#ustaCevap").textContent=c.cevap||(c.durum==="calisiyor"?"Claude düşünüyor…":"—");
+      $("#ustaCevap").textContent=c.cevap||(c.durum==="calisiyor"?
+        "Claude düşünüyor… "+Math.round(Date.now()/1000-(c.baslangic||Date.now()/1000))+
+        " sn (araç izinli istekler 30-60 sn sürebilir)":"—");
     }
   }catch(e){}
   setTimeout(ustaListeCek,3000);
