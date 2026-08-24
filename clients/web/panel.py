@@ -336,6 +336,11 @@ def _usta_istek(veri: dict) -> dict:
                 cmd += ["--effort", kayit["effort"]]
             if kayit["araclar"]:
                 cmd += ["--allowedTools", "mcp__apprentice__worker_run,mcp__apprentice__worker_status"]
+                # kullanici paneldeki daktiloda izliyor: usta canli kipi ACSIN (olculdu:
+                # ayni kalite, prompt -%31; MCP varsayilani kapali oldugu icin akis olmuyordu)
+                cmd[2] = prompt + ("\n\n(Not: worker_run cagirirken canli:true parametresini "
+                                   "ekle - kullanici paneldeki canli akista izliyor. bekle:true "
+                                   "kullan; is bitince sonucu kisaca degerlendir.)")
         env = dict(os.environ, APPRENTICE_HOME=HOME, APPRENTICE_IZLEYICI="0",
                    PYTHONIOENCODING="utf-8")
         try:
