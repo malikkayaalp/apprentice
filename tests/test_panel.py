@@ -126,6 +126,41 @@ def metin_isleyicileri() -> bool:
         os.unlink(yol)
 
 
+def goruntuleyici_sayfasi() -> bool:
+    """Dosya goruntuleyici (ayri pencere) sayfasi: JS sozdizimi + PENCERE DENETIMLERI.
+
+    YASANDI: kabuk pencereyi cercevesiz aciyor (Windows baslik cubugu yok) ama goruntuleyici
+    sayfasina kendi baslik seridimiz eklenmemisti - pencere ne KAPATILABILIYOR ne TASINABILIYORDU.
+    Bu dosyanin JS'i hicbir testte denetlenmiyordu; artik denetleniyor."""
+    sys.path.insert(0, os.path.join(ROOT, "clients", "web"))
+    import goruntuleyici as G
+    h = G.sayfa("20260101-000000-abcdef", "ornek/kod.py")
+    for gerek, aciklama in (("pKapat", "kapatma dugmesi"), ("pUstte", "hep ustte dugmesi"),
+                            ("pBuyult", "buyult dugmesi"), ("tasi:", "pencere tasima kanali"),
+                            ("postMessage", "kabuk mesaj kanali"), ("cursor:grab", "tasinabilir baslik")):
+        assert gerek in h, "goruntuleyicide %s (%s) yok" % (gerek, aciklama)
+    assert "ornek/kod.py" in h and "20260101" in h, "dosya adi/is kimligi sayfada yok"
+    node = shutil.which("node")
+    if node:
+        js = "\n".join(re.findall(r"<script>(.*?)</script>", h, re.S))
+        with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as f:
+            f.write("(function(){\n" + js + "\n})")
+            yol = f.name
+        try:
+            r = subprocess.run([node, "--check", yol], capture_output=True, text=True,
+                               encoding="utf-8", errors="replace", timeout=60,
+                               creationflags=0x08000000 if os.name == "nt" else 0)
+            assert r.returncode == 0, "goruntuleyici JS sozdizimi HATASI:\n%s" % (r.stderr or "")[:400]
+        finally:
+            os.unlink(yol)
+    # yol kacisi: goruntuleyici calisma alani disina cikamamali
+    for kotu in ("../gizli.txt", "C:gizli", "/mutlak"):
+        d = G.oku(os.path.join(ROOT, ".apprentice_test_home", "jobs"), "yok", kotu)
+        assert d.get("hata"), "%r yolu reddedilmedi: %s" % (kotu, d)
+    print("goruntuleyici: ok (pencere denetimleri, JS sozdizimi, yol kacisi reddi)")
+    return True
+
+
 def id_butunlugu() -> bool:
     """JS'in aradigi HER id HTML'de var mi? (ve HTML'deki id'ler kullaniliyor mu?)
 
@@ -590,7 +625,8 @@ def calisma_dizini_kurallari() -> bool:
 
 def main() -> int:
     ok = (js_sozdizimi() and metin_isleyicileri() and kaynak_denetimi() and id_butunlugu() and uc_sozlesmesi() and ust_bar_gorunur() and yerlesim_butun() and dizilimler_butun()
-          and yerlesim_motoru() and sunucu_uclari() and calisma_dizini_kurallari() and sohbet_uclari())
+          and yerlesim_motoru() and sunucu_uclari() and calisma_dizini_kurallari() and sohbet_uclari()
+          and goruntuleyici_sayfasi())
     print("SONUC:", "GECTI" if ok else "KALDI")
     return 0 if ok else 1
 

@@ -19,7 +19,13 @@ SAYFA = """<!doctype html><html lang="tr"><head><meta charset="utf-8">
 body{{margin:0;background:var(--zemin);color:var(--metin);font:13px/1.55 var(--mono);
  display:flex;flex-direction:column;height:100vh}}
 header{{display:flex;align-items:center;gap:12px;padding:9px 14px;background:var(--panel);
- border-bottom:1px solid var(--cizgi);flex-shrink:0}}
+ border-bottom:1px solid var(--cizgi);flex-shrink:0;cursor:grab;user-select:none}}
+header:active{{cursor:grabbing}}
+.pdug{{cursor:pointer;padding:2px 9px;border-radius:6px;color:var(--soluk);font-size:13px;
+ line-height:1.2}}
+.pdug:hover{{background:rgba(255,255,255,.08);color:var(--metin)}}
+.pdug.etkin{{color:var(--vurgu);background:rgba(217,119,87,.16)}}
+.pdug.kapat:hover{{background:rgba(224,108,95,.28);color:#fff}}
 header b{{color:var(--vurgu)}}
 header .k{{color:var(--soluk);font-size:11px}}
 header .sag{{margin-left:auto;display:flex;gap:8px;align-items:center}}
@@ -41,7 +47,10 @@ tr:hover td.s{{background:rgba(217,119,87,.07)}}
   <b>{ad}</b><span class="k">{bilgi}</span>
   <span class="sag"><span class="k" id="durum">yükleniyor…</span>
     <button id="kopyala">kopyala</button><button id="yenile">yenile</button>
-    <label class="k"><input type="checkbox" id="oto" checked> otomatik</label></span>
+    <label class="k"><input type="checkbox" id="oto" checked> otomatik</label>
+    <span class="pdug" id="pUstte" title="hep üstte kalsın">📌</span>
+    <span class="pdug" id="pBuyult" title="büyüt / geri al">▢</span>
+    <span class="pdug kapat" id="pKapat" title="kapat">✕</span></span>
 </header>
 <div id="kod"></div>
 <script>
@@ -80,6 +89,38 @@ async function cek(){{
     }}
   }}catch(e){{document.getElementById("durum").textContent="bağlantı yok"}}
 }}
+/* PENCERE DENETIMI: kabuk bu pencereyi CERCEVESIZ acar (Windows baslik cubugu yok), bu
+   yuzden tasima/kapatma/ustte-tutma BURADAN yonetilir. Yasandi: goruntuleyiciye bu serit
+   eklenmemisti - pencere ne kapatilabiliyor ne tasinabiliyordu. */
+const KABUK = !!(window.chrome && window.chrome.webview);
+const yolla = m => {{ try{{ window.chrome.webview.postMessage(m); }}catch(e){{}} }};
+(function(){{
+  const bar=document.querySelector("header");
+  let sx=0, sy=0, tut=false;
+  bar.addEventListener("pointerdown", e=>{{
+    if(e.target.closest(".pdug")||e.target.closest("button")||e.target.closest("label")) return;
+    tut=true; sx=e.screenX; sy=e.screenY; bar.setPointerCapture(e.pointerId);
+  }});
+  bar.addEventListener("pointermove", e=>{{
+    if(!tut) return;
+    const dx=e.screenX-sx, dy=e.screenY-sy;
+    if(dx||dy){{ sx=e.screenX; sy=e.screenY; if(KABUK) yolla("tasi:"+dx+","+dy); }}
+  }});
+  const birak=e=>{{ if(!tut)return; tut=false;
+    try{{bar.releasePointerCapture(e.pointerId)}}catch(_){{}} }};
+  bar.addEventListener("pointerup", birak);
+  bar.addEventListener("pointercancel", birak);
+  bar.addEventListener("dblclick", e=>{{ if(!e.target.closest(".pdug")&&KABUK) yolla("buyult"); }});
+  let ustte=false;
+  document.getElementById("pUstte").onclick=()=>{{
+    ustte=!ustte;
+    document.getElementById("pUstte").classList.toggle("etkin",ustte);
+    if(KABUK) yolla("ustte:"+(ustte?"1":"0"));
+  }};
+  document.getElementById("pBuyult").onclick=()=>{{ if(KABUK) yolla("buyult"); }};
+  document.getElementById("pKapat").onclick=()=>{{ if(KABUK) yolla("kapat"); else window.close(); }};
+  if(!KABUK) document.getElementById("pBuyult").style.display="none";
+}})();
 document.getElementById("yenile").onclick=cek;
 document.getElementById("kopyala").onclick=()=>navigator.clipboard.writeText(son||"");
 setInterval(()=>{{if(document.getElementById("oto").checked)cek()}},2000);
