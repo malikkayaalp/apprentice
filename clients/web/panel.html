@@ -217,6 +217,8 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
   <div class="pill"><span class="nokta" id="modelNokta"></span><span id="modelAd">—</span>
     <span id="yukle" title="çırağı önceden yükle (ısıt)" style="cursor:pointer;margin-left:4px">▶</span>
     <span id="eject" title="modeli RAM/VRAM'den boşalt" style="cursor:pointer;margin-left:2px">⏏</span></div>
+  <div class="pill" id="kokPill" title="çırağın çalışma alanı — tıkla, klasör seç"
+    style="cursor:pointer">📁 <b id="kokAd">—</b></div>
   <div class="pill">VRAM <b id="vramT">—</b><div class="olcekbar"><i id="vramBar"></i></div></div>
   <div class="pill">GPU <b id="gpuT">—</b><div class="olcekbar"><i id="gpuBar"></i></div></div>
   <div class="bosluk"></div>
@@ -259,7 +261,10 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
         <div id="kModelKart" style="width:100%;font-size:.68em;color:var(--soluk);line-height:1.5"></div>
       </div>
       <div id="dmetin"><span class="bekliyor">görevi aşağıdan yaz — canlı kipte token akışı burada akar…</span></div>
+      <div id="kEkler" style="display:none;padding:4px 10px 0;font-size:.72em;color:var(--soluk)"></div>
       <div class="girisSatiri">
+        <button id="kEk" title="metin dosyası ekle (çalışma dizinine konur, RAG indeksler; çırak resim almaz)"
+          style="background:var(--panel2);color:var(--soluk)">📎</button>
         <textarea id="kGorev" rows="2" placeholder="çırağa görev yaz… (Enter = gönder, Shift+Enter = yeni satır)"></textarea>
         <button id="kGonder">▶</button>
       </div>
@@ -303,17 +308,29 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
           style="display:none;flex:1;min-width:180px">
       </div>
       <div class="sohbet" id="ustaChat"></div>
+      <div id="uEkler" style="display:none;padding:4px 10px 0;font-size:.72em;color:var(--soluk)"></div>
       <div class="girisSatiri">
+        <button id="uEk" title="dosya/resim ekle — Claude Read ile okur"
+          style="background:var(--panel2);color:var(--soluk)">📎</button>
         <textarea id="uPrompt" rows="2" placeholder="Claude'a yaz… (Enter = gönder; her istek Max kotasından)"></textarea>
         <button id="uGonder">▶</button>
       </div>
     </div>
     <div class="tutamak"></div></div>
 
-  <div class="kart" data-p="dosyalar"><div class="kbaslik">YAZILAN DOSYALAR</div>
-    <div class="kgovde"><div id="dosyaSekmeler"></div><div id="dosyaGoster"></div></div>
+  <div class="kart" data-p="dosyalar"><div class="kbaslik">YAZILAN DOSYALAR
+      <span class="kek">tıkla → görüntüleyicide aç</span></div>
+    <div class="kgovde"><div id="dosyaListe" style="flex:1;overflow-y:auto;padding:7px"></div></div>
+    <div class="tutamak"></div></div>
+
+  <div class="kart" data-p="kod"><div class="kbaslik" style="color:var(--kod)">DOSYA GÖRÜNTÜLEYİCİ
+      <span class="kek" id="kodBaslik"></span></div>
+    <div class="kgovde"><div id="kodGoster" style="flex:1;overflow:auto;margin:8px;border-radius:10px;
+      background:rgba(12,10,8,.7)"></div></div>
     <div class="tutamak"></div></div>
 </div>
+<input type="file" id="uEkSecici" multiple style="display:none">
+<input type="file" id="kEkSecici" multiple accept=".py,.md,.txt,.json,.csv,.html,.js,.ts,.cs,.yaml,.yml,.xml,.toml,.ini,.sql,.sh,.bat,.css" style="display:none">
 <div id="tost"></div>
 
 <script>
@@ -336,10 +353,12 @@ const VARSAYILAN={
   isler:{gx:0,gy:0,gw:5,gh:24}, boru:{gx:5,gy:0,gw:12,gh:4},
   akis:{gx:5,gy:4,gw:12,gh:10}, cirak:{gx:5,gy:14,gw:12,gh:10},
   metrik:{gx:17,gy:0,gw:7,gh:5}, ozet:{gx:17,gy:5,gw:7,gh:5},
-  usta:{gx:17,gy:10,gw:7,gh:9}, dosyalar:{gx:17,gy:19,gw:7,gh:5}};
+  usta:{gx:17,gy:10,gw:7,gh:9}, dosyalar:{gx:17,gy:19,gw:7,gh:5},
+  kod:{gx:5,gy:24,gw:12,gh:10}};
 const PANEL_ADLARI={isler:"İŞLER",boru:"BORU HATTI",akis:"OLAY AKIŞI",cirak:"ÇIRAK",
-  metrik:"METRİKLER",ozet:"İŞ ÖZETİ",usta:"USTA · CLAUDE",dosyalar:"DOSYALAR"};
-let gizliPaneller=new Set();
+  metrik:"METRİKLER",ozet:"İŞ ÖZETİ",usta:"USTA · CLAUDE",dosyalar:"DOSYALAR",
+  kod:"DOSYA GÖRÜNTÜLEYİCİ"};
+let gizliPaneller=new Set(["kod"]);       // goruntuleyici: dosyaya tiklaninca acilir
 try{const g=JSON.parse(localStorage.getItem("apprentice_gizli_paneller"));
   if(g)gizliPaneller=new Set(g.filter(a=>PANEL_ADLARI[a]))}catch(e){}
 let gizliIsler=new Set();
@@ -559,18 +578,36 @@ function daktiloAdim(){
   setTimeout(daktiloAdim,42);
 }
 
-/* --------------- dosyalar --------------- */
+/* --------------- dosyalar: liste + ayri goruntuleyici --------------- */
+function dosyaAc(ad){
+  seciliDosya=ad; dosyaElle=true;
+  gizliPaneller.delete("kod"); panelKaydet(); duzenle();
+  $("#kodBaslik").textContent=ad;
+  $("#kodGoster").innerHTML=kodBlok(ad,dosyalar[ad]||"");
+  dosyalarCiz();
+}
 function dosyalarCiz(){
-  const kap=$("#dosyaSekmeler"); kap.innerHTML="";
+  const kap=$("#dosyaListe"); kap.innerHTML="";
   const adlar=Object.keys(dosyalar);
+  if(!adlar.length){kap.innerHTML='<div style="color:var(--soluk);font-size:.8em;padding:6px">—</div>';return}
   adlar.forEach(ad=>{
-    const s=document.createElement("span");
-    s.className="sekme"+(ad===seciliDosya?" aktif":"");
-    s.textContent=ad; s.onclick=()=>{seciliDosya=ad;dosyaElle=true;dosyalarCiz();};
-    kap.appendChild(s);
+    const d=document.createElement("div");
+    d.className="is"+(ad===seciliDosya?" aktif":"");
+    const n=(dosyalar[ad]||"").split("\n").length;
+    d.innerHTML='<div class="ibaslik">'+kacir(ad)+'</div><div class="imeta">'+
+      '<span class="rozet">'+n+' satır</span></div>';
+    d.onclick=()=>dosyaAc(ad);
+    kap.appendChild(d);
   });
-  if(!dosyaElle&&adlar.length)seciliDosya=adlar[adlar.length-1];
-  $("#dosyaGoster").innerHTML=seciliDosya?kodBlok(seciliDosya,dosyalar[seciliDosya]||""):"";
+  // goruntuleyici acik ve secili dosya guncellendiyse tazele
+  if(seciliDosya&&dosyalar[seciliDosya]!==undefined&&!gizliPaneller.has("kod")){
+    const yeni=kodBlok(seciliDosya,dosyalar[seciliDosya]||"");
+    if($("#kodGoster").dataset.h!==String(dosyalar[seciliDosya].length)){
+      $("#kodGoster").innerHTML=yeni;
+      $("#kodGoster").dataset.h=String(dosyalar[seciliDosya].length);
+      $("#kodBaslik").textContent=seciliDosya;
+    }
+  }
 }
 
 /* --------------- is secimi + dongu --------------- */
@@ -730,8 +767,10 @@ async function ustaGonder(){
   try{
     const r=await(await fetch("/api/usta",{method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({prompt:p,araclar:$("#uAraclar").checked,cli:$("#uCli").value,
-        sablon:$("#uSablon").value,model:$("#uModel").value,effort:$("#uEffort").value})})).json();
-    if(r.hata){tost("HATA: "+r.hata);}else{$("#uPrompt").value="";ustaSonH="";}
+        sablon:$("#uSablon").value,model:$("#uModel").value,effort:$("#uEffort").value,
+        ekler:uEkler})})).json();
+    if(r.hata){tost("HATA: "+r.hata);}
+    else{$("#uPrompt").value="";ustaSonH="";uEkler=[];eklerCiz(uEkler,"#uEkler");}
   }catch(e){tost("HATA: "+e);}
   b.disabled=false;
 }
@@ -770,12 +809,13 @@ async function cirakGonder(){
       kriterler:$("#kKriter").value.split(";").map(x=>x.trim()).filter(Boolean),
       calisma_dizini:$("#kDizin").value.trim(), dogrulama:$("#kDog").value,
       yazilabilir:$("#kYaz").value.split(",").map(x=>x.trim()).filter(Boolean),
-      canli:$("#kCanli").checked, harita:$("#kHarita").checked};
+      canli:$("#kCanli").checked, harita:$("#kHarita").checked, ekler:kEkler};
     const r=await(await fetch("/api/gorev",{method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify(veri)})).json();
     if(r.hata){tost("HATA: "+r.hata);}
     else{
       $("#kGorev").value=""; $("#kBaslik").value=""; $("#kKriter").value="";
+      kEkler=[]; eklerCiz(kEkler,"#kEkler");
       tost("🔧 "+(r.baslik||r.is_id)+" başladı"); takip=true;
     }
   }catch(e){tost("HATA: "+e);}
@@ -785,9 +825,55 @@ $("#kGonder").onclick=cirakGonder;
 $("#kGorev").addEventListener("keydown",e=>{
   if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();cirakGonder();}});
 
-/* --------------- ust bar --------------- */
+/* --------------- ust bar + calisma alani + ekler --------------- */
 function tost(m){const t=$("#tost");t.textContent=m;t.style.display="block";
   setTimeout(()=>t.style.display="none",5000)}
+async function kokGoster(){
+  try{const r=await(await fetch("/api/kok")).json();
+    const k=r.kok||""; $("#kokAd").textContent=k.length>34?"…"+k.slice(-32):k;
+    $("#kokPill").title="çırağın çalışma alanı: "+k+" — tıkla, klasör seç";}catch(e){}
+}
+$("#kokPill").onclick=async()=>{
+  tost("📁 klasör seçme penceresi açıldı (görev çubuğuna bakın)…");
+  try{
+    const r=await(await fetch("/api/kok_sec",{method:"POST",
+      headers:{"Content-Type":"application/json"},body:"{}"})).json();
+    if(r.hata)tost("HATA: "+r.hata);
+    else if(r.iptal)tost("seçim iptal");
+    else tost("📁 çalışma alanı: "+r.kok);
+    kokGoster();
+  }catch(e){tost("HATA: "+e);}
+};
+// ek yonetimi: [{ad, b64|icerik}]
+let uEkler=[], kEkler=[];
+function eklerCiz(liste,kap){
+  const el=$(kap);
+  el.style.display=liste.length?"":"none";
+  el.innerHTML=liste.map((e,i)=>'📎 '+kacir(e.ad)+
+    ' <span style="cursor:pointer;color:var(--kirmizi)" data-i="'+i+'">✕</span>').join("  ");
+  el.querySelectorAll("span[data-i]").forEach(s=>s.onclick=()=>{
+    liste.splice(parseInt(s.dataset.i),1);eklerCiz(liste,kap)});
+}
+function dosyaOku(f,metinMi){
+  return new Promise(res=>{
+    const r=new FileReader();
+    r.onload=()=>res(metinMi?{ad:f.name,icerik:r.result}:{ad:f.name,b64:r.result});
+    metinMi?r.readAsText(f):r.readAsDataURL(f);
+  });
+}
+$("#uEk").onclick=()=>$("#uEkSecici").click();
+$("#uEkSecici").onchange=async e=>{
+  for(const f of e.target.files)uEkler.push(await dosyaOku(f,false));
+  eklerCiz(uEkler,"#uEkler"); e.target.value="";
+};
+$("#kEk").onclick=()=>$("#kEkSecici").click();
+$("#kEkSecici").onchange=async e=>{
+  for(const f of e.target.files){
+    if(/\.(png|jpe?g|gif|bmp|webp|ico)$/i.test(f.name)){tost("çırak resim almaz: "+f.name);continue}
+    kEkler.push(await dosyaOku(f,true));
+  }
+  eklerCiz(kEkler,"#kEkler"); e.target.value="";
+};
 $("#yukle").onclick=async()=>{
   tost("▶ çırak yükleniyor (~1 dk)…");
   try{
@@ -808,7 +894,7 @@ $("#akis").addEventListener("wheel",()=>{const a=$("#akis");
   takip=a.scrollTop+a.clientHeight>=a.scrollHeight-60;});
 
 boruCiz(); duzenle(); filtreSec("tumu");
-isleriCek(); olaylariCek(); daktiloAdim(); ustaChatCek(); modelleriYukle();
+isleriCek(); olaylariCek(); daktiloAdim(); ustaChatCek(); modelleriYukle(); kokGoster();
 </script>
 </body>
 </html>

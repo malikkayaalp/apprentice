@@ -19,6 +19,79 @@ HOME = ""
 DEPO: IsDeposu | None = None
 KILIT = threading.Lock()
 SAYFA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "panel.html")
+AYAR: dict = {}
+METIN_UZANTILAR = (".py", ".md", ".txt", ".json", ".csv", ".html", ".js", ".ts", ".cs",
+                   ".yaml", ".yml", ".xml", ".toml", ".ini", ".sql", ".sh", ".bat", ".css")
+
+
+def _ayar_yolu() -> str:
+    return os.path.join(HOME, "panel_ayar.json")
+
+
+def _ayar_yukle():
+    global AYAR
+    try:
+        with open(_ayar_yolu(), encoding="utf-8") as f:
+            AYAR = json.load(f)
+    except Exception:
+        AYAR = {}
+    AYAR.setdefault("kok", HOME)          # calisma alani: kullanicinin proje klasoru
+
+
+def _ayar_kaydet():
+    try:
+        with open(_ayar_yolu(), "w", encoding="utf-8", newline="\n") as f:
+            json.dump(AYAR, f, ensure_ascii=False, indent=1)
+    except OSError:
+        pass
+
+
+def _kok_sec() -> dict:
+    """Yerel klasor secme diyalogu (panel yerelde kosar - gercek Windows penceresi).
+    tkinter ana surecte sorun cikarmasin diye ayri Python surecinde acilir."""
+    import subprocess
+    kod = ("import tkinter, tkinter.filedialog as f\n"
+           "r = tkinter.Tk(); r.withdraw(); r.attributes('-topmost', 1)\n"
+           "print(f.askdirectory(title='Apprentice calisma alani sec'))")
+    try:
+        r = subprocess.run([sys.executable, "-c", kod], capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=300)
+        yol = (r.stdout or "").strip()
+        if yol and os.path.isdir(yol):
+            AYAR["kok"] = os.path.abspath(yol)
+            _ayar_kaydet()
+            return {"kok": AYAR["kok"]}
+        return {"kok": AYAR.get("kok", HOME), "iptal": True}
+    except Exception as e:  # noqa: BLE001
+        return {"hata": str(e)[:200]}
+
+
+def _ekleri_kaydet(ekler: list, hedef_dir: str, yalniz_metin: bool) -> tuple:
+    """Panelden gelen ekleri diske yazar. Doner: (yollar, reddedilenler)."""
+    import base64
+    os.makedirs(hedef_dir, exist_ok=True)
+    yollar, red = [], []
+    for e in (ekler or [])[:6]:
+        ad = os.path.basename(str(e.get("ad") or "ek"))
+        if yalniz_metin and not ad.lower().endswith(METIN_UZANTILAR):
+            red.append(ad + " (cirak yalniz metin alir)")
+            continue
+        yol = os.path.join(hedef_dir, ad)
+        try:
+            if e.get("b64") is not None:
+                veri = base64.b64decode(str(e["b64"]).split(",")[-1])
+                if len(veri) > 8_000_000:
+                    red.append(ad + " (8 MB siniri)")
+                    continue
+                with open(yol, "wb") as f:
+                    f.write(veri)
+            else:
+                with open(yol, "w", encoding="utf-8", newline="\n") as f:
+                    f.write(str(e.get("icerik") or "")[:2_000_000])
+            yollar.append(yol)
+        except OSError as hata:
+            red.append("%s (%s)" % (ad, str(hata)[:60]))
+    return yollar, red
 
 
 def _sistem() -> dict:
@@ -144,12 +217,18 @@ def _gorev_baslat(veri: dict) -> dict:
         return {"hata": "bilinmeyen ortam %r (var: %s)" % (ortam, list(srv.ENVS))}
     dogrulama = str(veri.get("dogrulama") or "derleme")
     kapali_ek = ["run_tests", "run_shell"] if dogrulama == "derleme" else []
-    # calisma dizini EVE gore cozulur ve yoksa yaratilir (panelin MCP koku yok)
+    # calisma dizini SECILI CALISMA ALANINA gore cozulur (kullanicinin proje klasoru;
+    # ust bardaki klasor secici belirler, varsayilan panel evi)
     dizin = str(veri.get("calisma_dizini") or "panel").strip().replace("\\", "/")
     if ".." in dizin or os.path.isabs(dizin):
-        return {"hata": "calisma_dizini eve goreli olmali"}
-    tam_dizin = os.path.join(HOME, dizin)
+        return {"hata": "calisma_dizini calisma alanina goreli olmali"}
+    tam_dizin = os.path.join(AYAR.get("kok", HOME), dizin)
     os.makedirs(tam_dizin, exist_ok=True)
+    # ekler: metin dosyalari dogrudan calisma dizinine - `ara` (RAG) otomatik indeksler
+    ek_yollar, ek_red = _ekleri_kaydet(veri.get("ekler") or [], tam_dizin, yalniz_metin=True)
+    if ek_yollar:
+        gorev += ("\n\nEKLI DOSYALAR (calisma dizininde, gerekirse read_file/ara ile kullan): "
+                  + ", ".join(os.path.basename(y) for y in ek_yollar))
     model = str(veri.get("model") or "").strip() or \
         srv.config.env_or(["APPRENTICE_MODEL", "UNITY_CODE_MODEL"], "ollama.model")
     # MODEL UYUMU: secilen modelin kartindan ctx siniri alinir - config ctx karttan buyukse
@@ -322,6 +401,15 @@ def _usta_istek(veri: dict) -> dict:
     kayit["effort"] = str(veri.get("effort") or "")
     kayit["cli"] = str(veri.get("cli") or "claude")
     sablon = str(veri.get("sablon") or "")
+    # ekler (resim dahil): calisma alanindaki panel_ekler/ altina; Claude yollariyla okur
+    ek_yollar, ek_red = _ekleri_kaydet(veri.get("ekler") or [],
+                                       os.path.join(AYAR.get("kok", HOME), "panel_ekler"),
+                                       yalniz_metin=False)
+    if ek_yollar:
+        prompt += "\n\nEKLI DOSYALAR (Read araciyla oku; resimler dahil):\n" + \
+                  "\n".join(ek_yollar)
+        kayit["ekler"] = [os.path.basename(y) for y in ek_yollar]
+    kayit["prompt"] = prompt
 
     def kos():
         if kayit["cli"] == "ozel" and sablon:
@@ -334,13 +422,18 @@ def _usta_istek(veri: dict) -> dict:
                 cmd += ["--model", kayit["model"]]
             if kayit["effort"]:
                 cmd += ["--effort", kayit["effort"]]
+            izinler = []
             if kayit["araclar"]:
-                cmd += ["--allowedTools", "mcp__apprentice__worker_run,mcp__apprentice__worker_status"]
+                izinler += ["mcp__apprentice__worker_run", "mcp__apprentice__worker_status"]
                 # kullanici paneldeki daktiloda izliyor: usta canli kipi ACSIN (olculdu:
                 # ayni kalite, prompt -%31; MCP varsayilani kapali oldugu icin akis olmuyordu)
-                cmd[2] = prompt + ("\n\n(Not: worker_run cagirirken canli:true parametresini "
+                cmd[2] = cmd[2] + ("\n\n(Not: worker_run cagirirken canli:true parametresini "
                                    "ekle - kullanici paneldeki canli akista izliyor. bekle:true "
                                    "kullan; is bitince sonucu kisaca degerlendir.)")
+            if ek_yollar:
+                izinler.append("Read")             # ekleri (resim dahil) okuyabilsin
+            if izinler:
+                cmd += ["--allowedTools", ",".join(izinler)]
         env = dict(os.environ, APPRENTICE_HOME=HOME, APPRENTICE_IZLEYICI="0",
                    PYTHONIOENCODING="utf-8")
         try:
@@ -433,6 +526,8 @@ class Istek(BaseHTTPRequestHandler):
                 self._gonder({"istekler": _usta_liste()})
             elif yol.path == "/api/usta_cevap":
                 self._gonder(_usta_cevap(q.get("id", "")))
+            elif yol.path == "/api/kok":
+                self._gonder({"kok": AYAR.get("kok", HOME)})
             elif yol.path == "/api/modeller":
                 self._gonder(_modeller())
             elif yol.path == "/api/model_kart":
@@ -455,6 +550,15 @@ class Istek(BaseHTTPRequestHandler):
                 self._gonder(_model_bosalt())
             elif yolu == "/api/yukle":
                 self._gonder(_model_yukle())
+            elif yolu == "/api/kok_sec":
+                self._gonder(_kok_sec())
+            elif yolu == "/api/kok":
+                y = str(veri.get("yol") or "").strip()
+                if y and os.path.isdir(y):
+                    AYAR["kok"] = os.path.abspath(y); _ayar_kaydet()
+                    self._gonder({"kok": AYAR["kok"]})
+                else:
+                    self._gonder({"hata": "klasor bulunamadi: %s" % y})
             else:
                 self._gonder({"hata": "yok"}, kod=404)
         except Exception as e:  # noqa: BLE001
@@ -471,6 +575,7 @@ def main() -> int:
     a = ap.parse_args()
     HOME = os.path.expanduser(a.home)
     DEPO = IsDeposu(HOME)
+    _ayar_yukle()
     srv = ThreadingHTTPServer(("127.0.0.1", a.port), Istek)
     url = "http://127.0.0.1:%d" % a.port
     print("Apprentice Web Panel: %s  (ev: %s)" % (url, HOME))
