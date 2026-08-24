@@ -245,6 +245,9 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
       <span class="kek" id="daktiloDurum"></span></div>
     <div class="kgovde">
       <div class="ayarlar">
+        <select id="kMod" title="görev: iş koşturur (kriter+doğrulama) · sohbet: düz konuşma">
+          <option value="gorev">⚙ görev</option>
+          <option value="sohbet">💬 sohbet</option></select>
         <select id="kModel" title="çırak modeli"><option value="">model: varsayılan</option></select>
         <select id="kDog" title="doğrulama">
           <option value="derleme">derleme (hızlı)</option>
@@ -261,6 +264,7 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
         <div id="kModelKart" style="width:100%;font-size:.68em;color:var(--soluk);line-height:1.5"></div>
       </div>
       <div id="dmetin"><span class="bekliyor">görevi aşağıdan yaz — canlı kipte token akışı burada akar…</span></div>
+      <div class="sohbet" id="cirakChat" style="display:none"></div>
       <div id="kEkler" style="display:none;padding:4px 10px 0;font-size:.72em;color:var(--soluk)"></div>
       <div class="girisSatiri">
         <button id="kEk" title="metin dosyası ekle (çalışma dizinine konur, RAG indeksler; çırak resim almaz)"
@@ -801,8 +805,39 @@ $("#kModel").onchange=async e=>{
       " <span style='color:var(--sari)'>(işçide temperature=0 — determinizm; ctx karta göre sınırlanır)</span>";
   }catch(e){}
 };
+$("#kMod").onchange=e=>{
+  const sohbet=e.target.value==="sohbet";
+  $("#dmetin").style.display=sohbet?"none":"";
+  $("#cirakChat").style.display=sohbet?"flex":"none";
+  $("#kGorev").placeholder=sohbet?
+    "çırakla sohbet et… (görev kalıbı yok; Enter = gönder)":
+    "çırağa görev yaz… (Enter = gönder, Shift+Enter = yeni satır)";
+  if(sohbet&&!$("#cirakChat").children.length)
+    $("#cirakChat").innerHTML='<div class="balon karsi" style="opacity:.6">Sohbet kipi: '+
+      'düz konuşuruz, kriter/doğrulama yok. İş yaptırmak için ⚙ görev kipine dön.</div>';
+};
+function cirakBalon(sinif,metin){
+  const d=document.createElement("div"); d.className="balon "+sinif;
+  d.textContent=metin; $("#cirakChat").appendChild(d);
+  $("#cirakChat").scrollTop=$("#cirakChat").scrollHeight; return d;
+}
+async function cirakSohbet(g){
+  cirakBalon("ben",g);
+  const dus=cirakBalon("karsi dusunuyor","düşünüyor…");
+  try{
+    const r=await(await fetch("/api/cirak_sohbet",{method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({prompt:g,model:$("#kModel").value})})).json();
+    dus.classList.remove("dusunuyor");
+    dus.textContent=r.hata?("HATA: "+r.hata):(r.cevap||"—");
+  }catch(e){dus.textContent="HATA: "+e;}
+  $("#cirakChat").scrollTop=$("#cirakChat").scrollHeight;
+}
 async function cirakGonder(){
   const g=$("#kGorev").value.trim(); if(!g)return;
+  if($("#kMod").value==="sohbet"){
+    $("#kGorev").value=""; await cirakSohbet(g); return;
+  }
   const b=$("#kGonder"); b.disabled=true;
   try{
     const veri={baslik:$("#kBaslik").value, gorev:g, model:$("#kModel").value,

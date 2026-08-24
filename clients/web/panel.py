@@ -377,6 +377,47 @@ def _model_bosalt() -> dict:
         return {"hata": str(e)[:200]}
 
 
+SOHBET = {"mesajlar": []}          # cirakla serbest sohbet (gorev kalibi yok, hafizali)
+
+
+def _cirak_sohbet(veri: dict) -> dict:
+    """Cirakla DUZ sohbet: worker_run kalibi (kriter/dogrulama/rapor) YOK - dogrudan Ollama.
+    Kullanici geri bildirimi: 'her sorumda gorev basliyor, kriter istiyor'. Gorev kipi is
+    yaptirir, sohbet kipi konusur. Hafiza: son 20 mesaj; temperature 0.7 (sohbet, is degil)."""
+    import importlib, urllib.request
+    prompt = str(veri.get("prompt") or "").strip()
+    if veri.get("sifirla"):
+        SOHBET["mesajlar"] = []
+        if not prompt:
+            return {"cevap": "", "sifirlandi": True}
+    if not prompt:
+        return {"hata": "bos"}
+    os.environ.setdefault("APPRENTICE_HOME", HOME)
+    srv = importlib.import_module("server.apprentice_server")
+    model = str(veri.get("model") or "").strip() or \
+        srv.config.env_or(["APPRENTICE_MODEL", "UNITY_CODE_MODEL"], "ollama.model")
+    SOHBET["mesajlar"].append({"role": "user", "content": prompt})
+    body = json.dumps({"model": model, "stream": False,
+                       "messages": [{"role": "system", "content":
+                                     "Sen Apprentice sisteminin yerel cirak modelisin (%s). "
+                                     "Turkce, kisa ve net cevap ver. Kod isleri icin kullanici "
+                                     "gorev kipini kullanir; burada serbest sohbettesin."
+                                     % model.split("/")[-1].split(":")[0]}]
+                       + SOHBET["mesajlar"][-20:],
+                       "options": {"num_ctx": 16384, "temperature": 0.7, "num_predict": 1200},
+                       "keep_alive": "30m"}).encode()
+    try:
+        d = json.load(urllib.request.urlopen(urllib.request.Request(
+            "http://localhost:11434/api/chat", body, {"Content-Type": "application/json"}),
+            timeout=600))
+        cevap = ((d.get("message") or {}).get("content") or "").strip()
+        SOHBET["mesajlar"].append({"role": "assistant", "content": cevap})
+        return {"cevap": cevap, "tok": d.get("eval_count")}
+    except Exception as e:  # noqa: BLE001
+        SOHBET["mesajlar"].pop()
+        return {"hata": str(e)[:250]}
+
+
 def _usta_istek(veri: dict) -> dict:
     """Panelden Claude CLI'ya BASSIZ istek (claude -p). Desktop gerekmez; kullanicinin
     girisiyle calisir. Her istek Max kotasindan harcar - o yuzden yalnizca kullanici
@@ -406,38 +447,48 @@ def _usta_istek(veri: dict) -> dict:
                                        os.path.join(AYAR.get("kok", HOME), "panel_ekler"),
                                        yalniz_metin=False)
     if ek_yollar:
-        prompt += "\n\nEKLI DOSYALAR (Read araciyla oku; resimler dahil):\n" + \
-                  "\n".join(ek_yollar)
+        # talimat BASTA ve emir kipinde: sona eklenen not gorulup gecildi (yasandi -
+        # Claude Read'i cagirmadan "gorsel yok" dedi). Yollar normalize edilir.
+        yollar = "\n".join(os.path.normpath(y) for y in ek_yollar)
+        prompt = ("ONCE su dosyalari Read araciyla TEK TEK AC ve iceriklerini gor "
+                  "(kullanici panelden ekledi; resimler dahil - Read resimleri gosterir):\n"
+                  + yollar + "\n\nSONRA kullanicinin istegini cevapla:\n" + prompt)
         kayit["ekler"] = [os.path.basename(y) for y in ek_yollar]
     kayit["prompt"] = prompt
 
     def kos():
+        # KRITIK (yasandi): shell=True + cok satirli prompt arguman olarak verilince cmd.exe
+        # satir sonunu KOMUT AYRACI sayiyor - Claude'a yalniz ilk satir ulasiyordu (ek yollari,
+        # canli:true notu sessizce dusuyordu). Prompt artik STDIN'den gider; komutta yalniz
+        # tek satirlik bayraklar durur.
+        girdi = prompt
         if kayit["cli"] == "ozel" and sablon:
-            # HER TURLU CLI: kullanicinin sablonu, {prompt} yerine istem konur.
-            # Yerel panel - komutu kullanici yazar, kullanici calistirir.
-            cmd = sablon.replace("{prompt}", '"' + prompt.replace('"', '\\"') + '"')
+            if "{prompt}" in sablon:
+                cmd = sablon.replace("{prompt}", '"' + prompt.replace('"', "'").replace("\n", " ") + '"')
+                girdi = None
+            else:
+                cmd = sablon                       # sablon {prompt} icermiyorsa stdin'den
         else:
-            cmd = ["claude", "-p", prompt, "--output-format", "text"]
+            parcalar = ["claude", "-p", "--output-format", "text"]
             if kayit["model"]:
-                cmd += ["--model", kayit["model"]]
+                parcalar += ["--model", kayit["model"]]
             if kayit["effort"]:
-                cmd += ["--effort", kayit["effort"]]
+                parcalar += ["--effort", kayit["effort"]]
             izinler = []
             if kayit["araclar"]:
                 izinler += ["mcp__apprentice__worker_run", "mcp__apprentice__worker_status"]
-                # kullanici paneldeki daktiloda izliyor: usta canli kipi ACSIN (olculdu:
-                # ayni kalite, prompt -%31; MCP varsayilani kapali oldugu icin akis olmuyordu)
-                cmd[2] = cmd[2] + ("\n\n(Not: worker_run cagirirken canli:true parametresini "
-                                   "ekle - kullanici paneldeki canli akista izliyor. bekle:true "
-                                   "kullan; is bitince sonucu kisaca degerlendir.)")
+                girdi += ("\n\n(Not: worker_run cagirirken canli:true parametresini "
+                          "ekle - kullanici paneldeki canli akista izliyor. bekle:true "
+                          "kullan; is bitince sonucu kisaca degerlendir.)")
             if ek_yollar:
                 izinler.append("Read")             # ekleri (resim dahil) okuyabilsin
             if izinler:
-                cmd += ["--allowedTools", ",".join(izinler)]
+                parcalar += ["--allowedTools", '"%s"' % ",".join(izinler)]
+            cmd = " ".join(parcalar)
         env = dict(os.environ, APPRENTICE_HOME=HOME, APPRENTICE_IZLEYICI="0",
                    PYTHONIOENCODING="utf-8")
         try:
-            r = _sp.run(cmd, capture_output=True, text=True, encoding="utf-8",
+            r = _sp.run(cmd, input=girdi, capture_output=True, text=True, encoding="utf-8",
                         errors="replace", timeout=600, cwd=ROOT, env=env, shell=True)
             kayit["cevap"] = (r.stdout or "").strip() or ("HATA: " + (r.stderr or "")[-500:])
             kayit["durum"] = "bitti" if r.returncode == 0 else "hata"
@@ -546,6 +597,8 @@ class Istek(BaseHTTPRequestHandler):
                 self._gonder(_gorev_baslat(veri))
             elif yolu == "/api/usta":
                 self._gonder(_usta_istek(veri))
+            elif yolu == "/api/cirak_sohbet":
+                self._gonder(_cirak_sohbet(veri))
             elif yolu == "/api/eject":
                 self._gonder(_model_bosalt())
             elif yolu == "/api/yukle":
