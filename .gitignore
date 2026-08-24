@@ -25,3 +25,6 @@ canli_daktilo*/
 shell/ApprenticePanel/bin/
 shell/ApprenticePanel/obj/
 Apprentice-WebPanel.exe
+# cirak test alanlari (bagli calisma klasoru, urun kodu degil)
+CursorTest/
+Test_Kurulum/

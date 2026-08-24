@@ -28,13 +28,21 @@ Evidence and every experiment live in [apprentice-lab](https://github.com/malikk
 **Windows — no Python required.** Download `Apprentice-Setup.exe` from
 [Releases](https://github.com/malikkayaalp/apprentice/releases) and run it from anywhere. You pick
 the install folder; the setup then checks and completes, step by step: Python (downloads an embedded
-runtime if missing) → Ollama (starts it, or points you to the download) → the model (~20 GB, with a
-progress bar) → an `apprentice` MCP entry for every installed IDE (Cursor, VS Code, Windsurf; other
-entries are left untouched) → a self-test.
+runtime if missing) → Ollama (starts it, or points you to the download) → the model (sized to your
+RAM, with a progress bar) → an `apprentice` MCP entry for every installed IDE (Cursor, VS Code,
+Windsurf; other entries are left untouched) → a self-test.
 
 ![Apprentice Setup](docs/setup.png)
 
 **macOS / Linux / manual:** Python 3.10+ and `python kur.py` (same engine, no third-party packages).
+
+## Watch it work
+
+The setup installs **Apprentice WebPanel** — a native window (WebView2, no browser chrome, no
+Electron) that shows the apprentice working in real time: the event stream, the files it writes,
+the pipeline, the metrics, and a **diff view** of every version of every file it touched. You can
+also talk to both models from it — free-form chat with the local apprentice, and with Claude as
+the supervisor. See [Panel](#panel) below.
 
 ## Use
 
@@ -69,18 +77,59 @@ Türkçede *Çırak*. Usta bakar, çırak yapar.
 
 Kanıtlar ve bütün deneyler [apprentice-lab](https://github.com/malikkayaalp/apprentice-lab) deposunda.
 
+## Panel
+
+Kurulum masaüstüne **Apprentice Panel** kısayolu bırakır; kısayol `Apprentice-WebPanel.exe`'yi
+açar. Tarayıcı değil, **kendi penceresi** (WebView2; Electron yok, ek bağımlılık yok). Panel çırağı iş üstünde
+gösterir ve iki modelle de konuşmanızı sağlar.
+
+**Sekiz bölüm:** İŞLER · BORU HATTI · OLAY AKIŞI · ÇIRAK · METRİKLER · İŞ ÖZETİ ·
+USTA·CLAUDE · DOSYALAR
+
+**Yerleşim.** Paneller 24×24'lük bir ızgaraya oturur ve **çerçevenin dışına taşmaz**. Bir paneli
+başka bir panelin üstüne sürüklerseniz alttaki küçülmez — itilir, yer değiştirir ya da rafa iner.
+Yedi hazır dizilim vardır (Dengeli · Kodu izle · Sohbet · Denetim · Odak: çırak · Odak: usta ·
+Dar ekran) ve kendi düzeniniz kaydedilir.
+
+**Dışarı alma.** Her panel kendi **çerçevesiz** penceresine çıkabilir: kapatma/taşıma/büyütme
+düğmeleri bizimdir, "hep üstte" seçeneği vardır, yeniden boyutlandırılır. Dosya görüntüleyici de
+ayrı bir penceredir — kod, panel alanını kaplamaz.
+
+**Fark (diff) görünümü.** Denetleyenin sorusu "ne yazdı" değil **"ne değiştirdi"**dir. Aynı dosya
+onarım turlarında birkaç kez yazılır; her yazım bir **sürümdür**. Görüntüleyicideki `± fark`
+düğmesi iki sürüm arasındaki değişikliği gösterir: yeşil `+` / kırmızı `−` satırlar, `+18 −9`
+özeti, değişmeyen uzun bloklar katlanmış. Sürüm seçiciden herhangi bir turu açabilirsiniz.
+
+**Model kapsülü** (sağ üst). Çırak modeli oradan seçilir — görev kutusundaki seçiciyle aynı
+seçimdir. `▶` seçili modeli önceden ısıtır, `⏏` bellekten boşaltır. Model yüklemesi 30–60 sn
+sürdüğü için kapsül **ışık verir**: sarı nabız, dönen düğme, saniye sayacı; model gerçekten
+yüklendiğinde yeşil parlar. Ollama'nın kaydında görünmeyip RAM tutan **öksüz süreçler** de
+burada uyarı olarak çıkar ve tek tıkla temizlenir (ölçüldü: 13 GB geri alındı).
+
+**İki sohbet.** ÇIRAK bölümünde yerel modelle serbest sohbet edilir (görev kalıbı yok, hafızalı);
+USTA bölümü Claude Code CLI'yı kullanır. Kod blokları açılıp kapanır ve kopyalanır, her balonun
+kendi kopyala düğmesi vardır. İstersen sohbet bağlamını göreve taşıyabilirsin (varsayılan kapalı).
+
+Elle açmak: `python panel_ac.py` — ya da yalnız sunucu: `python clients/web/panel.py --port 8788`
+
 ## Yapı
 
 ```
-server/          MCP sunucusu: worker_run(görev, kabul_kriterleri, ortam) — bkz. server/README.md
-kur.py           kurulum motoru (Windows'ta Apprentice-Setup.exe olarak paketlenir)
-core/            Ollama istemcisi, şema koruması, ayar yükleyici, ilk-çalıştırma ölçümü
-mcpbridge/       MCP taşıma (stdio + Streamable HTTP), bağımlılıksız; test için fake_server
-envs/code/       kod ortamı: dosya oku/yaz, shell, test; workspace'e hapis; compile()+unittest/pytest doğrulayıcı
-envs/fake/       duman testi ortamı (model gerektirmez)
-envs/<eklenti>/  eklentiler buraya klonlanır ve otomatik keşfedilir (örn. apprentice-unity)
-clients/web/     canlı izleme sayfası: python clients/web/monitor.py → http://127.0.0.1:8765
-tests/           sözleşme testleri, kod ortamı testi, ölçüm kampanyası
+server/            MCP sunucusu: worker_run(görev, kabul_kriterleri, ortam) — bkz. server/README.md
+kur.py             kurulum motoru (Windows'ta Apprentice-Setup.exe olarak paketlenir)
+kur_gui.py         kurulum penceresi (adım adım, Tanı düğmesi, çökme günlüğü)
+core/              Ollama istemcisi, şema koruması, ayar yükleyici, ilk-çalıştırma ölçümü
+core/tani.py       ortam tanısı: Ollama/port/model/disk/RAM/izin kontrolleri, öksüz süreç avı
+mcpbridge/         MCP taşıma (stdio + Streamable HTTP), bağımlılıksız; test için fake_server
+envs/code/         kod ortamı: dosya oku/yaz, shell, test; workspace'e hapis; compile()+unittest/pytest
+envs/fake/         duman testi ortamı (model gerektirmez)
+envs/<eklenti>/    eklentiler buraya klonlanır ve otomatik keşfedilir (örn. apprentice-unity)
+clients/web/panel.py         panel sunucusu (stdlib; ek paket yok)
+clients/web/panel.html       panel arayüzü (tek dosya, derleme adımı yok)
+clients/web/goruntuleyici.py dosya görüntüleyici + sürüm/fark motoru (stdlib difflib)
+shell/ApprenticePanel/       WebView2 kabuğu (C#) — Apprentice-WebPanel.exe
+panel_ac.py        paneli açar (kabuk varsa onunla, yoksa tarayıcıyla)
+tests/             sözleşme testleri, kod ortamı testi, ölçüm kampanyaları
 ```
 
 ## Gereksinimler
@@ -97,14 +146,15 @@ tests/           sözleşme testleri, kod ortamı testi, ölçüm kampanyası
 ![Apprentice Setup](docs/setup.png)
 
 Adım adım: Python (yoksa gömülü Python'u indirir) → Ollama (yoksa yönlendirir, kapalıysa başlatır) → model
-(yoksa ilerleme yüzdesiyle indirir, ~20 GB) → kurulu IDE'lerin MCP ayarına `apprentice` girdisi
-(Cursor, VS Code, Windsurf; diğer girdilere dokunmaz) → öz-test.
+(yoksa ilerleme yüzdesiyle indirir) → kurulu IDE'lerin MCP ayarına `apprentice` girdisi
+(Cursor, VS Code, Windsurf; diğer girdilere dokunmaz) → öz-test → masaüstüne panel kısayolu.
 
 **macOS / Linux / elle:** Python 3.10+ ile aynı betik:
 
 ```bash
 python kur.py            # kurulum
 python kur.py --kontrol  # yalnızca durum
+python kur.py --tani     # ortam tanısı (aşağıya bakın)
 python kur.py --ide cursor,vscode,windsurf,claude-desktop
 python kur.py --olc      # + makineye özel num_batch ölçümü (2–3 dk; ölçüldü: 512 → 4096 arası +%342 prefill)
 python kur.py --kural <proje>   # projeye denetçi kuralı (.cursor/rules/apprentice.mdc + APPRENTICE.md)
@@ -134,14 +184,22 @@ alanlar ayrı depolardır ve `envs/<ad>` olarak klonlanır:
 - İşçi ayrık süreç; istemci iptal ederse öldürülür (Cursor'ın ~150 sn zaman aşımı ölçüldü →
   `bekle=false` + `worker_status`).
 - Araç bloğu küçük ve sabit tutulur: her turda yeniden gönderilir, kullanılmayan araç kalıcı vergidir.
+- Yazma anında derleme + ruff: hata bir sonraki tura değil, **aynı** tura döner.
+- `yazilabilir` listesi (−%94 token), `dogrulama=derleme` (−%55), canlı kip (−%31 istem).
 
 ## Test
 
 ```bash
 python tests/test_server.py        # model gerekmez
+python tests/test_panel.py         # panel + görüntüleyici sözleşmeleri (20 kontrol)
+python tests/test_tani.py          # 11 arıza senaryosu, simüle
 python tests/test_code_env.py      # kod ortamı; --live ile gerçek görev
 python tests/code_kampanya.py      # 6 görevlik ölçüm kampanyası (Ollama gerekir)
 ```
+
+Testler **sözleşme** testidir: uç ↔ arayüz bağları, id bütünlüğü, yerleşim motoru, ışık durum
+makinesi ve sözdizimi vurgulayıcısı gerçekten koşturularak denetlenir. Her yeni test, hatayı
+kasten geri koyarak **gerileme testinden** geçirilir — yakalamayan test yazılmaz.
 
 ## Bir şey çalışmıyorsa: önce TANI
 
@@ -167,6 +225,7 @@ Tanının kapsadığı gerçek durumlar:
 | Model klasörü başka diske taşınmış (`OLLAMA_MODELS`) | O diskin boş alanı ölçülür, yetmezse söylenir |
 | Disk dolu | Kaç GB gerektiği ve modeli başka diske taşıma yolu |
 | RAM/VRAM yetersiz | **Makineye uygun model otomatik seçilir** (aşağıya bakın) |
+| Ollama kapatılınca RAM tutan öksüz süreç | Panelde uyarı çıkar, tek tıkla temizlenir (ölçüldü: 13 GB) |
 | Kurulum klasörüne yazılamıyor | Başka klasör önerilir (Program Files gibi korumalı yerleri seçmeyin) |
 | İnternet/proxy yok | Mevcut modelle çalışmaya devam edilir; `HTTPS_PROXY` hatırlatılır |
 | Python eski | 3.10+ gerekir; Windows'ta Setup gömülü Python indirir |
@@ -185,9 +244,9 @@ uygun olanı seçer:
 | 12–24 GB | Qwen2.5-Coder 14B | ~9 GB |
 | 12 GB altı | Qwen2.5-Coder 7B | ~5 GB |
 
-Farklı bir model kullanmak isterseniz panelin **ÇIRAK MODELİ** listesinden seçin; ayarlar
-(bağlam penceresi, düşünme kipi) modelin kartına göre kendiliğinden uyarlanır. GPU şart
-değildir — GPU yoksa CPU'da çalışır, yalnızca yavaştır.
+Farklı bir model kullanmak isterseniz panelin sağ üstündeki **model kapsülünden** seçin; ayarlar
+(bağlam penceresi, düşünme kipi, araç desteği) modelin kartına göre kendiliğinden uyarlanır.
+GPU şart değildir — GPU yoksa CPU'da çalışır, yalnızca yavaştır.
 
 ### Sık karşılaşılanlar
 
@@ -196,6 +255,7 @@ değildir — GPU yoksa CPU'da çalışır, yalnızca yavaştır.
 - **"Panel açılmıyor"** — masaüstündeki *Apprentice Panel* kısayolu; açılmazsa hata penceresi
   sebebi gösterir. Elle: `python panel_ac.py`
 - **"Claude ile konuşamıyorum"** — panelin USTA bölümü Claude Code CLI ister ve **ayrı giriş**
-  gerekir (Claude Desktop girişi CLI'ya geçmez): `claude auth login`. Çırak girişsiz çalışır.
-- **"Model yavaş"** — ilk çağrıda model belleğe yüklenir (30–60 sn). Paneldeki ▶ ile önceden
-  ısıtabilirsiniz.
+  gerekir (Claude Desktop girişi CLI'ya geçmez): `claude auth login`. Oturum süresi dolduysa
+  panel bunu sarı balonla söyler ve yeniden giriş düğmesi verir. Çırak girişsiz çalışır.
+- **"Model yavaş"** — ilk çağrıda model belleğe yüklenir (30–60 sn). Paneldeki `▶` ile önceden
+  ısıtabilirsiniz; kapsüldeki sayaç ne kadar sürdüğünü gösterir.
