@@ -191,6 +191,7 @@ def inceleme(jobs_dir: str, jid: str) -> dict:
         "sema": SEMA,
         "is_id": jid,
         "durum": durum,
+        "kaynak": kayit.get("kaynak") or "",   # web-panel | mcp | ornek (olcum bunu eler)
         "baslik": kayit.get("baslik") or "",
         "gorev": kayit.get("gorev") or "",
         "model": kayit.get("model") or "",
