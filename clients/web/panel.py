@@ -731,6 +731,14 @@ class Istek(BaseHTTPRequestHandler):
                 import goruntuleyici as G
                 self._gonder(G.oku(DEPO.jobs_dir, q.get("is", ""), q.get("yol", ""),
                                    _sayi(q.get("surum"))))
+            elif yol.path == "/api/inceleme":
+                # INCELEME SOZLESMESI: arayuz olay semasini BILMEZ, bu projeksiyonu okur.
+                # Yarin dugum tabanli orkestratore gecersek sema degisir, sozlesme kalir.
+                try:
+                    from core.inceleme import inceleme
+                    self._gonder(inceleme(DEPO.jobs_dir, q.get("is", "")))
+                except Exception as e:  # noqa: BLE001
+                    self._gonder({"hata": str(e)[:200]})
             elif yol.path == "/api/dosya_surumler":
                 # ayni dosya onarim turlarinda birkac kez yazilir; kac surum var?
                 import goruntuleyici as G
