@@ -66,6 +66,16 @@ class Sihirbaz(tk.Tk):
         self.geometry("980x640")
         self.minsize(940, 600)   # dar pencerede "Kur"
         # dugmesi "K"ya kirpiliyordu (yasandi): alt satirdaki dort dugme sigmali
+        # Pencere/gorev cubugu ikonu: exe'ye gomulu ortak Apprentice ikonu (yildiz).
+        # Gelistirme kipinde assets/apprentice.ico'dan, exe icinde _MEIPASS'tan okunur.
+        for aday in (os.path.join(getattr(sys, "_MEIPASS", BURASI), "assets", "apprentice.ico"),
+                     os.path.join(BURASI, "assets", "apprentice.ico")):
+            try:
+                if os.path.isfile(aday):
+                    self.iconbitmap(aday)
+                    break
+            except Exception:
+                pass
         self.kuyruk = queue.Queue()
         self.durum = {k: "bekliyor" for k, _ in ADIMLAR}
         self.ollama_eksik = False

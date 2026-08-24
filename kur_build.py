@@ -28,8 +28,11 @@ with zipfile.ZipFile(payload, "w", zipfile.ZIP_DEFLATED) as z:
 print("payload.zip: %d dosya, %.1f MB" % (len(dosyalar), os.path.getsize(payload) / 1e6))
 
 sep = ";" if os.name == "nt" else ":"
+IKON = os.path.join(ROOT, "assets", "apprentice.ico")   # tum Apprentice exe'leri ayni ikon
 cmd = [sys.executable, "-m", "PyInstaller", "--onefile", "--windowed", "--name", "Apprentice-Setup",
+       "--icon", IKON,
        "--add-data", payload + sep + ".",
+       "--add-data", IKON + sep + "assets",
        "--exclude-module", "core", "--exclude-module", "tests", "--exclude-module", "test_server",
        "--exclude-module", "kur",
        # kur.py ve core/config.py exe DISINDA (kurulum klasorunden yuklenir); onlarin stdlib
