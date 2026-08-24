@@ -50,6 +50,8 @@ body::before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.5;
 #ust .bosluk{flex:1}
 #fontKontrol{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--soluk)}
 #fontKontrol input{width:90px;accent-color:var(--vurgu)}
+#panelEkle{padding:4px 8px;border-radius:8px;border:1px solid var(--cizgi2);
+  background:var(--panel);color:var(--soluk);font-size:11px;outline:none;max-width:130px}
 #yerlesimSifirla{padding:4px 10px;border-radius:8px;border:1px solid var(--cizgi2);
   background:transparent;color:var(--soluk);cursor:pointer;font-size:11px}
 #yerlesimSifirla:hover{color:var(--metin);border-color:var(--cizgi)}
@@ -62,7 +64,6 @@ body::before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.5;
   transition:left .18s ease,top .18s ease,width .18s ease,height .18s ease}
 .kart.tasiniyor{transition:none;opacity:.92;box-shadow:0 18px 50px rgba(0,0,0,.65);
   border-color:var(--vurgu)}
-.kart.onde{border-color:var(--cizgi);box-shadow:0 14px 44px rgba(0,0,0,.55)}
 .kbaslik{padding:7px 12px;font:700 .78em var(--mono);letter-spacing:1.4px;color:var(--soluk);
   border-bottom:1px solid var(--cizgi2);display:flex;align-items:center;gap:8px;
   cursor:grab;user-select:none;flex-shrink:0}
@@ -74,9 +75,12 @@ body::before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.5;
 .tutamak{position:absolute;right:2px;bottom:2px;width:16px;height:16px;cursor:nwse-resize;
   border-right:2px solid rgba(217,119,87,.5);border-bottom:2px solid rgba(217,119,87,.5);
   border-radius:0 0 6px 0}
+.kapat{margin-left:6px;color:var(--soluk);cursor:pointer;font-size:1.05em;line-height:1;
+  padding:0 3px;border-radius:5px;flex-shrink:0}
+.kapat:hover{color:var(--kirmizi);background:rgba(224,108,95,.12)}
 
-#isListe{overflow-y:auto;padding:7px}
-.is{padding:8px 10px;border-radius:9px;margin-bottom:5px;cursor:pointer;
+#isListe{overflow-y:auto;padding:7px;flex:1}
+.is{padding:8px 10px;border-radius:9px;margin-bottom:5px;cursor:pointer;position:relative;
   border:1px solid transparent;transition:all .15s}
 .is:hover{background:var(--panel2);border-color:var(--cizgi)}
 .is.aktif{background:linear-gradient(90deg,rgba(217,119,87,.16),rgba(217,119,87,.05));
@@ -85,6 +89,10 @@ body::before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.5;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .is .iid{font:.68em var(--mono);color:var(--soluk)}
 .is .imeta{display:flex;gap:6px;margin-top:3px;flex-wrap:wrap}
+.is .sil{position:absolute;right:6px;top:6px;color:var(--soluk);cursor:pointer;
+  font-size:.8em;padding:1px 5px;border-radius:5px;opacity:0;transition:opacity .15s}
+.is:hover .sil{opacity:1}
+.is .sil:hover{color:var(--kirmizi);background:rgba(224,108,95,.15)}
 .rozet{padding:1px 7px;border-radius:6px;font-size:.68em;border:1px solid var(--cizgi2);color:var(--soluk)}
 .rozet.ok{color:var(--yesil);border-color:rgba(127,191,111,.4)}
 .rozet.hata{color:var(--kirmizi);border-color:rgba(224,108,95,.4)}
@@ -104,6 +112,8 @@ body::before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.5;
   filter:drop-shadow(0 0 4px rgba(217,119,87,.6))}
 @keyframes akis{to{stroke-dashoffset:-11}}
 .dugum{cursor:pointer}
+#filtreEtiket{cursor:pointer}
+#filtreEtiket:hover{text-decoration:underline}
 
 #akis{flex:1;overflow-y:auto;overflow-x:hidden;padding:9px 11px;scroll-behavior:smooth;min-width:0}
 .olay{display:flex;gap:9px;padding:6px 9px;margin-bottom:5px;border-radius:9px;min-width:0;
@@ -138,8 +148,38 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
 .tk-kw{color:var(--mavi)} .tk-str{color:var(--sari)} .tk-yorum{color:#8a9a7a;font-style:italic}
 .tk-sayi{color:var(--mor)} .tk-fn{color:var(--vurgu2)}
 
-#dmetin{flex:1;overflow-y:auto;padding:10px 13px;font:.95em/1.55 var(--mono);color:var(--kod);
-  white-space:pre-wrap;overflow-wrap:anywhere;background:rgba(10,9,7,.5)}
+/* ---- sohbet panelleri (usta + cirak) ---- */
+.ayarlar{display:flex;flex-wrap:wrap;gap:6px;padding:7px 10px;border-bottom:1px solid var(--cizgi2);
+  align-items:center;flex-shrink:0}
+.ayarlar select,.ayarlar input[type=text]{padding:4px 8px;border-radius:8px;
+  border:1px solid var(--cizgi2);background:rgba(0,0,0,.35);color:var(--metin);
+  font:.78em var(--mono);outline:none}
+.ayarlar select:focus,.ayarlar input:focus{border-color:rgba(217,119,87,.55)}
+.ayarlar .kutucuk{display:flex;align-items:center;gap:4px;font-size:.72em;color:var(--soluk);
+  cursor:pointer;white-space:nowrap}
+.ayarlar details{width:100%}
+.ayarlar details summary{cursor:pointer;font-size:.72em;color:var(--soluk)}
+.ayarlar details .icra{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+.sohbet{flex:1;overflow-y:auto;padding:10px 12px;display:flex;flex-direction:column;gap:8px;
+  scroll-behavior:smooth}
+.balon{max-width:88%;padding:8px 12px;border-radius:13px;font-size:.9em;line-height:1.55;
+  white-space:pre-wrap;overflow-wrap:anywhere;animation:gel .25s ease}
+.balon.ben{align-self:flex-end;background:linear-gradient(135deg,rgba(217,119,87,.25),rgba(217,119,87,.12));
+  border:1px solid rgba(217,119,87,.35);border-bottom-right-radius:4px}
+.balon.karsi{align-self:flex-start;background:var(--panel2);border:1px solid var(--cizgi2);
+  border-bottom-left-radius:4px;font-family:var(--mono);font-size:.85em}
+.balon.karsi.dusunuyor{color:var(--soluk);font-style:italic}
+.balon .bmeta{display:block;font-size:.68em;color:var(--soluk);margin-top:5px;font-family:var(--mono)}
+.girisSatiri{display:flex;gap:7px;padding:8px 10px;border-top:1px solid var(--cizgi2);flex-shrink:0}
+.girisSatiri textarea{flex:1;padding:8px 11px;border-radius:11px;resize:none;
+  border:1px solid var(--cizgi2);background:rgba(0,0,0,.35);color:var(--metin);
+  font:.88em var(--mono);outline:none;max-height:110px}
+.girisSatiri textarea:focus{border-color:rgba(217,119,87,.55)}
+.girisSatiri button{padding:0 16px;border:none;border-radius:11px;cursor:pointer;
+  font:700 .85em "Segoe UI";color:#fff;background:linear-gradient(135deg,var(--vurgu),#c96a48)}
+.girisSatiri button:disabled{opacity:.5;cursor:wait}
+#dmetin{flex:1;overflow-y:auto;padding:10px 13px;font:.92em/1.55 var(--mono);color:var(--kod);
+  white-space:pre-wrap;overflow-wrap:anywhere;background:rgba(10,9,7,.5);min-height:60px}
 #dmetin .bekliyor{color:var(--soluk);font-style:italic}
 .imlec{display:inline-block;width:8px;height:1em;background:var(--vurgu);
   vertical-align:text-bottom;animation:nefes .9s infinite;margin-left:1px;border-radius:1px}
@@ -152,7 +192,6 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
   background:linear-gradient(180deg,var(--metin),var(--vurgu2));
   -webkit-background-clip:text;background-clip:text;color:transparent}
 .metrik span{font-size:.62em;color:var(--soluk);letter-spacing:.5px}
-
 #ozetKutu{padding:9px 12px;font:.85em var(--mono);color:var(--soluk);line-height:1.7;
   overflow-y:auto;overflow-wrap:anywhere}
 #ozetKutu b{color:var(--metin)}
@@ -160,38 +199,12 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
   background:rgba(224,179,69,.08);border:1px solid rgba(224,179,69,.3);color:var(--sari);
   overflow-wrap:anywhere}
 .uyari.sert{background:rgba(224,108,95,.1);border-color:rgba(224,108,95,.45);color:var(--kirmizi)}
-
 #dosyaSekmeler{display:flex;flex-wrap:wrap;gap:5px;padding:8px 10px 0;flex-shrink:0}
 .sekme{padding:3px 10px;border-radius:7px;font:600 .78em var(--mono);cursor:pointer;
   border:1px solid var(--cizgi2);color:var(--soluk);transition:all .15s}
 .sekme:hover{color:var(--metin)}
 .sekme.aktif{color:var(--vurgu2);border-color:rgba(217,119,87,.5);background:rgba(217,119,87,.1)}
 #dosyaGoster{flex:1;overflow:auto;margin:8px;border-radius:10px;background:rgba(12,10,8,.7);min-height:60px}
-
-.gform{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:7px;padding:11px 13px}
-.gform textarea,.gform input,.gform select{width:100%;padding:7px 10px;border-radius:9px;
-  border:1px solid var(--cizgi2);background:rgba(0,0,0,.35);color:var(--metin);
-  font:.88em var(--mono);outline:none;resize:vertical}
-.gform textarea:focus,.gform input:focus{border-color:rgba(217,119,87,.55)}
-.gform label{font-size:.72em;color:var(--soluk);letter-spacing:.4px}
-.ksatir{display:flex;gap:8px}.ksatir>div{flex:1}
-.kapat{margin-left:6px;color:var(--soluk);cursor:pointer;font-size:1.05em;line-height:1;
-  padding:0 3px;border-radius:5px;flex-shrink:0}
-.kapat:hover{color:var(--kirmizi);background:rgba(224,108,95,.12)}
-#panelEkle{padding:4px 8px;border-radius:8px;border:1px solid var(--cizgi2);
-  background:var(--panel);color:var(--soluk);font-size:11px;outline:none;max-width:130px}
-#filtreEtiket{cursor:pointer}
-#filtreEtiket:hover{text-decoration:underline}
-.is{position:relative}
-.is .sil{position:absolute;right:6px;top:6px;color:var(--soluk);cursor:pointer;
-  font-size:.8em;padding:1px 5px;border-radius:5px;opacity:0;transition:opacity .15s}
-.is:hover .sil{opacity:1}
-.is .sil:hover{color:var(--kirmizi);background:rgba(224,108,95,.15)}
-.kutucuk{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--soluk);cursor:pointer}
-#gonder{padding:10px;border:none;border-radius:10px;cursor:pointer;font:700 13px "Segoe UI";
-  color:#fff;background:linear-gradient(135deg,var(--vurgu),#c96a48)}
-#gonder:disabled{opacity:.5;cursor:wait}
-#kNot{font-size:10.5px;color:var(--soluk)}
 #tost{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:90;
   padding:10px 22px;border-radius:999px;background:rgba(24,20,17,.95);
   border:1px solid rgba(127,191,111,.5);color:var(--yesil);font:600 12.5px var(--mono);
@@ -202,10 +215,8 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
 <div id="ust">
   <div id="logo">APPRENTICE</div>
   <div class="pill"><span class="nokta" id="modelNokta"></span><span id="modelAd">—</span>
-    <span id="yukle" title="çırağı önceden yükle (ısıt) — ilk işin ~1 dk yükleme bedelini peşin öder"
-      style="cursor:pointer;margin-left:4px">▶</span>
-    <span id="eject" title="modeli RAM/VRAM'den boşalt (sonraki iş kendiliğinden yeniden yükler ~1 dk)"
-      style="cursor:pointer;margin-left:2px">⏏</span></div>
+    <span id="yukle" title="çırağı önceden yükle (ısıt)" style="cursor:pointer;margin-left:4px">▶</span>
+    <span id="eject" title="modeli RAM/VRAM'den boşalt" style="cursor:pointer;margin-left:2px">⏏</span></div>
   <div class="pill">VRAM <b id="vramT">—</b><div class="olcekbar"><i id="vramBar"></i></div></div>
   <div class="pill">GPU <b id="gpuT">—</b><div class="olcekbar"><i id="gpuBar"></i></div></div>
   <div class="bosluk"></div>
@@ -225,9 +236,31 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
   <div class="kart" data-p="akis"><div class="kbaslik">CANLI OLAY AKIŞI</div>
     <div class="kgovde"><div id="akis"></div></div><div class="tutamak"></div></div>
 
-  <div class="kart" data-p="daktilo"><div class="kbaslik" style="color:var(--sari)">MODEL ŞU AN YAZIYOR
+  <div class="kart" data-p="cirak"><div class="kbaslik" style="color:var(--yesil)">🔧 ÇIRAK · YEREL MODEL
       <span class="kek" id="daktiloDurum"></span></div>
-    <div class="kgovde"><div id="dmetin"><span class="bekliyor">canlı kipte iş başlayınca token akışı burada…</span></div></div>
+    <div class="kgovde">
+      <div class="ayarlar">
+        <select id="kModel" title="çırak modeli"><option value="">model: varsayılan</option></select>
+        <select id="kDog" title="doğrulama">
+          <option value="derleme">derleme (hızlı)</option>
+          <option value="tam">tam (testler)</option></select>
+        <label class="kutucuk"><input type="checkbox" id="kCanli" checked> canlı akış</label>
+        <label class="kutucuk"><input type="checkbox" id="kHarita"> harita</label>
+        <details><summary>▸ ayrıntı: dizin · yazılabilir · kriterler · başlık</summary>
+          <div class="icra">
+            <input type="text" id="kDizin" placeholder="çalışma dizini" style="width:130px">
+            <input type="text" id="kYaz" placeholder="yazılabilir (virgülle)" style="width:170px">
+            <input type="text" id="kBaslik" placeholder="başlık" style="width:130px">
+            <input type="text" id="kKriter" placeholder="kriterler ( ; ile ayır)" style="flex:1;min-width:200px">
+          </div></details>
+        <div id="kModelKart" style="width:100%;font-size:.68em;color:var(--soluk);line-height:1.5"></div>
+      </div>
+      <div id="dmetin"><span class="bekliyor">görevi aşağıdan yaz — canlı kipte token akışı burada akar…</span></div>
+      <div class="girisSatiri">
+        <textarea id="kGorev" rows="2" placeholder="çırağa görev yaz… (Enter = gönder, Shift+Enter = yeni satır)"></textarea>
+        <button id="kGonder">▶</button>
+      </div>
+    </div>
     <div class="tutamak"></div></div>
 
   <div class="kart" data-p="metrik"><div class="kbaslik">METRİKLER</div>
@@ -246,77 +279,36 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
     <div class="kgovde"><div id="ozetKutu">—</div><div id="uyarilar" style="padding:0 12px 10px"></div></div>
     <div class="tutamak"></div></div>
 
-  <div class="kart" data-p="dosyalar"><div class="kbaslik">YAZILAN DOSYALAR</div>
-    <div class="kgovde"><div id="dosyaSekmeler"></div><div id="dosyaGoster"></div></div>
-    <div class="tutamak"></div></div>
-
-  <div class="kart" data-p="gorev"><div class="kbaslik" style="color:var(--vurgu2)">⚡ GÖREV GÖNDER
-      <span class="kek">usta sonraki aracında bildirilir</span></div>
-    <div class="kgovde"><div class="gform">
-      <label>KİME</label>
-      <select id="kHedef">
-        <option value="cirak">🔧 Çırak (yerel model — bedava)</option>
-        <option value="usta">🧠 Usta (Claude CLI — Max kotasından harcar)</option>
-      </select>
-      <div id="ustaForm" style="display:none;flex-direction:column;gap:7px">
-        <div class="ksatir">
-          <div><label>CLI</label><select id="uCli">
-            <option value="claude">claude</option>
-            <option value="ozel">özel komut</option></select></div>
-          <div id="uModelKap"><label>MODEL</label><select id="uModel">
-            <option value="">varsayılan</option>
-            <option value="claude-fable-5">Fable 5</option>
-            <option value="claude-opus-5">Opus 5</option>
-            <option value="claude-sonnet-5">Sonnet 5</option>
-            <option value="claude-haiku-4-5">Haiku 4.5</option></select></div>
-          <div id="uEffortKap"><label>EFFORT</label><select id="uEffort">
-            <option value="">varsayılan</option>
-            <option value="low">low</option><option value="medium">medium</option>
-            <option value="high">high</option></select></div>
-        </div>
-        <div id="uSablonKap" style="display:none">
-          <label>KOMUT ŞABLONU ({prompt} yerine istem konur)</label>
-          <input id="uSablon" placeholder='gemini -p {prompt}'>
-        </div>
-        <label>PROMPT</label>
-        <textarea id="uPrompt" rows="4" placeholder="ör: son işi worker_status ile incele ve değerlendir... ya da herhangi bir soru"></textarea>
-        <label class="kutucuk"><input type="checkbox" id="uAraclar"> araç izni (worker_run/worker_status — tam döngü)</label>
-      </div>
-      <div id="cirakForm" style="display:flex;flex-direction:column;gap:7px">
-      <div class="ksatir">
-        <div><label>ÇIRAK MODELİ</label><select id="kModel"><option value="">varsayılan</option></select></div>
-      </div>
-      <div id="kModelKart" style="font-size:.72em;color:var(--soluk);line-height:1.5"></div>
-      <label>BAŞLIK (listede görünür)</label>
-      <input id="kBaslik" placeholder="kalman filtresi">
-      <label>GÖREV</label>
-      <textarea id="kGorev" rows="3" placeholder="kalman.py dosyasina 1D Kalman filtresi sinifi yaz..."></textarea>
-      <label>KABUL KRİTERLERİ (her satır bir kriter)</label>
-      <textarea id="kKriter" rows="2"></textarea>
-      <div class="ksatir">
-        <div><label>ÇALIŞMA DİZİNİ</label><input id="kDizin" placeholder="deneme"></div>
-        <div><label>YAZILABİLİR (virgülle)</label><input id="kYaz" placeholder="kalman.py"></div>
-      </div>
-      <div class="ksatir">
-        <div><label>DOĞRULAMA</label><select id="kDog"><option value="derleme">derleme (hızlı)</option><option value="tam">tam (testler koşar)</option></select></div>
-        <div style="display:flex;align-items:flex-end;gap:12px;padding-bottom:4px">
-          <label class="kutucuk"><input type="checkbox" id="kCanli" checked> canlı</label>
-          <label class="kutucuk"><input type="checkbox" id="kHarita"> harita</label>
-        </div>
-      </div>
-      </div>
-      <button id="gonder">ÇIRAĞI ÇALIŞTIR</button>
-      <div id="kNot"></div>
-    </div></div>
-    <div class="tutamak"></div></div>
-
   <div class="kart" data-p="usta"><div class="kbaslik" style="color:var(--cyan)">🧠 USTA · CLAUDE
       <span class="kek" id="ustaDurum"></span></div>
     <div class="kgovde">
-      <div id="ustaListe" style="flex-shrink:0;max-height:32%;overflow-y:auto;padding:6px 8px 0"></div>
-      <div id="ustaCevap" style="flex:1;overflow-y:auto;padding:9px 13px;font:.88em/1.6 var(--mono);
-        white-space:pre-wrap;overflow-wrap:anywhere;color:var(--metin)">—</div>
+      <div class="ayarlar">
+        <select id="uCli"><option value="claude">claude</option><option value="ozel">özel CLI</option></select>
+        <select id="uModel">
+          <option value="">model: varsayılan</option>
+          <option value="claude-fable-5">Fable 5</option>
+          <option value="claude-opus-5">Opus 5</option>
+          <option value="claude-sonnet-5">Sonnet 5</option>
+          <option value="claude-haiku-4-5">Haiku 4.5</option></select>
+        <select id="uEffort">
+          <option value="">effort: varsayılan</option>
+          <option value="low">low</option><option value="medium">medium</option>
+          <option value="high">high</option></select>
+        <label class="kutucuk" title="Claude worker_run/worker_status kullanabilir — çırağı kendisi çalıştırır">
+          <input type="checkbox" id="uAraclar"> araç izni</label>
+        <input type="text" id="uSablon" placeholder='özel komut: gemini -p {prompt}'
+          style="display:none;flex:1;min-width:180px">
+      </div>
+      <div class="sohbet" id="ustaChat"></div>
+      <div class="girisSatiri">
+        <textarea id="uPrompt" rows="2" placeholder="Claude'a yaz… (Enter = gönder; her istek Max kotasından)"></textarea>
+        <button id="uGonder">▶</button>
+      </div>
     </div>
+    <div class="tutamak"></div></div>
+
+  <div class="kart" data-p="dosyalar"><div class="kbaslik">YAZILAN DOSYALAR</div>
+    <div class="kgovde"><div id="dosyaSekmeler"></div><div id="dosyaGoster"></div></div>
     <div class="tutamak"></div></div>
 </div>
 <div id="tost"></div>
@@ -327,51 +319,41 @@ const $=s=>document.querySelector(s);
 const ASAMALAR=[["tumu","TÜMÜ"],["baslama","BAŞLANGIÇ"],["uretim","ÜRETİM"],
                 ["dogrulama","DOĞRULAMA"],["onarim","ONARIM"],["usta","USTA RAPORU"]];
 const IKON={arac:"⚙",yazim:"▣",hata:"✖",sonuc:"◈",bilgi:"·",kanit:"✓"};
-let seciliIs=null, imlecN=0, filtre="tumu", takip=true, olaylar=[], t0=null;
-let daktiloHedef="", daktiloCiz=0, dosyalar={}, seciliDosya=null, dosyaElle=false;
-let girisKartlariEklendi=false, sonOzet={}, girisSonH="";
 const KAYNAK={tool:["ÇIRAK","yesil"],tool_result:["ÇIRAK","yesil"],write:["ÇIRAK","yesil"],
   assistant:["ÇIRAK","yesil"],onarim:["USTA→","cyan"],usta_rapor:["→USTA","cyan"],
   baglam:["SİSTEM","soluk"],system:["SİSTEM","soluk"],result:["HARNESS","mavi"],
   error:["HARNESS","kirmizi"],exit:["HARNESS","mavi"],duraganlik:["HARNESS","kirmizi"]};
+let seciliIs=null, imlecN=0, filtre="tumu", takip=true, olaylar=[], t0=null;
+let daktiloHedef="", daktiloCiz=0, dosyalar={}, seciliDosya=null, dosyaElle=false;
+let girisKartlariEklendi=false, sonOzet={}, girisSonH="", ustaSonH="";
 
-/* --------------- akilli izgara yerlesimi (gridstack-mini) ---------------
-   24 sutunluk gorunmez izgara: tasima/boyutlandirma hucreye SNAP eder; cakisan panel
-   ASAGI itilir (ust uste binmek imkansiz); birakinca herkes YUKARI sikisir (bosluk kalmaz).
-   Digerleri CSS gecissiyle yumusak kayar - "sezgisel" his buradan gelir. */
+/* --------------- akilli izgara (gridstack-mini) --------------- */
 const SUTUN=24, SATIR=24;
 const VARSAYILAN={
   isler:{gx:0,gy:0,gw:5,gh:24}, boru:{gx:5,gy:0,gw:12,gh:4},
-  akis:{gx:5,gy:4,gw:12,gh:12}, daktilo:{gx:5,gy:16,gw:12,gh:8},
-  metrik:{gx:17,gy:0,gw:7,gh:5}, ozet:{gx:17,gy:5,gw:7,gh:6},
-  gorev:{gx:17,gy:11,gw:7,gh:8}, dosyalar:{gx:17,gy:19,gw:7,gh:5},
-  usta:{gx:5,gy:24,gw:12,gh:8}};
-const PANEL_ADLARI={isler:"İŞLER",boru:"BORU HATTI",akis:"OLAY AKIŞI",daktilo:"DAKTİLO",
-  metrik:"METRİKLER",ozet:"İŞ ÖZETİ",gorev:"GÖREV GÖNDER",dosyalar:"DOSYALAR",
-  usta:"USTA · CLAUDE"};
-let gizliPaneller=new Set(["usta"]);      // usta paneli ilk kullanimda kendiliginden acilir
+  akis:{gx:5,gy:4,gw:12,gh:10}, cirak:{gx:5,gy:14,gw:12,gh:10},
+  metrik:{gx:17,gy:0,gw:7,gh:5}, ozet:{gx:17,gy:5,gw:7,gh:5},
+  usta:{gx:17,gy:10,gw:7,gh:9}, dosyalar:{gx:17,gy:19,gw:7,gh:5}};
+const PANEL_ADLARI={isler:"İŞLER",boru:"BORU HATTI",akis:"OLAY AKIŞI",cirak:"ÇIRAK",
+  metrik:"METRİKLER",ozet:"İŞ ÖZETİ",usta:"USTA · CLAUDE",dosyalar:"DOSYALAR"};
+let gizliPaneller=new Set();
 try{const g=JSON.parse(localStorage.getItem("apprentice_gizli_paneller"));
-  if(g)gizliPaneller=new Set(g)}catch(e){}
+  if(g)gizliPaneller=new Set(g.filter(a=>PANEL_ADLARI[a]))}catch(e){}
 let gizliIsler=new Set();
 try{gizliIsler=new Set(JSON.parse(localStorage.getItem("apprentice_gizli_isler"))||[])}catch(e){}
 let yerlesim=null;
-try{yerlesim=JSON.parse(localStorage.getItem("apprentice_yerlesim_v3"))||null}catch(e){}
-if(!yerlesim||!yerlesim.isler||yerlesim.isler.gx===undefined)
-  yerlesim=JSON.parse(JSON.stringify(VARSAYILAN));
-// GOC: kayitli yerlesim eski surumden olabilir - sonradan eklenen paneller (or. gorev)
-// varsayilandan tamamlanir; yoksa o panel tasinamaz/boyutlanamazdi (yasandi).
+try{yerlesim=JSON.parse(localStorage.getItem("apprentice_yerlesim_v4"))||null}catch(e){}
+if(!yerlesim||!yerlesim.isler)yerlesim=JSON.parse(JSON.stringify(VARSAYILAN));
 for(const k in VARSAYILAN)
-  if(!yerlesim[k]||yerlesim[k].gx===undefined)
-    yerlesim[k]=JSON.parse(JSON.stringify(VARSAYILAN[k]));
+  if(!yerlesim[k]||yerlesim[k].gx===undefined)yerlesim[k]=JSON.parse(JSON.stringify(VARSAYILAN[k]));
+for(const k in yerlesim)if(!VARSAYILAN[k])delete yerlesim[k];   // hayalet panel kalmasin
 let ustZ=10, surukluAd=null;
 
 function hucre(){const A=$("#alan").getBoundingClientRect();
-  return {w:A.width/SUTUN,h:Math.max(30,A.height/SATIR),ax:A.left,ay:A.top}}
+  return {w:A.width/SUTUN,h:Math.max(30,A.height/SATIR)}}
 function cakisir(a,b){return !(a.gx+a.gw<=b.gx||b.gx+b.gw<=a.gx||a.gy+a.gh<=b.gy||b.gy+b.gh<=a.gy)}
-
 function aktifAdlar(){return Object.keys(yerlesim).filter(a=>!gizliPaneller.has(a))}
 function itele(){
-  // suruklenen sabit kalir; onunla (ve birbirleriyle) cakisanlar asagi itilir
   const adlar=aktifAdlar().sort((a,b)=>yerlesim[a].gy-yerlesim[b].gy);
   let koruma=0, degisti=true;
   while(degisti&&koruma++<300){degisti=false;
@@ -379,7 +361,7 @@ function itele(){
       if(a===b)continue;
       const p=yerlesim[a],q=yerlesim[b];
       if(!cakisir(p,q))continue;
-      const itilen=(b===surukluAd)?a:b;          // surukleneni ASLA itme
+      const itilen=(b===surukluAd)?a:b;
       const sabit=(itilen===a)?b:a;
       yerlesim[itilen].gy=yerlesim[sabit].gy+yerlesim[sabit].gh;
       degisti=true;
@@ -387,15 +369,13 @@ function itele(){
   }
 }
 function sikistir(){
-  // yukari sikistirma: bosluk birakma (suruklenen haric - kullanicinin eli nerede o orada)
   const adlar=aktifAdlar().filter(a=>a!==surukluAd)
     .sort((a,b)=>yerlesim[a].gy-yerlesim[b].gy);
   for(const a of adlar){
     const p=yerlesim[a];
     while(p.gy>0){
       p.gy--;
-      const carpti=aktifAdlar().some(b=>b!==a&&cakisir(p,yerlesim[b]));
-      if(carpti){p.gy++;break}
+      if(aktifAdlar().some(b=>b!==a&&cakisir(p,yerlesim[b]))){p.gy++;break}
     }
   }
 }
@@ -412,17 +392,15 @@ function uygula(){
     [...gizliPaneller].map(a=>'<option value="'+a+'">'+(PANEL_ADLARI[a]||a)+'</option>').join("");
   sec.style.display=gizliPaneller.size?"":"none";
 }
+function duzenle(){itele();sikistir();itele();uygula()}
+function kaydet(){localStorage.setItem("apprentice_yerlesim_v4",JSON.stringify(yerlesim))}
 function panelKaydet(){localStorage.setItem("apprentice_gizli_paneller",JSON.stringify([...gizliPaneller]))}
+window.addEventListener("resize",uygula);
+$("#yerlesimSifirla").onclick=()=>{yerlesim=JSON.parse(JSON.stringify(VARSAYILAN));kaydet();duzenle()};
 $("#panelEkle").onchange=e=>{if(e.target.value){gizliPaneller.delete(e.target.value);
   panelKaydet();duzenle()}e.target.value=""};
-function duzenle(){itele();sikistir();itele();uygula()}
-function kaydet(){localStorage.setItem("apprentice_yerlesim_v3",JSON.stringify(yerlesim))}
-window.addEventListener("resize",uygula);
-$("#yerlesimSifirla").onclick=()=>{yerlesim=JSON.parse(JSON.stringify(VARSAYILAN));kaydet();uygula()};
-
 document.querySelectorAll(".kart").forEach(k=>{
   const ad=k.dataset.p;
-  // kapatma dugmesi: panel gizlenir, ust bardaki "panel ekle" ile geri gelir
   const kx=document.createElement("span"); kx.className="kapat"; kx.textContent="✕";
   kx.title="paneli kapat"; kx.addEventListener("pointerdown",e=>e.stopPropagation());
   kx.onclick=e=>{e.stopPropagation();gizliPaneller.add(ad);panelKaydet();duzenle()};
@@ -431,7 +409,7 @@ document.querySelectorAll(".kart").forEach(k=>{
     document.querySelectorAll(".kart").forEach(x=>x.classList.remove("onde"));k.classList.add("onde")});
   const bas=k.querySelector(".kbaslik");
   bas.addEventListener("pointerdown",e=>{
-    if(e.target.closest(".kek"))return;
+    if(e.target.closest(".kek")||e.target.closest(".kapat"))return;
     const p=yerlesim[ad], h=hucre();
     const sx=e.clientX,sy=e.clientY,ox=p.gx,oy=p.gy;
     surukluAd=ad; k.classList.add("tasiniyor");
@@ -476,6 +454,7 @@ function renklendir(satir){
   s=s.replace(/\b(\d[\d_.]*)\b/g,'␁sayi␂$1␃');
   return s.replace(/␁(\w+)␂/g,'<span class="tk-$1">').replace(/␃/g,'</span>');
 }
+function renklendir2(metin){return metin.split("\n").map(renklendir).join("\n")}
 function kodBlok(yol,icerik,sinir){
   const satirlar=icerik.split("\n"); const n=satirlar.length;
   const kes=sinir&&n>sinir?satirlar.slice(0,sinir):satirlar;
@@ -485,7 +464,7 @@ function kodBlok(yol,icerik,sinir){
   return h+'</pre></div>';
 }
 
-/* --------------- boru hatti --------------- */
+/* --------------- boru hatti + filtre --------------- */
 function boruCiz(){
   const svg=$("#boruSvg"); const g=ASAMALAR.filter(a=>a[0]!=="tumu");
   const aralik=760/(g.length+0.4); let h="";
@@ -501,8 +480,8 @@ function boruCiz(){
   svg.innerHTML=h;
 }
 function filtreSec(a){
-  if(a===filtre&&a!=="tumu")a="tumu";               // ayni asamaya ikinci tik = filtreyi kaldir
-  filtre=a; $("#akis").innerHTML=""; girisKartlariEklendi=false; girisKartlari();
+  if(a===filtre&&a!=="tumu")a="tumu";
+  filtre=a; $("#akis").innerHTML=""; girisSonH=""; girisKartlari();
   olaylar.forEach(ekleOlay);
   const ADLAR={baslama:"BAŞLANGIÇ",uretim:"ÜRETİM",dogrulama:"DOĞRULAMA",onarim:"ONARIM",usta:"USTA"};
   $("#filtreEtiket").textContent=a==="tumu"?"":
@@ -515,7 +494,7 @@ window.filtreSec=filtreSec;
 
 /* --------------- olay akisi --------------- */
 function girisKartlari(){
-  if(filtre!=="tumu"&&filtre!=="baslama"){const e=$("#girisKap");if(e)e.remove();return;}
+  if(filtre!=="tumu"&&filtre!=="baslama"){const e=$("#girisKap");if(e)e.remove();girisSonH="";return;}
   const kap=$("#akis"); let h="";
   if(sonOzet.gorev)h+='<div class="olay sonuc"><span class="ikon">◈</span><div class="icerik">GÖREV (ustadan): '+
     kacir(sonOzet.gorev.slice(0,400))+'</div></div>';
@@ -527,13 +506,11 @@ function girisKartlari(){
     kacir(sonOzet.sistem_metin)+'</pre></details></div></div>';
   let gk=$("#girisKap");
   if(!gk){gk=document.createElement("div");gk.id="girisKap";kap.insertAdjacentElement("afterbegin",gk);}
-  // innerHTML ile KIYASLAMA yapma: tarayici normalize eder, hep "farkli" cikar ve her
-  // yoklamada yeniden cizilir - aciklarin (details) kendiliginden kapanma hatasi buydu.
   if(girisSonH!==h){gk.innerHTML=h;girisSonH=h;}
 }
 function ekleOlay(o){
   if(filtre!=="tumu"&&o.asama!==filtre)return;
-  if(o.tip==="baglam"&&o.ham&&o.ham.sistem_metin){sonOzet.sistem_metin=o.ham.sistem_metin;girisKartlariEklendi=false;girisKartlari();}
+  if(o.tip==="baglam"&&o.ham&&o.ham.sistem_metin){sonOzet.sistem_metin=o.ham.sistem_metin;girisKartlari();}
   const kap=$("#akis"); const div=document.createElement("div");
   const sinif=o.metin&&o.metin.startsWith("KANIT")?"kanit":o.etiket;
   div.className="olay "+sinif;
@@ -554,7 +531,7 @@ function ekleOlay(o){
   if(takip)kap.scrollTop=kap.scrollHeight;
 }
 
-/* --------------- daktilo --------------- */
+/* --------------- cirak daktilosu --------------- */
 function daktiloAdim(){
   if(daktiloCiz<daktiloHedef.length){
     const geri=daktiloHedef.length-daktiloCiz;
@@ -566,7 +543,6 @@ function daktiloAdim(){
   }
   setTimeout(daktiloAdim,42);
 }
-function renklendir2(metin){return metin.split("\n").map(renklendir).join("\n")}
 
 /* --------------- dosyalar --------------- */
 function dosyalarCiz(){
@@ -586,8 +562,9 @@ function dosyalarCiz(){
 function isSec(id){
   if(seciliIs===id)return;
   seciliIs=id; imlecN=0; olaylar=[]; dosyalar={}; seciliDosya=null; dosyaElle=false;
-  daktiloHedef=""; daktiloCiz=0; t0=null; girisKartlariEklendi=false; sonOzet={};
-  $("#akis").innerHTML=""; $("#dmetin").innerHTML='<span class="bekliyor">bekleniyor…</span>';
+  daktiloHedef=""; daktiloCiz=0; t0=null; girisSonH=""; sonOzet={};
+  $("#akis").innerHTML="";
+  $("#dmetin").innerHTML='<span class="bekliyor">bekleniyor…</span>';
 }
 async function isleriCek(){
   try{
@@ -640,19 +617,14 @@ async function olaylariCek(){
       if(r.canli&&r.canli.trim()){
         if(!r.canli.startsWith(daktiloHedef)){daktiloCiz=0;$("#dmetin").innerHTML="";}
         daktiloHedef=r.canli; $("#daktiloDurum").textContent="● akıyor";
+      }else if(s.durum==="calisiyor"&&s.canli===false){
+        $("#daktiloDurum").textContent="bu işte canlı akış kapalı";
+        if(!daktiloHedef)$("#dmetin").innerHTML='<span class="bekliyor">bu iş CANLI KİP KAPALI '+
+          'başlatıldı (MCP/usta işlerinde varsayılan) — token akışı üretilmiyor.\n'+
+          'Kod bittiği an OLAY AKIŞI\'na YAZDI bloğu olarak düşer.\n'+
+          'Akış için görevi buradan (canlı akış işaretli) gönder ya da usta canli:true desin.</span>';
       }else{
-        if(s.durum==="calisiyor"&&s.canli===false){
-          $("#daktiloDurum").textContent="bu işte kapalı";
-          if(!daktiloHedef)$("#dmetin").innerHTML='<span class="bekliyor">bu iş CANLI KİP KAPALI '+
-            'başlatıldı (MCP/usta işlerinde varsayılan) — token akışı üretilmiyor.\n'+
-            'Kod yine yazılıyor: bittiği an OLAY AKIŞI\'na YAZDI bloğu olarak düşer.\n'+
-            'Akışı izlemek için işi canlı kutusu işaretli gönder (panel) ya da usta '+
-            'worker_run(canli=true) desin.</span>';
-        }else{
-          $("#daktiloDurum").textContent=s.durum==="calisiyor"?"boşta":"";
-          if(s.durum!=="calisiyor"&&!daktiloHedef)
-            $("#dmetin").innerHTML='<span class="bekliyor">canlı kipte iş başlayınca token akışı burada…</span>';
-        }
+        $("#daktiloDurum").textContent=s.durum==="calisiyor"?"model üretiyor…":"";
       }
       const aktif=s.asama||"baslama";
       ASAMALAR.forEach(([a])=>{if(a==="tumu")return;
@@ -674,9 +646,10 @@ async function olaylariCek(){
       const b=s.baglam||{};
       $("#ozetKutu").innerHTML="iş: <b>"+(s.baslik||s.id||"—")+"</b><br><span style='font-size:.85em'>"+(s.id||"")+
         "</span><br>ortam: <b>"+(s.ortam||"—")+"</b> · doğrulama: <b>"+(s.dogrulama||"—")+
-        "</b> · durum: <b>"+(s.durum||"—")+"</b><br>bağlam: sistem <b>"+(b.sistem||"—")+
-        "</b> kr · hafıza <b>"+(b.hafiza||"—")+"</b> · STATE <b>"+(b.durum||"—")+
-        "</b> · harita <b>"+(b.harita||"—")+"</b><br>görev: "+kacir((s.gorev||"").slice(0,180));
+        "</b> · canlı: <b>"+(s.canli?"açık":"kapalı")+"</b> · durum: <b>"+(s.durum||"—")+
+        "</b><br>bağlam: sistem <b>"+(b.sistem||"—")+"</b> kr · hafıza <b>"+(b.hafiza||"—")+
+        "</b> · STATE <b>"+(b.durum||"—")+"</b> · harita <b>"+(b.harita||"—")+
+        "</b><br>görev: "+kacir((s.gorev||"").slice(0,180));
       const uy=$("#uyarilar"); uy.innerHTML="";
       (s.uyarilar||[]).slice(0,5).forEach(u=>{
         const d=document.createElement("div");
@@ -691,27 +664,64 @@ async function olaylariCek(){
   setTimeout(olaylariCek,550);
 }
 
-/* --------------- gorev paneli (hedef: cirak | usta) --------------- */
-let seciliUsta=null;
-$("#kHedef").onchange=e=>{
-  const u=e.target.value==="usta";
-  $("#ustaForm").style.display=u?"flex":"none";
-  $("#cirakForm").style.display=u?"none":"flex";
-  $("#gonder").textContent=u?"USTAYA GÖNDER":"ÇIRAĞI ÇALIŞTIR";
-};
+/* --------------- USTA: Claude Desktop tarzi sohbet --------------- */
 $("#uCli").onchange=e=>{
   const ozel=e.target.value==="ozel";
-  $("#uSablonKap").style.display=ozel?"":"none";
-  $("#uModelKap").style.display=ozel?"none":"";
-  $("#uEffortKap").style.display=ozel?"none":"";
+  $("#uSablon").style.display=ozel?"":"none";
+  $("#uModel").style.display=ozel?"none":"";
+  $("#uEffort").style.display=ozel?"none":"";
 };
+async function ustaChatCek(){
+  try{
+    const r=await(await fetch("/api/usta_liste")).json();
+    const ist=(r.istekler||[]).slice().reverse();          // eski -> yeni (sohbet sirasi)
+    const kosan=ist.filter(x=>x.durum==="calisiyor").length;
+    $("#ustaDurum").textContent=kosan?"● Claude düşünüyor":"";
+    let h="";
+    for(const x of ist){
+      h+='<div class="balon ben">'+kacir(x.ozet)+(x.araclar?' <span class="bmeta">araç izinli</span>':"")+'</div>';
+      if(x.durum==="calisiyor"){
+        h+='<div class="balon karsi dusunuyor">düşünüyor… '+(x.sure||0)+' sn'+
+           (x.araclar?" (araçlı istekler 30-60 sn sürebilir)":"")+'</div>';
+      }else{
+        const c=await(await fetch("/api/usta_cevap?id="+x.id)).json();
+        h+='<div class="balon karsi">'+kacir((c.cevap||"—").slice(0,4000))+
+           '<span class="bmeta">'+(x.sure||"?")+' sn'+(x.araclar?" · araçlı":"")+'</span></div>';
+      }
+    }
+    if(!ist.length)h='<div class="balon karsi" style="opacity:.6">Merhaba — buradan Claude ile konuş; '+
+      '"araç izni" açıkken çırağı da çalıştırabilirim.</div>';
+    if(ustaSonH!==h){
+      const kap=$("#ustaChat"); const dipte=kap.scrollTop+kap.clientHeight>=kap.scrollHeight-80;
+      kap.innerHTML=h; ustaSonH=h;
+      if(dipte||kosan)kap.scrollTop=kap.scrollHeight;
+    }
+  }catch(e){}
+  setTimeout(ustaChatCek,2500);
+}
+async function ustaGonder(){
+  const p=$("#uPrompt").value.trim(); if(!p)return;
+  const b=$("#uGonder"); b.disabled=true;
+  try{
+    const r=await(await fetch("/api/usta",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({prompt:p,araclar:$("#uAraclar").checked,cli:$("#uCli").value,
+        sablon:$("#uSablon").value,model:$("#uModel").value,effort:$("#uEffort").value})})).json();
+    if(r.hata){tost("HATA: "+r.hata);}else{$("#uPrompt").value="";ustaSonH="";}
+  }catch(e){tost("HATA: "+e);}
+  b.disabled=false;
+}
+$("#uGonder").onclick=ustaGonder;
+$("#uPrompt").addEventListener("keydown",e=>{
+  if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();ustaGonder();}});
+
+/* --------------- CIRAK: gorev girisi --------------- */
 async function modelleriYukle(){
   try{
     const r=await(await fetch("/api/modeller")).json();
     const s=$("#kModel");
-    s.innerHTML='<option value="">varsayılan ('+
-      ((r.varsayilan||"").split("/").pop().slice(0,30)||"?")+')</option>'+
-      (r.modeller||[]).map(m=>'<option value="'+m.ad+'">'+m.ad.split("/").pop().slice(0,40)+
+    s.innerHTML='<option value="">model: varsayılan ('+
+      ((r.varsayilan||"").split("/").pop().slice(0,24)||"?")+')</option>'+
+      (r.modeller||[]).map(m=>'<option value="'+m.ad+'">'+m.ad.split("/").pop().slice(0,36)+
         ' · '+m.gb+' GB</option>').join("");
   }catch(e){}
 }
@@ -723,104 +733,57 @@ $("#kModel").onchange=async e=>{
     const p=k.parametreler||{};
     kap.innerHTML="kart: aile <b>"+(k.aile||"?")+"</b> · ctx <b>"+(k.ctx||"?")+
       "</b> · yetenekler: "+(k.yetenekler||[]).join(",")+
-      (Object.keys(p).length?"<br>önerilen: "+Object.entries(p).map(([a,b])=>a+"="+b).join(" · "):"")+
-      "<br><span style='color:var(--sari)'>not: işçi koşusunda temperature=0 (determinizm, ölçüldü); ctx karta göre sınırlanır</span>";
+      (Object.keys(p).length?" · önerilen: "+Object.entries(p).map(([a,b])=>a+"="+b).join(" "):"")+
+      " <span style='color:var(--sari)'>(işçide temperature=0 — determinizm; ctx karta göre sınırlanır)</span>";
   }catch(e){}
 };
+async function cirakGonder(){
+  const g=$("#kGorev").value.trim(); if(!g)return;
+  const b=$("#kGonder"); b.disabled=true;
+  try{
+    const veri={baslik:$("#kBaslik").value, gorev:g, model:$("#kModel").value,
+      kriterler:$("#kKriter").value.split(";").map(x=>x.trim()).filter(Boolean),
+      calisma_dizini:$("#kDizin").value.trim(), dogrulama:$("#kDog").value,
+      yazilabilir:$("#kYaz").value.split(",").map(x=>x.trim()).filter(Boolean),
+      canli:$("#kCanli").checked, harita:$("#kHarita").checked};
+    const r=await(await fetch("/api/gorev",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(veri)})).json();
+    if(r.hata){tost("HATA: "+r.hata);}
+    else{
+      $("#kGorev").value=""; $("#kBaslik").value=""; $("#kKriter").value="";
+      tost("🔧 "+(r.baslik||r.is_id)+" başladı"); takip=true;
+    }
+  }catch(e){tost("HATA: "+e);}
+  b.disabled=false;
+}
+$("#kGonder").onclick=cirakGonder;
+$("#kGorev").addEventListener("keydown",e=>{
+  if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();cirakGonder();}});
+
+/* --------------- ust bar --------------- */
+function tost(m){const t=$("#tost");t.textContent=m;t.style.display="block";
+  setTimeout(()=>t.style.display="none",5000)}
 $("#yukle").onclick=async()=>{
-  const t=$("#tost"); t.textContent="▶ çırak yükleniyor (~1 dk)…";
-  t.style.display="block";
+  tost("▶ çırak yükleniyor (~1 dk)…");
   try{
     const r=await(await fetch("/api/yukle",{method:"POST",headers:{"Content-Type":"application/json"},
       body:"{}"})).json();
-    t.textContent=r.hata?("HATA: "+r.hata):
-      ("▶ yükleniyor: "+(r.model||"").split("/").pop().slice(0,30)+" — üstteki nokta yeşile dönünce hazır");
-  }catch(e){t.textContent="HATA: "+e;}
-  setTimeout(()=>t.style.display="none",5000);
+    tost(r.hata?("HATA: "+r.hata):("▶ yükleniyor: "+(r.model||"").split("/").pop().slice(0,30)+
+      " — nokta yeşile dönünce hazır"));
+  }catch(e){tost("HATA: "+e);}
 };
 $("#eject").onclick=async()=>{
   try{
     const r=await(await fetch("/api/eject",{method:"POST",headers:{"Content-Type":"application/json"},
       body:"{}"})).json();
-    const t=$("#tost");
-    t.textContent=r.hata?("HATA: "+r.hata):("⏏ boşaltıldı: "+((r.bosaltilan||[]).map(x=>x.split("/").pop()).join(", ")||"yüklü model yoktu"));
-    t.style.display="block"; setTimeout(()=>t.style.display="none",5000);
+    tost(r.hata?("HATA: "+r.hata):("⏏ boşaltıldı: "+((r.bosaltilan||[]).map(x=>x.split("/").pop()).join(", ")||"yüklü model yoktu")));
   }catch(e){}
-};
-async function ustaListeCek(){
-  try{
-    const r=await(await fetch("/api/usta_liste")).json();
-    const ist=r.istekler||[];
-    const kosan=ist.filter(x=>x.durum==="calisiyor").length;
-    $("#ustaDurum").textContent=kosan?("● "+kosan+" istek koşuyor"):"";
-    const kap=$("#ustaListe"); kap.innerHTML="";
-    ist.forEach(x=>{
-      const d=document.createElement("div");
-      d.className="is"+(x.id===seciliUsta?" aktif":"");
-      d.innerHTML='<div class="ibaslik">'+kacir(x.ozet)+'</div><div class="imeta">'+
-        '<span class="rozet '+(x.durum==="calisiyor"?"kosuyor":(x.durum==="bitti"?"ok":"hata"))+'">'+
-        x.durum+'</span>'+(x.sure?'<span class="rozet">'+x.sure+'s</span>':"")+
-        (x.araclar?'<span class="rozet web">araçlı</span>':"")+'</div>';
-      d.onclick=()=>{seciliUsta=x.id};
-      kap.appendChild(d);
-    });
-    if(!seciliUsta&&ist.length)seciliUsta=ist[0].id;
-    if(seciliUsta){
-      const c=await(await fetch("/api/usta_cevap?id="+seciliUsta)).json();
-      $("#ustaCevap").textContent=c.cevap||(c.durum==="calisiyor"?
-        "Claude düşünüyor… "+Math.round(Date.now()/1000-(c.baslangic||Date.now()/1000))+
-        " sn (araç izinli istekler 30-60 sn sürebilir)":"—");
-    }
-  }catch(e){}
-  setTimeout(ustaListeCek,3000);
-}
-$("#gonder").onclick=async()=>{
-  if($("#kHedef").value==="usta"){
-    const b=$("#gonder"); b.disabled=true; $("#kNot").textContent="Claude'a gönderiliyor...";
-    try{
-      const r=await(await fetch("/api/usta",{method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({prompt:$("#uPrompt").value,araclar:$("#uAraclar").checked,
-          cli:$("#uCli").value,sablon:$("#uSablon").value,
-          model:$("#uModel").value,effort:$("#uEffort").value})})).json();
-      if(r.hata){$("#kNot").textContent="HATA: "+r.hata;}
-      else{
-        $("#kNot").textContent=""; $("#uPrompt").value=""; seciliUsta=r.id;
-        gizliPaneller.delete("usta"); panelKaydet(); duzenle();   // usta paneli kendiliginden acilir
-        const t=$("#tost"); t.textContent="🧠 Claude'a gitti — cevap USTA panelinde";
-        t.style.display="block"; setTimeout(()=>t.style.display="none",5000);
-      }
-    }catch(e){$("#kNot").textContent="HATA: "+e;}
-    b.disabled=false; return;
-  }
-  const b=$("#gonder"); b.disabled=true; $("#kNot").textContent="gönderiliyor...";
-  try{
-    const veri={baslik:$("#kBaslik").value, gorev:$("#kGorev").value,
-      model:$("#kModel").value,
-      kriterler:$("#kKriter").value.split("\n"),
-      calisma_dizini:$("#kDizin").value.trim(), dogrulama:$("#kDog").value,
-      yazilabilir:$("#kYaz").value.split(",").map(s=>s.trim()).filter(Boolean),
-      canli:$("#kCanli").checked, harita:$("#kHarita").checked};
-    const r=await(await fetch("/api/gorev",{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify(veri)})).json();
-    if(r.hata){$("#kNot").textContent="HATA: "+r.hata;}
-    else{
-      $("#kNot").textContent="";
-      // form temizlenir: yeni gorev icin bos alan (dizin/yazilabilir tercihi kalir)
-      $("#kBaslik").value=""; $("#kGorev").value=""; $("#kKriter").value="";
-      const t=$("#tost");
-      t.textContent="⚡ "+(r.baslik||r.is_id)+" başladı — usta bir sonraki aracında bildirilecek";
-      t.style.display="block"; setTimeout(()=>t.style.display="none",6000);
-      takip=true;
-    }
-  }catch(e){$("#kNot").textContent="HATA: "+e;}
-  b.disabled=false;
 };
 $("#akis").addEventListener("wheel",()=>{const a=$("#akis");
   takip=a.scrollTop+a.clientHeight>=a.scrollHeight-60;});
 
-boruCiz(); uygula(); filtreSec("tumu"); isleriCek(); olaylariCek(); daktiloAdim(); ustaListeCek();
-modelleriYukle();
+boruCiz(); duzenle(); filtreSec("tumu");
+isleriCek(); olaylariCek(); daktiloAdim(); ustaChatCek(); modelleriYukle();
 </script>
 </body>
 </html>
