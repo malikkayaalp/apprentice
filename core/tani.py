@@ -19,7 +19,7 @@ Kapsanan gercek senaryolar (hepsi sahada gorulen turden):
 Bagimlilik yok (stdlib).
 """
 from __future__ import annotations
-import json, os, platform, shutil, socket, subprocess, sys, urllib.error, urllib.request
+import json, os, platform, shutil, socket, subprocess, sys, time, urllib.error, urllib.request
 
 PENCERESIZ = 0x08000000 if os.name == "nt" else 0
 GB = 1024 ** 3
@@ -87,6 +87,65 @@ def onerilen_model(ram: float, vram: float) -> dict:
         if ram >= m["ram_gb"]:
             return m
     return MODELLER[-1]
+
+
+OKSUZ_ONBELLEK = {"veri": [], "t": 0.0}
+
+
+def oksuz_kosucular(zorla: bool = False) -> list:
+    """OKSUZ llama-server surecleri: Ollama modeli AYRI bir surecte calistirir
+    (ollama serve = yonetici, llama-server.exe = asil bellek). 'ollama serve' zorla
+    kapatilirsa (taskkill /F, cokme, guncelleme) cocuk surec OKSUZ kalir ve modelin
+    tuttugu RAM'i (10-50 GB) salmaz. Ollama'nin kaydinda gorunmedigi icin panel de
+    "model yuklu degil" der - kullanici "RAM neden sisti?" diye sorar (yasandi: 13 GB).
+
+    Doner: [{"pid":..., "gb":..., "ebeveyn":...}] - yalnizca Windows'ta anlamli.
+    Onbellek 15 sn: surec listesi taramasi ucuz degil."""
+    if os.name != "nt":
+        return []
+    simdi = time.time()
+    if not zorla and simdi - OKSUZ_ONBELLEK["t"] < 15:
+        return OKSUZ_ONBELLEK["veri"]
+    OKSUZ_ONBELLEK["t"] = simdi
+    import subprocess
+    try:
+        ps = ("$c=@{}; Get-CimInstance Win32_Process -Filter \"Name='llama-server.exe' OR "
+              "Name='ollama.exe'\" | ForEach-Object { $c[$_.ProcessId]=$_ }; "
+              "$canli = ($c.Values | Where-Object {$_.Name -eq 'ollama.exe'}).ProcessId; "
+              "$c.Values | Where-Object {$_.Name -eq 'llama-server.exe'} | ForEach-Object { "
+              "'{0},{1},{2},{3}' -f $_.ProcessId, $_.ParentProcessId, $_.WorkingSetSize, "
+              "([int]($canli -contains $_.ParentProcessId)) }")
+        r = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True,
+                           text=True, timeout=30, creationflags=0x08000000)
+        out = []
+        for satir in (r.stdout or "").splitlines():
+            p = satir.strip().split(",")
+            if len(p) != 4 or not p[0].isdigit():
+                continue
+            pid, ebeveyn, bellek, sahipli = int(p[0]), int(p[1]), int(p[2]), p[3] == "1"
+            if not sahipli and bellek > 500_000_000:      # 0.5 GB alti: kapaniyor olabilir
+                out.append({"pid": pid, "gb": round(bellek / 1e9, 1), "ebeveyn": ebeveyn})
+        OKSUZ_ONBELLEK["veri"] = out
+        return out
+    except Exception:
+        return OKSUZ_ONBELLEK["veri"]
+
+
+def oksuz_temizle() -> dict:
+    """Oksuz kosuculari oldur (surec agaciyla). Ollama'nin KENDI kayitli modellerine
+    dokunmaz - onlar 'ollama serve' altinda calisir ve ⏏ ile bosaltilir."""
+    import subprocess
+    liste = oksuz_kosucular(zorla=True)
+    kapanan, gb = [], 0.0
+    for o in liste:
+        try:
+            subprocess.run(["taskkill", "/PID", str(o["pid"]), "/T", "/F"],
+                           capture_output=True, timeout=20, creationflags=0x08000000)
+            kapanan.append(o["pid"]); gb += o["gb"]
+        except Exception:
+            pass
+    OKSUZ_ONBELLEK["t"] = 0.0                            # bir sonraki yoklamada yeniden bak
+    return {"kapanan": kapanan, "kazanilan_gb": round(gb, 1)}
 
 
 # --------------------------------------------------------------------- kontroller
@@ -289,6 +348,20 @@ def kontrol_yazma(dizin: str) -> dict:
                      "calistir. Program Files gibi korumali klasorleri secme.")
 
 
+def kontrol_kalinti() -> dict:
+    """Oksuz llama-server: Ollama zorla kapatilinca cocuk surec RAM'i salmaz (olculdu: 13 GB)."""
+    o = oksuz_kosucular(zorla=True)
+    if not o:
+        return sonuc("kalinti", "ok", "Artik (oksuz) model sureci yok")
+    gb = round(sum(x["gb"] for x in o), 1)
+    return sonuc("kalinti", "uyari",
+                 "%d artik llama-server sureci %.1f GB RAM tutuyor" % (len(o), gb),
+                 "Ollama zorla kapatilinca (taskkill/cokme) cocuk surec bellegi salmaz. "
+                 "Panelin ust barindaki sari '⚠ artık süreç' kapsuluyle tek tikla temizle, "
+                 "ya da: taskkill /PID %s /T /F" % " /PID ".join(str(x["pid"]) for x in o),
+                 {"surecler": o, "gb": gb})
+
+
 def kontrol_panel_portu(port: int = 8788) -> dict:
     if not _port_dolu(port):
         return sonuc("panel_portu", "ok", "Panel portu bos (%d)" % port)
@@ -318,6 +391,7 @@ def tani(model_ad: str = "", kurulum_dizini: str = "", url: str = "") -> dict:
     if k[-1]["durum"] != "hata":
         k.append(kontrol_ollama_calisiyor(url))
         k.append(kontrol_model(model_ad, url))
+    k.append(kontrol_kalinti())
     k.append(kontrol_ag(url))
     k.append(kontrol_panel_portu())
     durum = "hata" if any(x["durum"] == "hata" for x in k) else \

@@ -158,6 +158,15 @@ def main() -> int:
         assert r["durum"] == "hata" and "3.10" in r["cozum"], r
     print("10 eski python: ok")
 
+    # 11) OKSUZ llama-server (Ollama zorla kapatilinca RAM'i salmayan cocuk surec)
+    with Yama(T, "oksuz_kosucular", lambda zorla=False: [{"pid": 111, "gb": 13.0, "ebeveyn": 999}]):
+        r = T.kontrol_kalinti()
+        assert r["durum"] == "uyari" and "13.0 GB" in r["mesaj"], r
+        assert "taskkill" in r["cozum"] and "111" in r["cozum"], r
+    with Yama(T, "oksuz_kosucular", lambda zorla=False: []):
+        assert T.kontrol_kalinti()["durum"] == "ok"
+    print("11 oksuz kosucu (RAM sismesi): ok")
+
     # toplu tani: sema butunlugu + 'hata' varsa toplam durum 'hata'
     r = T.tani(kurulum_dizini=os.path.join(ROOT, ".apprentice_test_home"))
     assert set(r) >= {"durum", "kontroller", "makine", "oneri"}, r

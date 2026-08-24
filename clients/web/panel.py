@@ -107,23 +107,52 @@ def _ekleri_kaydet(ekler: list, hedef_dir: str, yalniz_metin: bool) -> tuple:
     return yollar, red
 
 
+def _oksuz_kosucular():
+    """Oksuz llama-server surecleri (core/tani.py'de tek uygulama)."""
+    try:
+        from core import tani as T
+        return T.oksuz_kosucular()
+    except Exception:
+        return []
+
+
+def _oksuz_temizle() -> dict:
+    try:
+        from core import tani as T
+        return T.oksuz_temizle()
+    except Exception as e:  # noqa: BLE001
+        return {"hata": str(e)[:200]}
+
+
 _SISTEM_ONBELLEK = {"veri": {"model": "", "yuklu_gb": 0, "vram": [0, 0], "gpu": 0}, "t": 0.0}
 
 
+_SISTEM_MESGUL = threading.Lock()
+
+
 def _sistem() -> dict:
-    """Onbellekli: /api/isler her cagrida nvidia-smi + ollama yokluyordu -> 2.1 sn gecikme
-    (olculdu; panel acilisi bu yuzden geciyordu). Artik 3 sn'lik onbellek, tazeleme AYRI
-    is parcaciginda - istek asla beklemez."""
+    """Onbellekli sistem durumu. /api/isler her cagrida nvidia-smi + ollama yoklarsa 2.1 sn
+    gecikiyor (olculdu) - bu yuzden onbellek + ayri is parcaciginda tazeleme.
+    ILK cagri SENKRON: panel acilir acilmaz "model yuklu degil" yaziyordu, cunku olcum daha
+    gelmemisti; kullanici "VRAM'de model var ama panel gormuyor" dedi (yasandi)."""
     simdi = time.time()
-    if simdi - _SISTEM_ONBELLEK["t"] > 3:
-        _SISTEM_ONBELLEK["t"] = simdi
-        threading.Thread(target=lambda: _SISTEM_ONBELLEK.update(veri=_sistem_olc()),
-                         daemon=True).start()
+    if not _SISTEM_ONBELLEK["t"]:                 # ilk olcum: bekle (en fazla ~1.5 sn)
+        with _SISTEM_MESGUL:
+            if not _SISTEM_ONBELLEK["t"]:
+                _SISTEM_ONBELLEK["veri"] = _sistem_olc()
+                _SISTEM_ONBELLEK["t"] = time.time()
+        return _SISTEM_ONBELLEK["veri"]
+    if simdi - _SISTEM_ONBELLEK["t"] > 2 and not _SISTEM_MESGUL.locked():
+        def tazele():
+            with _SISTEM_MESGUL:                  # ust uste is parcacigi birikmesin
+                _SISTEM_ONBELLEK["veri"] = _sistem_olc()
+                _SISTEM_ONBELLEK["t"] = time.time()
+        threading.Thread(target=tazele, daemon=True).start()
     return _SISTEM_ONBELLEK["veri"]
 
 
 def _sistem_olc() -> dict:
-    out = {"model": "", "yuklu_gb": 0, "vram": [0, 0], "gpu": 0}
+    out = {"model": "", "yuklu_gb": 0, "vram": [0, 0], "gpu": 0, "ornekler": [], "toplam_gb": 0}
     try:
         import urllib.request
         with urllib.request.urlopen("http://localhost:11434/api/ps", timeout=3) as r:
@@ -131,6 +160,12 @@ def _sistem_olc() -> dict:
         if m:
             out["model"] = m[0].get("name", "").split("/")[-1]
             out["yuklu_gb"] = round(m[0].get("size", 0) / 1e9)
+            # TUM ornekler: ayni model iki kez yuklenirse (iki sunucu / eski surec kalintisi)
+            # bellek iki katina cikar - kullanici bunu panelde gormeli.
+            out["ornekler"] = [{"ad": x.get("name", "").split("/")[-1],
+                                "gb": round(x.get("size", 0) / 1e9, 1),
+                                "vram_gb": round(x.get("size_vram", 0) / 1e9, 1)} for x in m]
+            out["toplam_gb"] = round(sum(x.get("size", 0) for x in m) / 1e9)
     except Exception:
         out["model"] = None
     try:
@@ -142,6 +177,7 @@ def _sistem_olc() -> dict:
         out["vram"] = [k, t]; out["gpu"] = u
     except Exception:
         pass
+    out["oksuz"] = _oksuz_kosucular()      # Ollama'nin kaydinda olmayan, RAM tutan kalintilar
     return out
 
 
@@ -782,6 +818,8 @@ class Istek(BaseHTTPRequestHandler):
                         self._gonder({"durum": "giris penceresi acildi"})
                     except Exception as e:  # noqa: BLE001
                         self._gonder({"hata": str(e)[:200]})
+            elif yolu == "/api/oksuz_temizle":
+                self._gonder(_oksuz_temizle())
             elif yolu == "/api/eject":
                 self._gonder(_model_bosalt())
             elif yolu == "/api/yukle":

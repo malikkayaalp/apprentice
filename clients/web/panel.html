@@ -43,6 +43,8 @@ body::before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.5;
 .nokta{width:8px;height:8px;border-radius:50%;background:var(--yesil);
   box-shadow:0 0 8px var(--yesil);animation:nefes 2.2s infinite}
 .nokta.kapali{background:var(--kirmizi);box-shadow:0 0 8px var(--kirmizi);animation:none}
+.nokta.uyari{background:var(--sari);box-shadow:0 0 8px var(--sari)}
+.nokta.bekle{background:var(--soluk);animation:nabiz 1.2s infinite}
 @keyframes nefes{0%,100%{opacity:1}50%{opacity:.35}}
 .olcekbar{width:90px;height:6px;border-radius:6px;background:rgba(255,255,255,.08);overflow:hidden}
 .olcekbar i{display:block;height:100%;width:0%;border-radius:6px;
@@ -817,8 +819,34 @@ async function isleriCek(){
   try{
     const r=await(await fetch("/api/isler")).json();
     const sis=r.sistem||{};
-    $("#modelAd").textContent=sis.model?sis.model.slice(0,30)+" · "+sis.yuklu_gb+" GB":"model yüklü değil";
-    $("#modelNokta").className="nokta"+(sis.model?"":" kapali");
+    // model kapsulu: olcum HENUZ gelmediyse "kontrol ediliyor" (eskiden hemen "yüklü değil"
+    // yazip kullaniciyi yaniltiyordu); birden fazla ornek yukluyse UYARI (bellek iki katina cikar)
+    const orn=sis.ornekler||[];
+    if(sis.model===undefined||sis.model===null&&sis.vram&&!sis.vram[1]){
+      $("#modelAd").textContent="kontrol ediliyor…"; $("#modelNokta").className="nokta bekle";
+    }else if(orn.length>1){
+      $("#modelAd").textContent="⚠ "+orn.length+" model bellekte · "+sis.toplam_gb+" GB";
+      $("#modelNokta").className="nokta uyari";
+      $("#modelAd").title=orn.map(o=>o.ad+" ("+o.gb+" GB, VRAM "+o.vram_gb+")").join(" | ")+
+        "  —  Aynı model iki kez yüklüyse ⏏ ile boşalt.";
+    }else if(sis.model){
+      $("#modelAd").textContent=sis.model.slice(0,30)+" · "+sis.yuklu_gb+" GB";
+      $("#modelNokta").className="nokta";
+      $("#modelAd").title=orn.length?("VRAM'de "+orn[0].vram_gb+" GB, toplam "+orn[0].gb+" GB"):"";
+    }else{
+      $("#modelAd").textContent="model yüklü değil"; $("#modelNokta").className="nokta kapali";
+      $("#modelAd").title="İlk görevde yüklenir (30-60 sn) — ▶ ile önceden ısıtabilirsin";
+    }
+    // OKSUZ KOSUCU uyarisi: Ollama zorla kapatilinca cocuk surec RAM'i (10-50 GB) salmaz;
+    // Ollama'nin kaydinda gorunmez, panel "model yuklu degil" der - kullanici "RAM neden
+    // sisti?" diye sorar (yasandi: 13 GB). Artik gorunur ve tek tikla temizlenir.
+    const oks=sis.oksuz||[], op=$("#oksuzPill");
+    if(oks.length){
+      op.style.display="";
+      $("#oksuzMetin").textContent=oks.reduce((a,b)=>a+b.gb,0).toFixed(1)+" GB artık süreç";
+      op.title="Ollama kapatılınca öksüz kalan "+oks.length+" llama-server süreci RAM tutuyor "+
+        "(PID "+oks.map(o=>o.pid).join(", ")+"). Tıkla → temizle.";
+    }else op.style.display="none";
     if(sis.vram&&sis.vram[1]){$("#vramT").textContent=(sis.vram[0]/1024).toFixed(1)+"/"+(sis.vram[1]/1024).toFixed(1)+"G";
       $("#vramBar").style.width=(100*sis.vram[0]/sis.vram[1])+"%";}
     $("#gpuT").textContent="%"+(sis.gpu||0); $("#gpuBar").style.width=(sis.gpu||0)+"%";
