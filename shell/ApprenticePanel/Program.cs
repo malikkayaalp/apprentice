@@ -378,7 +378,14 @@ internal sealed class AltPencere : Form
     public AltPencere(string uri, CoreWebView2Environment ortam)
     {
         _ortam = ortam;
-        Text = "Apprentice — dosya";
+        Text = "Apprentice";
+        // "&ustte=1": kullanici paneli disari alirken "hep ustte kalsin" dediyse pencere
+        // diger uygulamalarin uzerinde durur (kod yazarken izlemek icin).
+        if (uri.Contains("ustte=1"))
+        {
+            TopMost = true;
+            Text = "Apprentice (üstte)";
+        }
         BackColor = Color.FromArgb(0x14, 0x12, 0x10);
         Size = new Size(1020, 760);
         StartPosition = FormStartPosition.CenterParent;
@@ -394,7 +401,8 @@ internal sealed class AltPencere : Form
             w.Settings.AreDefaultContextMenusEnabled = false;
             w.Settings.IsStatusBarEnabled = false;
             w.DocumentTitleChanged += (_, _) =>
-                Text = string.IsNullOrWhiteSpace(w.DocumentTitle) ? "Apprentice — dosya" : w.DocumentTitle;
+                Text = (string.IsNullOrWhiteSpace(w.DocumentTitle) ? "Apprentice" : w.DocumentTitle)
+                       + (TopMost ? "  (üstte)" : "");
             Hazir?.Invoke(this, w);          // WebView2 sayfayi kendisi yukler (NewWindow)
         };
     }

@@ -210,20 +210,22 @@ def yerlesim_motoru() -> bool:
                 if any(b != a and cakisir(yer[a], yer[b]) for b in aktif):
                     yer[a][1] += 1
                     break
-        for _ in range(10):                        # sigdir
+        # sigdir: KUCULTME YOK (dashboard standardi) - sigmayan panel RAFA iner
+        raf = []
+        koruma = 0
+        while aktif and koruma < 20:
             alt = max(yer[a][1] + yer[a][3] for a in aktif)
             if alt <= SATIR:
                 break
-            k = SATIR / alt
-            for a in aktif:
-                yer[a][1] = max(0, int(yer[a][1] * k))
-                yer[a][3] = max(2, round(yer[a][3] * k))
-        for a in aktif:
-            if yer[a][1] > SATIR - 2:
-                yer[a][1] = SATIR - 2
-            if yer[a][1] + yer[a][3] > SATIR:
-                yer[a][3] = max(2, SATIR - yer[a][1])
-        return yer
+            koruma += 1
+            if len(aktif) <= 1:
+                yer[aktif[0]][1] = 0
+                yer[aktif[0]][3] = min(SATIR, yer[aktif[0]][3])
+                break
+            en_alt = max(aktif, key=lambda x: yer[x][1] + yer[x][3])
+            raf.append(en_alt)
+            aktif = [x for x in aktif if x != en_alt]
+        return yer, aktif, raf
 
     sayi = 0
     for blok in re.split(r"\n  (?=\w+:\{etiket:)", diz):
@@ -237,7 +239,12 @@ def yerlesim_motoru() -> bool:
         yer = {k: list(v) for k, v in kut.items()}
         aktif = [k for k in yer if k not in gizli]
         assert aktif, "%s: gorunur panel yok" % ad
-        yer = duzenle(yer, aktif)
+        onceki_yukseklik = {k: v[3] for k, v in yer.items()}
+        yer, aktif, raf = duzenle(yer, aktif)
+        # KURAL: hicbir panel KUCULMEZ - sigmayan rafa iner
+        for a in aktif:
+            assert yer[a][3] >= onceki_yukseklik[a] or len(aktif) == 1,                 "%s: %s paneli kuculdu (%d -> %d) - kucultme yasak, rafa inmeliydi" % (
+                    ad, a, onceki_yukseklik[a], yer[a][3])
         for i, a in enumerate(aktif):
             for b in aktif[i + 1:]:
                 assert not cakisir(yer[a], yer[b]), "%s: %s + %s cakisiyor (motor sonrasi)" % (ad, a, b)
@@ -249,7 +256,7 @@ def yerlesim_motoru() -> bool:
     # kod paneli kaldirildi mi (dosyalar AYRI PENCEREDE acilir)
     assert 'data-p="kod"' not in html, "kod paneli hala izgarada"
     assert "/dosya?is=" in html, "dosya ayri pencerede acilmiyor (window.open yolu yok)"
-    print("yerlesim motoru: ok (%d dizilim 24x24 cerceveye sigdi, kod paneli yok)" % sayi)
+    print("yerlesim motoru: ok (%d dizilim 24x24'e sigdi; kucultme yok, tasan panel rafa iner)" % sayi)
     return True
 
 

@@ -63,7 +63,21 @@ body::before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.5;
 /* Acilir listedeki secenekler: bazi Chromium surumleri color-scheme'i tam uygulamiyor */
 select option,select optgroup{background:var(--panel);color:var(--metin)}
 select option:checked{background:var(--vurgu);color:#1a1512}
-#dizilim,#panelEkle{padding:4px 8px;border-radius:8px;border:1px solid var(--cizgi2);
+#dizilim,html.tekKip #ust>*:not(#logo):not(.bosluk){display:none!important}
+html.tekKip #ust{padding:0 10px;min-height:30px}
+html.tekKip #logo{font-size:12px;opacity:.55}
+html.tekKip #raf{display:none!important}
+html.tekKip #alan{height:calc(100% - 30px)}
+html.tekKip .kart{border-radius:0;border:none;box-shadow:none}
+html.tekKip .kart .kapat{display:none}
+html.tekKip .tutamak{display:none}
+#raf{display:flex;align-items:center;gap:7px;padding:5px 12px;background:rgba(20,17,14,.9);
+  border-top:1px solid var(--cizgi2);font-size:11px;flex-wrap:wrap}
+#raf .rafEt{color:var(--soluk);opacity:.75}
+#raf .rafCip{padding:2px 9px;border:1px solid var(--cizgi2);border-radius:20px;cursor:pointer;
+  color:var(--soluk);background:rgba(255,255,255,.03)}
+#raf .rafCip:hover{color:var(--metin);border-color:var(--vurgu)}
+#panelEkle{padding:4px 8px;border-radius:8px;border:1px solid var(--cizgi2);
   background:var(--panel);color:var(--soluk);font-size:11px;outline:none;max-width:130px}
 #yerlesimSifirla{padding:4px 10px;border-radius:8px;border:1px solid var(--cizgi2);
   background:transparent;color:var(--soluk);cursor:pointer;font-size:11px}
@@ -91,6 +105,7 @@ select option:checked{background:var(--vurgu);color:#1a1512}
 .kapat{margin-left:6px;color:var(--soluk);cursor:pointer;font-size:1.05em;line-height:1;
   padding:0 3px;border-radius:5px;flex-shrink:0}
 .kapat:hover{color:var(--kirmizi);background:rgba(224,108,95,.12)}
+.kapat.disari:hover{color:var(--vurgu2);background:rgba(217,119,87,.14)}
 
 #isListe{overflow-y:auto;padding:7px;flex:1}
 .is{padding:8px 10px;border-radius:9px;margin-bottom:5px;cursor:pointer;position:relative;
@@ -246,6 +261,7 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
   <button id="yerlesimSifirla">yerleşimi sıfırla</button>
 </div>
 
+<div id="raf" style="display:none"></div>
 <div id="alan">
   <div class="kart" data-p="isler"><div class="kbaslik">İŞLER</div>
     <div class="kgovde"><div id="isListe"></div></div><div class="tutamak"></div></div>
@@ -453,6 +469,9 @@ const DIZILIMLER={
       ozet:{gx:0,gy:0,gw:24,gh:5},   boru:{gx:0,gy:5,gw:24,gh:4},
       metrik:{gx:0,gy:9,gw:24,gh:4}, dosyalar:{gx:0,gy:13,gw:24,gh:5}}}};
 
+let rafPaneller=new Set();   // cerceveye sigmayanlar: KUCULMEZ, rafa iner (geri konabilir)
+try{const rr=JSON.parse(localStorage.getItem("apprentice_raf"));
+  if(rr)rafPaneller=new Set(rr)}catch(e){}
 let gizliPaneller=new Set();   // kod paneli kaldirildi: dosyalar AYRI PENCEREDE acilir
 try{const g=JSON.parse(localStorage.getItem("apprentice_gizli_paneller"));
   if(g)gizliPaneller=new Set(g.filter(a=>PANEL_ADLARI[a]))}catch(e){}
@@ -539,27 +558,64 @@ function _uygula(){
     [...gizliPaneller].map(a=>'<option value="'+a+'">'+(PANEL_ADLARI[a]||a)+'</option>').join("");
   sec.style.display=gizliPaneller.size?"":"none";
 }
+/* YERLESIM KURALI (dashboard standardi): paneller birbirini ITER, ASLA KUCULTMEZ.
+   Kullanici bir paneli otekinin ustune surukleyince alttaki asagi kayar; boyutunu yalniz
+   kullanici degistirir (Gridstack/Grafana davranisi). Eskiden cerceveye sigdirmak icin
+   yukseklikler oranlaniyordu - "ustune basinca alttaki kuculuyor" sikayeti bundandi.
+
+   Cerceveye sigmayan panel KUCULMEZ, RAFA iner: alttaki serit uzerinde adiyla durur,
+   tiklayinca geri gelir. Boylece "yer bulamazsa ne olacak" sorusunun cevabi belli:
+   panel kaybolmaz, kuculmez - rafta bekler. */
 function sigdir(){
-  // KAYDIRMA YOK: gorunur paneller her zaman 24 satirlik cerceveye sigar. Tasarsa once
-  // yukselikler oranlanir, sonra sikistirilir; kalan tasma kirpilir. (Kullanici istegi:
-  // "paneller cercevenin disina tasmasin, scroll ile asagida kalan olmasin".)
-  const adlar=aktifAdlar(); if(!adlar.length)return;
-  const alt=()=>Math.max(...adlar.map(a=>yerlesim[a].gy+yerlesim[a].gh));
+  const alt=()=>{const a=aktifAdlar(); return a.length?Math.max(...a.map(x=>yerlesim[x].gy+yerlesim[x].gh)):0;};
   let koruma=0;
-  while(alt()>SATIR&&koruma++<10){
-    const k=SATIR/alt();
-    for(const a of adlar){const p=yerlesim[a];
-      p.gy=Math.max(0,Math.floor(p.gy*k));
-      p.gh=Math.max(2,Math.round(p.gh*k));}
+  while(alt()>SATIR&&koruma++<20){
+    const adlar=aktifAdlar();
+    // En ALTTAKI paneli rafa indir (kullanicinin en son yerlestirdigi, en az gorunen)
+    const enAlt=adlar.reduce((a,b)=>(yerlesim[a].gy+yerlesim[a].gh>=yerlesim[b].gy+yerlesim[b].gh)?a:b);
+    if(adlar.length<=1){                       // tek panel kaldiysa cerceveye sigdir
+      yerlesim[enAlt].gy=0; yerlesim[enAlt].gh=Math.min(SATIR,yerlesim[enAlt].gh);
+      break;
+    }
+    rafPaneller.add(enAlt); gizliPaneller.add(enAlt);
     sikistir(); itele(); sikistir();
   }
-  for(const a of adlar){const p=yerlesim[a];
-    if(p.gy>SATIR-2)p.gy=SATIR-2;
-    if(p.gy+p.gh>SATIR)p.gh=Math.max(2,SATIR-p.gy);}
+  rafCiz();
+}
+function rafCiz(){
+  const raf=$("#raf"); if(!raf)return;
+  const liste=[...rafPaneller].filter(a=>PANEL_ADLARI[a]);
+  raf.innerHTML=liste.length
+    ? '<span class="rafEt">rafta (yer açılınca geri koy):</span>'+liste.map(a=>
+        '<span class="rafCip" data-p="'+a+'">'+PANEL_ADLARI[a]+'</span>').join("")
+    : "";
+  raf.style.display=liste.length?"":"none";
+  raf.querySelectorAll(".rafCip").forEach(c=>c.onclick=()=>{
+    const ad=c.dataset.p;
+    rafPaneller.delete(ad); gizliPaneller.delete(ad);
+    // Yer acmak icin: yeni gelen panel EN ALTA konur; sigmazsa sigdir() bir baskasini rafa iner
+    yerlesim[ad].gy=SATIR;
+    panelKaydet(); duzenle(); kaydet(); dizilimOzellesti();
+  });
 }
 function duzenle(){itele();sikistir();itele();sigdir();uygula()}
+
+/* TEK PANEL KIPI (?tek=akis): ayni sayfa, yalnizca o panel tam pencere. Tum yoklama ve
+   cizim kodu aynen calisir - ayri bir arayuz yazmaya gerek yok. Native kabuk bu adresi
+   gercek ikinci uygulama penceresinde acar; &ustte=1 varsa pencere hep ustte kalir. */
+const URLP=new URLSearchParams(location.search);
+const TEK=URLP.get("tek");
+if(TEK&&PANEL_ADLARI[TEK]){
+  document.documentElement.classList.add("tekKip");
+  gizliPaneller=new Set(Object.keys(PANEL_ADLARI).filter(a=>a!==TEK));
+  rafPaneller=new Set();
+  yerlesim[TEK]={gx:0,gy:0,gw:SUTUN,gh:SATIR};
+  document.title=PANEL_ADLARI[TEK]+" — Apprentice";
+  const bis=URLP.get("is"); if(bis){seciliIs=bis; otoSec=false;}
+}
 function kaydet(){localStorage.setItem("apprentice_yerlesim_v4",JSON.stringify(yerlesim))}
-function panelKaydet(){localStorage.setItem("apprentice_gizli_paneller",JSON.stringify([...gizliPaneller]))}
+function panelKaydet(){localStorage.setItem("apprentice_gizli_paneller",JSON.stringify([...gizliPaneller]));
+  localStorage.setItem("apprentice_raf",JSON.stringify([...rafPaneller]))}
 window.addEventListener("resize",uygula);
 // pencere boyutu gecikmeli kesinlesir (Edge --app acilisi): olcum degisince yeniden yerlestir
 if(window.ResizeObserver)new ResizeObserver(()=>uygula()).observe(document.getElementById("alan"));
@@ -572,7 +628,7 @@ $("#yerlesimKaydet").onclick=()=>{
   dizilimListesi();
   tost("💾 düzenin kaydedildi — dizilim listesinde 🗂 Benim düzenim olarak seçilebilir");
 };
-$("#panelEkle").onchange=e=>{if(e.target.value){gizliPaneller.delete(e.target.value);
+$("#panelEkle").onchange=e=>{if(e.target.value){gizliPaneller.delete(e.target.value);rafPaneller.delete(e.target.value);
   panelKaydet();duzenle();kaydet();dizilimOzellesti()}e.target.value=""};
 
 /* ---- dizilim (preset) secici ---- */
@@ -590,6 +646,7 @@ function dizilimUygula(ad,sessiz){
       yerlesim[k]=JSON.parse(JSON.stringify(d.kutu[k]||VARSAYILAN[k]));
     gizliPaneller=new Set((d.gizli||[]).filter(a=>PANEL_ADLARI[a]));
   }
+  rafPaneller.clear();        // dizilim degisti: raf sifirlanir
   secilenDizilim=ad; localStorage.setItem("apprentice_dizilim",ad);
   kaydet(); panelKaydet(); duzenle();
   if(!sessiz)tost((d?d.etiket:"🗂 Benim düzenim")+(d&&d.aciklama?" — "+d.aciklama:""));
@@ -616,11 +673,33 @@ function dizilimOzellesti(){
   const sec=$("#dizilim"); if(sec)sec.value="__ozel";
 }
 dizilimListesi();
+/* PANELI DISARI AL: her panel kendi PENCERESINDE acilabilir (dosya goruntuleyicideki gibi).
+   Ayni sayfa "?tek=<panel>" ile acilir - tum yoklama/cizim kodu aynen calisir, yalnizca o
+   panel tam pencere olur. Native kabukta gercek ikinci uygulama penceresi; "&ustte=1" ile
+   pencere HEP USTTE kalir (kabuk TopMost yapar). Disari alinan panel izgaradan cikar -
+   boylece "yer yok" sorunu da cozulur: paneli disari al, izgara rahatlar. */
+function paneliDisariAl(ad, ustte){
+  const u="/?tek="+encodeURIComponent(ad)+(seciliIs?("&is="+encodeURIComponent(seciliIs)):"")+
+          (ustte?"&ustte=1":"");
+  const p=window.open(u,"apprentice_"+ad,"width=900,height=700,menubar=no,toolbar=no,location=no");
+  if(!p){tost("pencere engellendi — açılır pencereye izin ver");return}
+  gizliPaneller.add(ad); rafPaneller.delete(ad);   // izgaradan cik (yer acilir)
+  panelKaydet(); duzenle(); kaydet(); dizilimOzellesti();
+  tost("⧉ "+(PANEL_ADLARI[ad]||ad)+" ayrı pencerede"+(ustte?" (üstte kalır)":"")+
+       " — geri koymak için ➕ panel ekle");
+}
 document.querySelectorAll(".kart").forEach(k=>{
   const ad=k.dataset.p;
+  // ⧉ DISARI AL: sol tik = ayri pencere, sag tik = ayri pencere + hep ustte
+  const dx=document.createElement("span"); dx.className="kapat disari"; dx.textContent="⧉";
+  dx.title="ayrı pencerede aç (sağ tık: hep üstte kalsın)";
+  dx.addEventListener("pointerdown",e=>e.stopPropagation());
+  dx.onclick=e=>{e.stopPropagation(); paneliDisariAl(ad,false)};
+  dx.oncontextmenu=e=>{e.preventDefault(); e.stopPropagation(); paneliDisariAl(ad,true); return false};
   const kx=document.createElement("span"); kx.className="kapat"; kx.textContent="✕";
   kx.title="paneli kapat"; kx.addEventListener("pointerdown",e=>e.stopPropagation());
   kx.onclick=e=>{e.stopPropagation();gizliPaneller.add(ad);panelKaydet();duzenle();kaydet();dizilimOzellesti()};
+  k.querySelector(".kbaslik").appendChild(dx);
   k.querySelector(".kbaslik").appendChild(kx);
   k.addEventListener("pointerdown",()=>{k.style.zIndex=++ustZ;
     document.querySelectorAll(".kart").forEach(x=>x.classList.remove("onde"));k.classList.add("onde")});
