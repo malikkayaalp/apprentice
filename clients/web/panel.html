@@ -271,9 +271,52 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
   background:linear-gradient(180deg,var(--metin),var(--vurgu2));
   -webkit-background-clip:text;background-clip:text;color:transparent}
 .metrik span{font-size:.62em;color:var(--soluk);letter-spacing:.5px}
-#ozetKutu{padding:9px 12px;font:.85em var(--mono);color:var(--soluk);line-height:1.7;
-  overflow-y:auto;overflow-wrap:anywhere}
+#ozetKutu{flex:1;min-height:0;padding:9px 12px;font:.85em var(--mono);color:var(--soluk);
+  line-height:1.7;overflow-y:auto;overflow-wrap:anywhere}
 #ozetKutu b{color:var(--metin)}
+/* INCELEME (Review) ekrani: uret -> kanitla -> degerlendir. Kanit ile beyan gorsel olarak
+   da ayrilir - dogrulama satirlari isaretli, modelin kendi ozeti buraya girmez. */
+.incBas{color:var(--metin);font-weight:700;font-size:1.05em;letter-spacing:.04em;margin-bottom:2px}
+.incBas.uyari{color:var(--sari)}
+.incDevir .incKanitSat{color:var(--metin)}
+.incGorev{color:var(--soluk);margin-bottom:7px;line-height:1.4}
+.incBaslik{color:var(--soluk);font-size:.82em;letter-spacing:.12em;text-transform:uppercase;
+  margin:9px 0 3px;border-bottom:1px solid var(--cizgi2);padding-bottom:2px}
+.incSat{display:flex;gap:8px;align-items:baseline;margin:2px 0}
+.incEt{color:var(--soluk);min-width:104px;font-size:.86em}
+.incSari{color:var(--sari)}
+.incBos{color:var(--soluk);font-style:italic}
+.incDosya{display:flex;justify-content:space-between;gap:10px;align-items:baseline;
+  padding:3px 6px;margin:1px -6px;border-radius:6px;cursor:pointer}
+.incDosya:hover{background:rgba(217,119,87,.12)}
+.incAd{color:var(--metin);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.incSayi{white-space:nowrap;font-size:.9em}
+.incArt{color:var(--yesil)} .incEks{color:var(--kirmizi)}
+.incTur{color:var(--soluk);margin-left:7px;font-size:.9em}
+.incYeni{background:rgba(111,194,138,.18);color:var(--yesil);border-radius:5px;
+  padding:0 5px;margin-left:6px;font-size:.82em}
+.incDisi{background:rgba(224,108,95,.2);color:var(--kirmizi);border-radius:5px;
+  padding:0 5px;margin-left:6px;font-size:.82em}
+.incDogSat{display:flex;flex-wrap:wrap;gap:2px 12px}
+.incDog{display:inline-flex;gap:5px;align-items:baseline;padding:1px 0}
+.incDog .incIm{width:12px;text-align:center}
+.incDog.gecti .incIm{color:var(--yesil)}
+.incDog.kaldi{color:var(--kirmizi)} .incDog.kaldi .incIm{color:var(--kirmizi)}
+.incDog.yok{color:var(--soluk)}
+.incKanit{color:var(--soluk);font-size:.85em;padding-left:6px}
+.incDevir{border:1px solid var(--sari);background:rgba(233,184,92,.08);border-radius:8px;
+  padding:7px 9px;margin:9px 0 4px}
+.incDevirBas{color:var(--sari);font-weight:700;letter-spacing:.03em;margin-bottom:4px}
+.incKanitSat{color:var(--metin);font-size:.9em;line-height:1.5}
+.incHata{background:rgba(0,0,0,.35);border-radius:6px;padding:6px 8px;margin:6px 0 0;
+  white-space:pre-wrap;color:var(--kirmizi);font-size:.88em;max-height:120px;overflow:auto}
+.incGeri{display:flex;gap:8px;align-items:baseline;margin-top:9px;padding-top:6px;
+  border-top:1px solid var(--cizgi2);font-size:.9em}
+.incGeri.var{color:var(--yesil)} .incGeri.yok{color:var(--sari)}
+/* Ise BASLAMADAN once yazma kapsami gorunur olsun (guvenlik yuzeyi, konfor degil) */
+.kapsamIpucu{font-size:.92em;margin-top:3px;line-height:1.4}
+.kapsamIpucu.dar{color:var(--yesil)}
+.kapsamIpucu.genis{color:var(--sari)}
 .uyari{padding:6px 10px;margin-top:6px;border-radius:8px;font:.82em var(--mono);
   background:rgba(224,179,69,.08);border:1px solid rgba(224,179,69,.3);color:var(--sari);
   overflow-wrap:anywhere}
@@ -353,6 +396,7 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
               <label class="alanEt" title="Çırağın DEĞİŞTİRMESİNE izin verilen dosyalar. Boş = sınır yok. Ölçüldü: 'yalnız X.py yaz' cümlesi kriterde yazsa bile model disiplini tutturamıyor; sınır araca konunca tutuyor.">
                 ✏ neye yazabilsin</label>
               <input type="text" id="kYaz" placeholder="boş = sınır yok   ·   örn: oyun.py, testler/test_oyun.py">
+              <div id="kYazKapsam" class="kapsamIpucu genis"></div>
             </div>
             <div class="alanSatir">
               <label class="alanEt" title="Kabul kriterleri: işin BİTTİ sayılması için sağlanması gerekenler. Göreve eklenir; çırak bunları tek tek sağlamaya çalışır. Ölçüldü: sözleşmeli görev 14/14, sözleşmesiz 12/14.">
@@ -393,7 +437,7 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
       <div class="metrik"><b id="mCagri">0</b><span>ÇAĞRI</span></div>
     </div></div><div class="tutamak"></div></div>
 
-  <div class="kart" data-p="ozet"><div class="kbaslik">İŞ ÖZETİ</div>
+  <div class="kart" data-p="ozet"><div class="kbaslik">İŞ ÖZETİ · SONUÇ</div>
     <div class="kgovde"><div id="ozetKutu">—</div><div id="uyarilar" style="padding:0 12px 10px"></div></div>
     <div class="tutamak"></div></div>
 
@@ -476,8 +520,8 @@ const SUTUN=24, SATIR=24;
 const VARSAYILAN={
   isler:{gx:0,gy:0,gw:5,gh:24}, boru:{gx:5,gy:0,gw:12,gh:4},
   akis:{gx:5,gy:4,gw:12,gh:10}, cirak:{gx:5,gy:14,gw:12,gh:10},
-  metrik:{gx:17,gy:0,gw:7,gh:5}, ozet:{gx:17,gy:5,gw:7,gh:5},
-  usta:{gx:17,gy:10,gw:7,gh:9}, dosyalar:{gx:17,gy:19,gw:7,gh:5}};
+  metrik:{gx:17,gy:0,gw:7,gh:5}, ozet:{gx:17,gy:5,gw:7,gh:7},
+  usta:{gx:17,gy:12,gw:7,gh:7}, dosyalar:{gx:17,gy:19,gw:7,gh:5}};
 const PANEL_ADLARI={isler:"İŞLER",boru:"BORU HATTI",akis:"OLAY AKIŞI",cirak:"ÇIRAK",
   metrik:"METRİKLER",ozet:"İŞ ÖZETİ",usta:"USTA · CLAUDE",dosyalar:"DOSYALAR"};
 
@@ -1222,31 +1266,133 @@ async function olaylariCek(){
       $("#mSure").textContent=(s.sure||0)+"s";
       $("#mArac").textContent=sy.arac||0; $("#mYazim").textContent=sy.yazim||0;
       $("#mOnarim").textContent=sy.onarim||0; $("#mCagri").textContent=ku.model_cagrisi||0;
-      const b=s.baglam||{};
-      // KACIS: baslik/ortam/dogrulama/durum kullanicidan ve is dosyasindan gelir; kacirilmadan
-      // innerHTML'e girince "<b" gibi bir baslik paneli bozuyordu (is listesinde kacirilirken
-      // burada kacirilmiyordu - tutarsizdi).
-      $("#ozetKutu").innerHTML="iş: <b>"+kacir(s.baslik||s.id||"—")+"</b><br><span style='font-size:.85em'>"+
-        kacir(s.id||"")+
-        "</span><br>ortam: <b>"+kacir(s.ortam||"—")+"</b> · doğrulama: <b>"+kacir(s.dogrulama||"—")+
-        "</b> · canlı: <b>"+(s.canli?"açık":"kapalı")+"</b> · durum: <b>"+kacir(s.durum||"—")+
-        "</b><br>bağlam: sistem <b>"+(+b.sistem||"—")+"</b> kr · hafıza <b>"+(+b.hafiza||"—")+
-        "</b> · STATE <b>"+(+b.durum||"—")+"</b> · harita <b>"+(+b.harita||"—")+
-        "</b><br>görev: "+kacir((s.gorev||"").slice(0,180));
-      const uy=$("#uyarilar"); uy.innerHTML="";
-      (s.uyarilar||[]).slice(0,5).forEach(u=>{
-        const d=document.createElement("div");
-        d.className="uyari"+(String(u).startsWith("DURAGANLIK")?" sert":"");
-        d.textContent=u; uy.appendChild(d);
-      });
-      (s.hatalar||[]).slice(0,2).forEach(u=>{
-        const d=document.createElement("div"); d.className="uyari sert"; d.textContent=u; uy.appendChild(d);
-      });
+      // INCELEME SOZLESMESI: bu ekran artik olay semasini BILMIYOR - /api/inceleme
+      // projeksiyonunu ciziyor (core/inceleme.py). Yarin dugum tabanli orkestratore
+      // gecilirse sema degisir, ekran degismez. Her yoklamada cekmeyiz: is/durum/olay
+      // sayaci degisince cekeriz (olay dosyasi her 2 sn'de bir bastan okunmasin).
+      const incImza=[seciliIs,s.durum,imlecN].join("|");
+      if(incImza!==incelemeImza){ incelemeImza=incImza; incelemeCek(seciliIs); }
     }catch(e){}
   }
   setTimeout(olaylariCek,550);
 }
 
+/* INCELEME EKRANI (salt okunur). Panel olay semasini BILMEZ: /api/inceleme projeksiyonunu
+   cizer. Yarin dugum tabanli orkestratore gecilirse sema degisir, bu ekran degismez.
+   Burada HESAP YAPILMAZ - duraganligi da devir onerisini de runtime karara baglar; UI
+   ikinci bir karar motoru olursa iki yerde iki dogru cikar. Kabul/ret dugmesi YOK:
+   geri alma ispatlanmadan (kabuk komutu kosmadigi kanitlanmadan) dugme konmaz. */
+let incelemeImza="";
+async function incelemeCek(jid){
+  try{
+    const r=await(await fetch("/api/inceleme?is="+encodeURIComponent(jid))).json();
+    if(jid!==seciliIs) return;              // yaris: kullanici baska ise gecmis olabilir
+    incelemeCiz(r);
+  }catch(e){}
+}
+const DOG_IM={gecti:"✓", kaldi:"✕", yok:"–"};
+function incelemeCiz(r){
+  const kap=$("#ozetKutu"), uy=$("#uyarilar");
+  if(!r||r.hata){
+    kap.innerHTML='<span class="incBos">'+kacir((r&&r.hata)||"—")+'</span>';
+    if(uy)uy.innerHTML=""; return;
+  }
+  const ks=r.yazma_kapsami||{}, gr=r.geri_alinabilir||{}, dv=r.devir_onerisi||{};
+  const bitti=r.durum!=="calisiyor", k=r.kullanim||{};
+  /* SIRA = ONEM. Panonun ilk ekrani en kritik bilgiyi tasimali; devir onerisi varsa
+     BASLIK odur. (Kullanici elestirisi: "panel cok sey biliyor ama hangi anda neyi
+     gosterecegini secmiyor" - once kesilen sey tam da devir kutusuydu.) */
+  let h='<div class="incBas'+(dv.var?" uyari":"")+'">'+
+        (!bitti ? "ÇALIŞIYOR…" : dv.var ? "⚑ USTA ÖNERİLİYOR"
+                : r.durum==="hata" ? "İŞ HATAYLA BİTTİ" : "İŞ TAMAMLANDI")+'</div>';
+  h+='<div class="incGorev">'+kacir((r.baslik||r.gorev||r.is_id).slice(0,140))+'</div>';
+
+  /* DEVIR ONERISI en uste: runtime devretmedi, ONERDI - sebep ve kaniti gorunur olsun ki
+     kullanici "Claude niye devreye girdi?" diye sormasin. */
+  if(dv.var){
+    h+='<div class="incDevir"><div class="incDevirBas">sebep: '+kacir(dv.sebep||"")+'</div>';
+    (dv.kanit||[]).forEach(x=>{h+='<div class="incKanitSat">✓ '+kacir(x)+'</div>';});
+    if(dv.son_hata)h+='<pre class="incHata">'+kacir(dv.son_hata.slice(0,300))+'</pre>';
+    h+='</div>';
+  }
+
+  /* DEGISEN DOSYALAR: net fark (isin ilk halinden son haline, ara turlarin toplami degil).
+     Tiklayinca dogrudan FARK gorunumu acilir - "ne yazdi" degil "ne degistirdi". */
+  const df=r.degisen_dosyalar||[];
+  h+='<div class="incBaslik">değiştirilen'+(df.length?" ("+df.length+")":"")+'</div>';
+  if(!df.length) h+='<div class="incBos">dosya yazılmadı</div>';
+  df.forEach(d=>{
+    h+='<div class="incDosya" data-yol="'+ozniteligeKacir(d.yol)+'" title="tıkla → fark görünümü">'+
+       '<span class="incAd">'+kacir(d.yol)+(d.yeni?'<span class="incYeni">yeni</span>':'')+
+       (d.kapsam_disi?'<span class="incDisi">kapsam dışı</span>':'')+'</span>'+
+       '<span class="incSayi"><span class="incArt">+'+d.eklenen+'</span> '+
+       '<span class="incEks">−'+d.silinen+'</span>'+
+       (d.surum>1?'<span class="incTur">'+d.surum+' sürüm</span>':'')+'</span></div>';
+  });
+
+  /* DOGRULAMA: her satir bir KANIT. "yok" gecti DEGILDIR - olculmediyse iddia edilmez. */
+  h+='<div class="incBaslik">doğrulama</div><div class="incDogSat">';
+  (r.dogrulama||[]).forEach(d=>{
+    // gecenin kaniti tooltip'te, kalanin/olculmeyenin kaniti EKRANDA: goz once sorunlu olani gorsun
+    h+='<span class="incDog '+d.durum+'" title="'+ozniteligeKacir(d.kanit||"")+'">'+
+       '<span class="incIm">'+(DOG_IM[d.durum]||"·")+'</span>'+kacir(d.ad)+
+       (d.durum!=="gecti"?'<span class="incKanit">'+kacir(d.kanit||"")+'</span>':'')+'</span>';
+  });
+  h+='</div>';
+
+  h+='<div class="incSat"><span class="incEt">çırak</span><b>'+(r.onarim_turu||0)+
+     ' onarım turu</b>'+(r.sure?' · '+Math.round(r.sure)+' sn':'')+
+     (k.prompt_tokens?' · '+(k.prompt_tokens).toLocaleString("tr")+' istem tok':'')+'</div>';
+
+  /* CALISMA ALANI + YAZMA KAPSAMI: baglam bilgisi, bu yuzden alta alindi. Ihlal varsa
+     zaten yukarida dosyanin yaninda "kapsam disi" rozeti ve dogrulama satiri cikiyor.
+     Sinirsiz kapsam SARI yazilir: iddia edilemeyecek bir sey yesil gosterilmez. */
+  h+='<div class="incBaslik">kapsam</div>';
+  h+='<div class="incSat"><span class="incEt">çalışma alanı</span><b>'+
+     kacir(r.calisma_dizini||"—")+'</b></div>';
+  h+='<div class="incSat"><span class="incEt">yazma kapsamı</span>'+
+     (ks.sinirli?'<b>'+kacir((ks.liste||[]).join(" · "))+'</b>'
+               :'<b class="incSari">tüm çalışma alanı — sınır yok</b>')+'</div>';
+
+  /* GERI ALINABILIRLIK: ispatlanmadan dugme konmaz. run_shell calisma alanini olay
+     gunlugune girmeden degistirebilir - o durumda sebep YAZILIR, sessizce gizlenmez. */
+  if(bitti){
+    h+='<div class="incGeri '+(gr.mumkun?"var":"yok")+'">'+
+       (gr.mumkun?"↺ geri alınabilir":"⚠ geri alınamaz")+
+       '<span class="incKanit">'+kacir(gr.sebep||"")+'</span></div>';
+  }
+  kap.innerHTML=h;
+
+  if(uy){
+    uy.innerHTML="";
+    (r.uyarilar||[]).slice(0,4).forEach(u=>{
+      const d=document.createElement("div"); d.className="uyari"; d.textContent=u; uy.appendChild(d);
+    });
+  }
+}
+
+/* Dosyaya tiklayinca DOGRUDAN fark gorunumu (derin baglanti ?kip=fark). Delegasyon:
+   ekran surekli yeniden ciziliyor, tek tek baglamak bozulur. */
+document.addEventListener("click", e=>{
+  const d=e.target.closest(".incDosya");
+  if(!d||!seciliIs)return;
+  const yol=d.dataset.yol||"";
+  const u="/dosya?is="+encodeURIComponent(seciliIs)+"&yol="+encodeURIComponent(yol)+"&kip=fark";
+  const p=window.open(u,"apprentice_dosya_"+yol.replace(/[^\w]/g,"_"),
+                      "width=1020,height=760,menubar=no,toolbar=no,location=no,status=no");
+  if(!p)tost("pencere engellendi — tarayıcı ayarlarından açılır pencereye izin ver");
+});
+/* ISE BASLAMADAN kapsam gorunur olsun: kullanici cirağın nereye yazabilecegini
+   gondermeden once gormeli (kullanici istegi: "write scope"). */
+function kapsamIpucu(){
+  const g=$("#kYaz"), c=$("#kYazKapsam");
+  if(!g||!c)return;
+  const liste=g.value.split(",").map(x=>x.trim()).filter(Boolean);
+  c.className = liste.length ? "kapsamIpucu dar" : "kapsamIpucu genis";
+  c.textContent = liste.length
+    ? ("çırak yalnız şuraya yazabilir: " + liste.join(" · "))
+    : "çırak çalışma alanının TAMAMINA yazabilir (sınır yok)";
+}
 /* --------------- USTA: Claude Desktop tarzi sohbet --------------- */
 $("#uCli").onchange=e=>{
   const ozel=e.target.value==="ozel";
@@ -1570,6 +1716,7 @@ $("#uEkSecici").onchange=async e=>{
   eklerCiz(uEkler,"#uEkler"); e.target.value="";
 };
 $("#kEk").onclick=()=>$("#kEkSecici").click();
+$("#kYaz").addEventListener("input", kapsamIpucu);
 $("#kEkSecici").onchange=async e=>{
   for(const f of e.target.files){
     if(/\.(png|jpe?g|gif|bmp|webp|ico)$/i.test(f.name)){tost("çırak resim almaz: "+f.name);continue}
@@ -1604,6 +1751,7 @@ $("#akis").addEventListener("wheel",()=>{const a=$("#akis");
 
 boruCiz(); duzenle(); filtreSec("tumu");
 isleriCek(); olaylariCek(); daktiloAdim(); ustaChatCek(); modelleriYukle(); kokGoster();
+kapsamIpucu();
 </script>
 </body>
 </html>
