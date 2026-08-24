@@ -496,7 +496,7 @@ def _cirak_sohbet(veri: dict) -> dict:
                                      "Turkce, kisa ve net cevap ver. Kod isleri icin kullanici "
                                      "gorev kipini kullanir; burada serbest sohbettesin."
                                      % model.split("/")[-1].split(":")[0]}]
-                       + SOHBET["mesajlar"][-20:],
+                       + gecmis,
                        "options": {"num_ctx": 16384, "temperature": 0.7, "num_predict": 1200},
                        "keep_alive": "30m"}).encode()
     try:
@@ -504,10 +504,13 @@ def _cirak_sohbet(veri: dict) -> dict:
             "http://localhost:11434/api/chat", body, {"Content-Type": "application/json"}),
             timeout=600))
         cevap = ((d.get("message") or {}).get("content") or "").strip()
-        SOHBET["mesajlar"].append({"role": "assistant", "content": cevap})
+        with SOHBET_KILIT:
+            SOHBET["mesajlar"].append({"role": "assistant", "content": cevap})
         return {"cevap": cevap, "tok": d.get("eval_count")}
     except Exception as e:  # noqa: BLE001
-        SOHBET["mesajlar"].pop()
+        with SOHBET_KILIT:
+            if benim in SOHBET["mesajlar"]:     # KIMLIKLE sil: pop() baskasinin ogesini siler
+                SOHBET["mesajlar"].remove(benim)
         return {"hata": str(e)[:250]}
 
 
@@ -732,7 +735,10 @@ class Istek(BaseHTTPRequestHandler):
         srv = importlib.import_module("server.apprentice_server")
         model = str(veri.get("model") or "").strip() or \
             srv.config.env_or(["APPRENTICE_MODEL", "UNITY_CODE_MODEL"], "ollama.model")
-        SOHBET["mesajlar"].append({"role": "user", "content": prompt})
+        with SOHBET_KILIT:
+            SOHBET["mesajlar"].append({"role": "user", "content": prompt})
+            benim = SOHBET["mesajlar"][-1]      # kimlikle sil (pop baskasinin ogesini siler)
+            gecmis = list(SOHBET["mesajlar"][-20:])
         body = json.dumps({"model": model, "stream": True,
                            "messages": [{"role": "system", "content":
                                          "Sen Apprentice sisteminin yerel cirak modelisin (%s). "

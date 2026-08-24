@@ -10,7 +10,8 @@ Kapsam:
   3. Yerlesim butunlugu: VARSAYILAN izgarada panel cakismasi olmamali (metinden okunur).
 """
 from __future__ import annotations
-import json, os, re, shutil, subprocess, sys, tempfile, threading, time, urllib.request
+import json, os, re, shutil, subprocess, sys, tempfile, threading, time
+import urllib.error, urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -96,6 +97,89 @@ def id_butunlugu() -> bool:
             "%s hata yutmuyor - tek istisna tum paneli durdurur" % fn
     print("yoklama donguleri: ok (uc dongu de hata yutuyor)")
     return True
+
+
+def kaynak_denetimi() -> bool:
+    """TANIMSIZ AD / olu atama taramasi (ruff F821, F811, F841).
+
+    YASANDI: bir duzeltme iki sohbet fonksiyonuna bolunmus; biri 'gecmis' degiskenini
+    tanimliyor, oteki KULLANIYORDU. Sozdizimi gecerli oldugu icin testler gecti, kullanici
+    sohbete yazinca 500 aldi: "name 'gecmis' is not defined". Bu tarama tam o sinifi yakalar
+    ve az kullanilan kod yollarini da kapsar (calistirmadan)."""
+    ruff = [sys.executable, "-m", "ruff", "check", "--select", "F821,F811,F841",
+            "--output-format", "concise", "--no-cache"]
+    hedefler = ["clients", "server", "core", "envs", "izle.py", "kur.py", "kur_gui.py",
+                "panel_ac.py", "panel_build.py"]
+    r = subprocess.run(ruff + [os.path.join(ROOT, h) for h in hedefler],
+                       capture_output=True, text=True, encoding="utf-8", errors="replace",
+                       timeout=180, creationflags=0x08000000 if os.name == "nt" else 0)
+    if r.returncode == 2 and "No module named" in (r.stderr or ""):
+        print("kaynak denetimi: ruff yok, atlandi (pip install ruff)")
+        return True
+    # ruff temizse "All checks passed!" yazar - onu bulgu sanmayalim
+    ciktilar = [s for s in (r.stdout or "").splitlines()
+                if s.strip() and not s.startswith("All checks passed")
+                and "Found 0 errors" not in s]
+    assert r.returncode in (0, 1), "ruff calistirilamadi: %s" % (r.stderr or "")[:200]
+    assert not ciktilar, "TANIMSIZ AD / olu atama bulundu:\n  " + "\n  ".join(ciktilar[:10])
+    print("kaynak denetimi: ok (F821/F811/F841 temiz - tanimsiz ad yok)")
+    return True
+
+
+def sohbet_uclari() -> bool:
+    """Cirak sohbeti (akisli ve duz) Ollama KAPALIYKEN bile duzgun hata donmeli - 500 yiginla
+    degil. Yasandi: NameError -> HTTP 500 govdesi kullanicinin sohbet balonuna dustu."""
+    ev = os.path.join(ROOT, ".apprentice_test_home", "sohbet_unit")
+    os.makedirs(os.path.join(ev, "jobs"), exist_ok=True)
+    port = 8897
+    p = subprocess.Popen([sys.executable, os.path.join(ROOT, "clients", "web", "panel.py"),
+                          "--port", str(port), "--home", ev],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, cwd=ROOT,
+                         creationflags=0x08000000 if os.name == "nt" else 0)
+    try:
+        for _ in range(80):
+            time.sleep(0.1)
+            try:
+                urllib.request.urlopen("http://127.0.0.1:%d/api/hazir" % port, timeout=1).read()
+                break
+            except Exception:
+                continue
+        else:
+            print("panel kalkmadi:", (p.stderr.read() or b"").decode("utf-8", "replace")[:200])
+            return False
+
+        def istek(yol, govde):
+            r = urllib.request.Request("http://127.0.0.1:%d%s" % (port, yol),
+                                       json.dumps(govde).encode(),
+                                       {"Content-Type": "application/json",
+                                        "X-Apprentice": "panel"})
+            try:
+                with urllib.request.urlopen(r, timeout=60) as c:
+                    return c.status, c.read().decode("utf-8", "replace")
+            except urllib.error.HTTPError as e:
+                return e.code, e.read().decode("utf-8", "replace")
+
+        # Ollama'yi ULASILMAZ yap: gercek modeli beklemeden hata yolunu sina
+        kod, govde = istek("/api/cirak_sohbet", {"prompt": "merhaba",
+                                                 "model": "olmayan-model-xyz:1b"})
+        assert kod == 200, "duz sohbet %d dondu: %s" % (kod, govde[:200])
+        d = json.loads(govde)
+        assert "hata" in d or "cevap" in d, d
+        assert "not defined" not in govde and "Traceback" not in govde, \
+            "sohbette Python hatasi sizdi: %s" % govde[:200]
+
+        r2 = urllib.request.Request("http://127.0.0.1:%d/api/cirak_sohbet_akis" % port,
+                                    json.dumps({"prompt": "merhaba",
+                                                "model": "olmayan-model-xyz:1b"}).encode(),
+                                    {"Content-Type": "application/json", "X-Apprentice": "panel"})
+        with urllib.request.urlopen(r2, timeout=60) as c:
+            akis = c.read().decode("utf-8", "replace")
+        assert "not defined" not in akis and "HTTP/1." not in akis, \
+            "akisli sohbette hata sizdi: %s" % akis[:200]
+        print("sohbet uclari: ok (duz + akisli, hata yolunda bile temiz yanit)")
+        return True
+    finally:
+        p.terminate()
 
 
 def uc_sozlesmesi() -> bool:
@@ -437,8 +521,8 @@ def calisma_dizini_kurallari() -> bool:
 
 
 def main() -> int:
-    ok = (js_sozdizimi() and id_butunlugu() and uc_sozlesmesi() and ust_bar_gorunur() and yerlesim_butun() and dizilimler_butun()
-          and yerlesim_motoru() and sunucu_uclari() and calisma_dizini_kurallari())
+    ok = (js_sozdizimi() and kaynak_denetimi() and id_butunlugu() and uc_sozlesmesi() and ust_bar_gorunur() and yerlesim_butun() and dizilimler_butun()
+          and yerlesim_motoru() and sunucu_uclari() and calisma_dizini_kurallari() and sohbet_uclari())
     print("SONUC:", "GECTI" if ok else "KALDI")
     return 0 if ok else 1
 
