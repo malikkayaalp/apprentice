@@ -58,6 +58,68 @@ def js_sozdizimi() -> bool:
     return True
 
 
+def metin_isleyicileri() -> bool:
+    """Sohbet/akis metin islemeyi GERCEKTEN CALISTIR (node ile).
+
+    YASANDI: 'kod' etiketi bir temizlik regex'inde kaza ile silinince zenginMetin, kodBlok'u
+    TEK argumanla cagirdi; govde undefined kaldi ve model kod yazinca sohbet balonuna
+    "TypeError: Cannot read properties of undefined (reading 'split')" dustu. Sozdizimi
+    testi bunu goremez - fonksiyonlarin CALISMASI gerekir. Burada gercek girdilerle kosulur."""
+    node = shutil.which("node")
+    if not node:
+        print("metin isleyicileri: node yok, atlandi")
+        return True
+    with open(SAYFA, encoding="utf-8") as f:
+        html = f.read()
+    js = "\n".join(re.findall(r"<script>(.*?)</script>", html, re.S))
+    gerek = ["kacir", "renklendir", "kodBlok", "zenginMetin", "KW", "SAY", "renklendir2"]
+    parcalar = []
+    for ad in gerek:
+        m = re.search(r"^(?:function %s\(|const %s\s*=)" % (ad, ad), js, re.M)
+        if not m:
+            continue
+        bas = m.start()
+        son = len(js)
+        for sonraki in re.finditer(r"^(?:function \w+\(|const \w+\s*=|/\* -)", js[bas + 5:], re.M):
+            son = bas + 5 + sonraki.start()
+            break
+        parcalar.append(js[bas:son])
+    kod = "\n".join(parcalar)
+    ornekler = [
+        "Merhaba! Nasil yardimci olabilirim?",
+        "Iste kod:\n```python\ndef say(m):\n    return len(m.split())\n```\nBitti.",
+        "```\nkod bloğu dil etiketsiz\n```",
+        "Yarim blok: ```python\ndef f():\n    pass",
+        "`satir ici` ve **kalin** ve <script>alert(1)</script>",
+        "```js\nconst x = {a:1};\n```\nsonra ```py\nprint('x')\n```",
+        "",
+    ]
+    surucu = (kod + "\n" +
+              "const ornekler=" + json.dumps(ornekler, ensure_ascii=False) + ";\n"
+              "let cikti=[];\n"
+              "for (const o of ornekler){\n"
+              "  const h = zenginMetin(o);\n"
+              "  if (typeof h !== 'string') throw new Error('zenginMetin string dondurmedi');\n"
+              "  if (h.includes('<script>')) throw new Error('KACIS YOK: <script> ham gecti');\n"
+              "  cikti.push(h.length);\n"
+              "}\n"
+              "if (kodBlok('x.py', undefined) === undefined) throw new Error('kodBlok undefined');\n"
+              "console.log('OK ' + cikti.join(','));\n")
+    with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as f:
+        f.write(surucu)
+        yol = f.name
+    try:
+        r = subprocess.run([node, yol], capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=60,
+                           creationflags=0x08000000 if os.name == "nt" else 0)
+        assert r.returncode == 0 and "OK" in (r.stdout or ""), \
+            "metin isleyicileri PATLADI:\n%s" % ((r.stderr or r.stdout)[:500])
+        print("metin isleyicileri: ok (%d ornek islendi, kacis calisiyor)" % len(ornekler))
+        return True
+    finally:
+        os.unlink(yol)
+
+
 def id_butunlugu() -> bool:
     """JS'in aradigi HER id HTML'de var mi? (ve HTML'deki id'ler kullaniliyor mu?)
 
@@ -521,7 +583,7 @@ def calisma_dizini_kurallari() -> bool:
 
 
 def main() -> int:
-    ok = (js_sozdizimi() and kaynak_denetimi() and id_butunlugu() and uc_sozlesmesi() and ust_bar_gorunur() and yerlesim_butun() and dizilimler_butun()
+    ok = (js_sozdizimi() and metin_isleyicileri() and kaynak_denetimi() and id_butunlugu() and uc_sozlesmesi() and ust_bar_gorunur() and yerlesim_butun() and dizilimler_butun()
           and yerlesim_motoru() and sunucu_uclari() and calisma_dizini_kurallari() and sohbet_uclari())
     print("SONUC:", "GECTI" if ok else "KALDI")
     return 0 if ok else 1

@@ -862,13 +862,15 @@ function zenginMetin(m){
         .replace(/`([^`\n]+)`/g,'<code style="background:rgba(0,0,0,.35);padding:1px 5px;border-radius:5px;color:var(--vurgu2)">$1</code>')
         .replace(/\*\*([^*\n]+)\*\*/g,'<b>$1</b>');
     }else if(kalan===1){
-      h+=kodBlok(p[i]||(p[i+1]||"").replace(/\n$/,"")); i++;
+      // DIL etiketi + govde iki AYRI arguman (yasandi: "kod" etiketi kaza ile silinince
+      // govde undefined kaldi -> "Cannot read properties of undefined (reading 'split')")
+      h+=kodBlok(p[i]||"kod",(p[i+1]||"").replace(/\n$/,"")); i++;
     }
   }
   return h;
 }
 function kodBlok(yol,icerik,sinir){
-  const satirlar=icerik.split("\n"); const n=satirlar.length;
+  const satirlar=String(icerik==null?"":icerik).split("\n"); const n=satirlar.length;
   const kes=sinir&&n>sinir?satirlar.slice(0,sinir):satirlar;
   let h='<div class="kodblok"><div class="kbas"><span>'+kacir(yol||"")+'</span><span>'+n+' satır</span></div><pre>';
   kes.forEach((s,i)=>{h+='<div class="satir"><span class="no">'+(i+1)+'</span><span class="sk">'+renklendir(s)+'</span></div>';});
