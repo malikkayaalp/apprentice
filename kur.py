@@ -521,6 +521,20 @@ def kontrol_cli() -> bool:
             pass
         bulunan.append(ad)
         log(OK + "%-13s %s %s" % (ad, surum or "(surum okunamadi)", "- " + aciklama))
+    if "claude" in bulunan:
+        # Kurulu olmak yetmez: giris yapilmamissa panelin USTA sohbeti calismaz.
+        try:
+            r = kos([shutil.which("claude"), "auth", "status"], timeout=45)
+            d = json.loads((r.stdout or "{}").strip() or "{}")
+            if d.get("loggedIn"):
+                log(OK + "claude oturumu acik (%s / %s)"
+                    % (d.get("email", "?"), d.get("authMethod", "?")))
+            else:
+                log(UYARI + "claude KURULU ama GIRIS YAPILMAMIS - panelin USTA sohbeti "
+                            "calismaz. Bir terminal ac ve 'claude auth login' calistir "
+                            "(tarayicida Anthropic hesabinla giris yaparsin).")
+        except Exception:
+            log(BILGI + "claude oturum durumu okunamadi - gerekirse: claude auth login")
     yok = [a for a, _, _ in CLI_ADAYLARI if a not in bulunan]
     if yok:
         log(BILGI + "bulunamadi: %s  (istege bagli; panelde 'ozel CLI' alanindan da kullanilabilir)"

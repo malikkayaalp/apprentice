@@ -364,6 +364,20 @@ class Sihirbaz(tk.Tk):
         y("")
         y("3) KOMUT SATIRI CLI'LARI", "bas")
         y("   Sistemde bulunanlar: " + (", ".join(cliler) if cliler else "—"), "ok")
+        if "claude" in cliler:
+            try:
+                import json as _j, subprocess as _sp
+                _r = _sp.run([shutil.which("claude"), "auth", "status"], capture_output=True,
+                             text=True, encoding="utf-8", errors="replace", timeout=30,
+                             creationflags=0x08000000 if os.name == "nt" else 0)
+                _d = _j.loads((_r.stdout or "{}").strip() or "{}")
+                if _d.get("loggedIn"):
+                    y("   Claude oturumu: açık (%s)" % _d.get("email", "?"), "ok")
+                else:
+                    y("   ⚠ Claude KURULU ama GİRİŞ YAPILMAMIŞ — terminalde: claude auth login", "bas")
+                    y("     (çırak/yerel model girişsiz de çalışır; usta sohbeti giriş ister)", "soluk")
+            except Exception:
+                pass
         y("   Panelin USTA bölümü “claude”u başsız çağırır (model + effort seçilebilir);", "soluk")
         y("   “özel CLI” alanına kendi komutunu yazarak (ör. gemini -p {prompt}) başka", "soluk")
         y("   bir ajanı da usta olarak bağlayabilirsin.", "soluk")
