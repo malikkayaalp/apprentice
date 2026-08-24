@@ -187,6 +187,22 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
   background:rgba(12,10,8,.75);min-width:0}
 .kodblok .kbas{display:flex;justify-content:space-between;padding:5px 10px;font:600 .8em var(--mono);
   color:var(--vurgu2);background:rgba(217,119,87,.09);border-bottom:1px solid var(--cizgi2)}
+.kodblok .kbSol,.kodblok .kbSag{display:flex;align-items:center;gap:8px}
+.kodblok .kbOk{cursor:pointer;width:14px;text-align:center;color:var(--vurgu2);user-select:none}
+.kodblok .kbOk:hover{color:var(--metin)}
+.kodblok .kbKopya{cursor:pointer;padding:1px 6px;border-radius:6px;border:1px solid var(--cizgi2);
+  color:var(--soluk);font-size:.95em;line-height:1.3}
+.kodblok .kbKopya:hover{color:var(--metin);border-color:var(--vurgu);background:rgba(217,119,87,.14)}
+.kodblok.kapali pre{display:none}
+.kodblok.kapali .kbas{border-bottom:none}
+.balon{position:relative}
+.balon.uyari{border-color:rgba(233,184,92,.5)}
+.balon .balonKopya{position:absolute;top:4px;right:6px;opacity:0;cursor:pointer;
+  padding:1px 6px;border-radius:6px;border:1px solid var(--cizgi2);background:rgba(0,0,0,.35);
+  color:var(--soluk);font-size:.85em;transition:opacity .15s}
+.balon:hover .balonKopya{opacity:.85}
+.balon .balonKopya:hover{color:var(--metin);border-color:var(--vurgu)}
+
 .kodblok pre{padding:7px 0;overflow-x:auto;font:.86em/1.5 var(--mono)}
 .satir{display:flex}
 .satir .no{width:38px;text-align:right;padding-right:10px;color:rgba(157,150,139,.45);
@@ -869,14 +885,65 @@ function zenginMetin(m){
   }
   return h;
 }
+/* Panoya kopyala: HTTPS olmayan baglamda navigator.clipboard olmayabilir - yedegi var. */
+function panoyaYaz(metin){
+  const t=String(metin==null?"":metin);
+  if(navigator.clipboard&&navigator.clipboard.writeText)
+    return navigator.clipboard.writeText(t).then(()=>true).catch(()=>eskiUsulKopya(t));
+  return Promise.resolve(eskiUsulKopya(t));
+}
+function eskiUsulKopya(t){
+  try{
+    const a=document.createElement("textarea");
+    a.value=t; a.style.position="fixed"; a.style.opacity="0";
+    document.body.appendChild(a); a.select(); document.execCommand("copy"); a.remove();
+    return true;
+  }catch(e){return false}
+}
+function ozniteligeKacir(s){
+  return kacir(s).replace(/"/g,"&quot;");
+}
+/* KOD BLOGU: baslikta ▾ ac/kapa ve ⧉ kopyala. Uzun bloklar KAPALI baslar (kullanici istegi:
+   "kod gizli durabilir, minik bir ok ile acabiliriz, ufak bir kopya butonu olabilir").
+   Ham kod data-ham ozniteliginde durur - blok yeniden cizilse de kopyalama calisir. */
+const KOD_ACIK_SINIR=14;                 // bu satirdan uzun bloklar kapali gelir
 function kodBlok(yol,icerik,sinir){
-  const satirlar=String(icerik==null?"":icerik).split("\n"); const n=satirlar.length;
+  const ham=String(icerik==null?"":icerik);
+  const satirlar=ham.split("\n"); const n=satirlar.length;
+  const kapali=n>KOD_ACIK_SINIR;
   const kes=sinir&&n>sinir?satirlar.slice(0,sinir):satirlar;
-  let h='<div class="kodblok"><div class="kbas"><span>'+kacir(yol||"")+'</span><span>'+n+' satır</span></div><pre>';
+  let h='<div class="kodblok'+(kapali?" kapali":"")+'" data-ham="'+ozniteligeKacir(ham)+'">'+
+    '<div class="kbas"><span class="kbSol"><span class="kbOk" title="göster / gizle">'+
+    (kapali?"▸":"▾")+'</span><span>'+kacir(yol||"")+'</span></span>'+
+    '<span class="kbSag"><span class="kbN">'+n+' satır</span>'+
+    '<span class="kbKopya" title="kodu kopyala">⧉</span></span></div><pre>';
   kes.forEach((s,i)=>{h+='<div class="satir"><span class="no">'+(i+1)+'</span><span class="sk">'+renklendir(s)+'</span></div>';});
   if(sinir&&n>sinir)h+='<div class="satir"><span class="no">…</span><span class="sk" style="color:var(--soluk)">+'+(n-sinir)+' satır — DOSYALAR panelinde tamamı</span></div>';
   return h+'</pre></div>';
 }
+/* Tek yerden olay dinleme: bloklar/balonlar surekli yeniden ciziliyor, tek tek baglamak
+   yerine belgede delegasyon (yeniden cizim kopyalamayi bozmaz). */
+document.addEventListener("click", e=>{
+  const kop=e.target.closest(".kbKopya");
+  if(kop){
+    const blok=kop.closest(".kodblok");
+    panoyaYaz(blok?blok.dataset.ham:"").then(ok=>tost(ok?"⧉ kod kopyalandı":"kopyalanamadı"));
+    e.stopPropagation(); return;
+  }
+  const ok=e.target.closest(".kbOk");
+  if(ok){
+    const blok=ok.closest(".kodblok");
+    if(blok){ const k=blok.classList.toggle("kapali"); ok.textContent=k?"▸":"▾"; }
+    e.stopPropagation(); return;
+  }
+  const bk=e.target.closest(".balonKopya");
+  if(bk){
+    const balon=bk.closest(".balon");
+    panoyaYaz(balon?(balon.dataset.ham||balon.innerText):"")
+      .then(ok2=>tost(ok2?"⧉ mesaj kopyalandı":"kopyalanamadı"));
+    e.stopPropagation();
+  }
+});
 
 /* --------------- boru hatti + filtre --------------- */
 function boruCiz(){
@@ -1155,7 +1222,9 @@ async function ustaChatCek(){
     $("#ustaDurum").textContent=kosan?"● Claude düşünüyor":(ustaUyari?"giriş gerekli":"");
     let h="";
     for(const x of ist){
-      h+='<div class="balon ben">'+kacir(x.ozet)+(x.araclar?' <span class="bmeta">araç izinli</span>':"")+'</div>';
+      h+='<div class="balon ben" data-ham="'+ozniteligeKacir(x.ozet||"")+'">'+
+          '<span class="balonKopya" title="mesajı kopyala">⧉</span>'+kacir(x.ozet)+
+          (x.araclar?' <span class="bmeta">araç izinli</span>':"")+'</div>';
       if(x.durum==="calisiyor"){
         // saniye sayaci h'ye GIRMEZ: her tik degisip tum sohbeti yeniden cizdiriyordu
         // (gidip-gelme titremesi). Sayac ayri span'da, asagida yerinde guncellenir.
@@ -1169,7 +1238,16 @@ async function ustaChatCek(){
           const c=await(await fetch("/api/usta_cevap?id="+x.id)).json();
           USTA_CEVAP[x.id]=c.cevap||"—";
         }
-        h+='<div class="balon karsi">'+zenginMetin(USTA_CEVAP[x.id].slice(0,6000))+
+        const c=USTA_CEVAP[x.id]||"";
+        // Oturum suresi dolmussa (401) balona GIRIS dugmesi koy - kullanici "girisliyim ama
+        // olmuyor" ile bas basa kalmasin (yasandi: auth status 'girisli' der, cagri 401 doner)
+        const oturum=/OTURUM SURESI DOLMUS|401 OAuth|Re-authenticate/i.test(c);
+        h+='<div class="balon karsi'+(oturum?" uyari":"")+'" data-ham="'+ozniteligeKacir(c)+'">'+
+           '<span class="balonKopya" title="mesajı kopyala">⧉</span>'+
+           zenginMetin(c.slice(0,6000))+
+           (oturum?'<br><button class="girisBtn" style="margin-top:8px;padding:6px 14px;border:none;'+
+              'border-radius:9px;cursor:pointer;font-weight:700;color:#fff;'+
+              'background:linear-gradient(135deg,var(--vurgu),#c96a48)">Claude&#39;a yeniden giriş yap</button>':"")+
            '<span class="bmeta">'+(x.sure||"?")+' sn'+(x.araclar?" · araçlı":"")+'</span></div>';
       }
     }
@@ -1268,7 +1346,10 @@ $("#kMod").onchange=e=>{
 };
 function cirakBalon(sinif,metin){
   const d=document.createElement("div"); d.className="balon "+sinif;
-  d.textContent=metin; $("#cirakChat").appendChild(d);
+  d.textContent=metin; d.dataset.ham=metin||"";
+  const k=document.createElement("span"); k.className="balonKopya"; k.textContent="⧉";
+  k.title="mesajı kopyala"; d.appendChild(k);          // kopyala: her balonda (kullanici istegi)
+  $("#cirakChat").appendChild(d);
   $("#cirakChat").scrollTop=$("#cirakChat").scrollHeight; return d;
 }
 async function cirakSohbet(g){
@@ -1289,7 +1370,9 @@ async function cirakSohbet(g){
       $("#cirakChat").scrollTop=$("#cirakChat").scrollHeight;
     }
     dus.classList.remove("dusunuyor");
-    dus.innerHTML=zenginMetin(metin||"—");            // bitince kod bloklari renklenir
+    dus.dataset.ham=metin||"";
+    dus.innerHTML='<span class="balonKopya" title="mesajı kopyala">⧉</span>'+
+                  zenginMetin(metin||"—");            // bitince kod bloklari renklenir
   }catch(e){dus.textContent="HATA: "+e;}
   $("#cirakChat").scrollTop=$("#cirakChat").scrollHeight;
 }

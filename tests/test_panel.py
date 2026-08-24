@@ -72,7 +72,8 @@ def metin_isleyicileri() -> bool:
     with open(SAYFA, encoding="utf-8") as f:
         html = f.read()
     js = "\n".join(re.findall(r"<script>(.*?)</script>", html, re.S))
-    gerek = ["kacir", "renklendir", "kodBlok", "zenginMetin", "KW", "SAY", "renklendir2"]
+    gerek = ["kacir", "renklendir", "kodBlok", "zenginMetin", "KW", "SAY", "renklendir2",
+             "KOD_ACIK_SINIR", "ozniteligeKacir", "panoyaYaz", "eskiUsulKopya"]
     parcalar = []
     for ad in gerek:
         m = re.search(r"^(?:function %s\(|const %s\s*=)" % (ad, ad), js, re.M)
@@ -94,7 +95,12 @@ def metin_isleyicileri() -> bool:
         "```js\nconst x = {a:1};\n```\nsonra ```py\nprint('x')\n```",
         "",
     ]
-    surucu = (kod + "\n" +
+    # node'da DOM yok: kopyalama/olay-delegasyonu kodu icin kucuk sahte ortam
+    sahte = ("const document={addEventListener(){},createElement(){return {style:{},"
+             "select(){},remove(){},appendChild(){}}},body:{appendChild(){},removeChild(){}},"
+             "execCommand(){return true}};\n"
+             "const navigator={};\nfunction tost(){}\n")
+    surucu = (sahte + kod + "\n" +
               "const ornekler=" + json.dumps(ornekler, ensure_ascii=False) + ";\n"
               "let cikti=[];\n"
               "for (const o of ornekler){\n"

@@ -602,8 +602,22 @@ def _usta_istek(veri: dict) -> dict:
             r = _sp.run(cmd, input=girdi, capture_output=True, text=True, encoding="utf-8",
                         errors="replace", timeout=600, cwd=ROOT, env=env, shell=True,
                         creationflags=0x08000000 if os.name == "nt" else 0)
-            kayit["cevap"] = (r.stdout or "").strip() or ("HATA: " + (r.stderr or "")[-500:])
-            kayit["durum"] = "bitti" if r.returncode == 0 else "hata"
+            cikti = (r.stdout or "").strip() or ("HATA: " + (r.stderr or "")[-500:])
+            # OTURUM SURESI DOLMUS: 'claude auth status' loggedIn:true der ama gercek cagri
+            # 401 doner (olculdu). Bu durumda CLI hatayi NORMAL CEVAP gibi basiyor - panel de
+            # onu duz metin sanip giris dugmesi gostermiyordu. Artik acikca isaretlenir.
+            dusuk = cikti.lower()
+            if ("oauth" in dusuk and "expired" in dusuk) or "re-authenticate" in dusuk or \
+                    ("401" in dusuk and "authenticate" in dusuk):
+                kayit["oturum_hatasi"] = True
+                kayit["cevap"] = ("CLAUDE OTURUMU SURESI DOLMUS (401). 'claude auth status' "
+                                  "hala 'girisli' gosterir - yalnizca kimlik dosyasinin varligina "
+                                  "bakar, gecerliligine degil. Asagidaki dugmeyle yeniden giris "
+                                  "yap; cirak (yerel model) bundan etkilenmez.\n\n" + cikti)
+                kayit["durum"] = "hata"
+            else:
+                kayit["cevap"] = cikti
+                kayit["durum"] = "bitti" if r.returncode == 0 else "hata"
         except Exception as e:  # noqa: BLE001
             kayit["cevap"] = "HATA: %s" % str(e)[:300]
             kayit["durum"] = "hata"
