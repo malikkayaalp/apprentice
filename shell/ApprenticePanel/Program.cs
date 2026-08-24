@@ -195,7 +195,7 @@ internal sealed class PanelForm : Form
             Hata.Goster("kurulum bulunamadi",
                 "Panel dosyalari (clients\\web\\panel.py) bulunamadi.\nBakilan yer: " + AppContext.BaseDirectory,
                 "Bu exe'yi Apprentice kurulum klasorune koy, ya da:\n" +
-                "Apprentice-Panel.exe --kok \"C:\\...\\Apprentice\"");
+                "Apprentice-WebPanel.exe --kok \"C:\\...\\Apprentice\"");
             Close(); return;
         }
 

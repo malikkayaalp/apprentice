@@ -669,7 +669,7 @@ def kisayol_yaz() -> bool:
         return True
     # Native kabuk varsa kisayol DOGRUDAN onu gosterir: cift tikta gercek uygulama penceresi
     # (Python arasi yok, ikon ve gorev cubugu kimligi kendisinin).
-    kabuk = os.path.join(ROOT, "Apprentice-Panel.exe")
+    kabuk = os.path.join(ROOT, "Apprentice-WebPanel.exe")
     if os.path.isfile(kabuk):
         hedef, betik = kabuk, ""
     else:

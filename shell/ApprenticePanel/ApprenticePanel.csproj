@@ -9,13 +9,13 @@
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>disable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <AssemblyName>Apprentice-Panel</AssemblyName>
+    <AssemblyName>Apprentice-WebPanel</AssemblyName>
     <RootNamespace>Apprentice</RootNamespace>
     <ApplicationIcon>..\..\assets\apprentice.ico</ApplicationIcon>
     <Version>0.3.0</Version>
     <Company>Apprentice</Company>
-    <Product>Apprentice Panel</Product>
-    <AssemblyTitle>Apprentice Panel</AssemblyTitle>
+    <Product>Apprentice WebPanel</Product>
+    <AssemblyTitle>Apprentice WebPanel</AssemblyTitle>
     <Description>Yerel model calisir, frontier model denetler - canli panel</Description>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>true</SelfContained>

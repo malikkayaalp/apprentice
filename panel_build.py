@@ -1,4 +1,4 @@
-"""Apprentice-Panel.exe (WebView2 kabugu) uret.
+"""Apprentice-WebPanel.exe (WebView2 kabugu) uret.
 
     python panel_build.py
 
@@ -6,7 +6,7 @@ Gereksinim (yalnizca gelistirici): .NET SDK 8+ (dotnet). Kullaniciya .NET GEREKM
 self-contained tek dosyadir; tek on kosul Windows'ta zaten bulunan Edge WebView2 calisma
 zamanidir (yoksa kabuk bunu soyleyip tarayici yoluna dusmeyi onerir).
 
-Cikti: dist/Apprentice-Panel.exe  (~52 MB)
+Cikti: dist/Apprentice-WebPanel.exe  (~52 MB)
 """
 from __future__ import annotations
 import os, shutil, subprocess, sys
@@ -37,10 +37,10 @@ def main() -> int:
                        cwd=PROJE, creationflags=PENCERESIZ)
     if r.returncode:
         return r.returncode
-    kaynak = os.path.join(CIKTI, "Apprentice-Panel.exe")
-    hedef = os.path.join(ROOT, "dist", "Apprentice-Panel.exe")
+    kaynak = os.path.join(CIKTI, "Apprentice-WebPanel.exe")
+    hedef = os.path.join(ROOT, "dist", "Apprentice-WebPanel.exe")
     shutil.copy2(kaynak, hedef)
-    print("Apprentice-Panel.exe: %.1f MB -> %s" % (os.path.getsize(hedef) / 1e6, hedef))
+    print("Apprentice-WebPanel.exe: %.1f MB -> %s" % (os.path.getsize(hedef) / 1e6, hedef))
     return 0
 
 

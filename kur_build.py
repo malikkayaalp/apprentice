@@ -21,10 +21,10 @@ with zipfile.ZipFile(payload, "w", zipfile.ZIP_DEFLATED) as z:
         z.write(d, d)
     # WebView2 kabugu (varsa): kurulum klasorune acilir, kisayol dogrudan onu gosterir.
     # Yoksa sistem yine calisir - panel Edge/Chrome --app kipinde acilir.
-    kabuk = os.path.join(ROOT, "dist", "Apprentice-Panel.exe")
+    kabuk = os.path.join(ROOT, "dist", "Apprentice-WebPanel.exe")
     if os.path.isfile(kabuk):
-        z.write(kabuk, "Apprentice-Panel.exe")
-        print("  + Apprentice-Panel.exe (WebView2 kabugu, %.0f MB)" % (os.path.getsize(kabuk) / 1e6))
+        z.write(kabuk, "Apprentice-WebPanel.exe")
+        print("  + Apprentice-WebPanel.exe (WebView2 kabugu, %.0f MB)" % (os.path.getsize(kabuk) / 1e6))
 print("payload.zip: %d dosya, %.1f MB" % (len(dosyalar), os.path.getsize(payload) / 1e6))
 
 sep = ";" if os.name == "nt" else ":"

@@ -35,11 +35,11 @@ def bos_port(baslangic: int = 8788) -> int:
 
 
 def native_kabuk(port: int) -> bool:
-    """Apprentice-Panel.exe (WebView2 kabugu): gercek uygulama penceresi - kendi ikonu,
+    """Apprentice-WebPanel.exe (WebView2 kabugu): gercek uygulama penceresi - kendi ikonu,
     kendi gorev cubugu kimligi, adres cubugu yok. Olculdu: sicak acilis 0.6 sn
     (Edge --app: ~8 sn ilk acilis). Yoksa False doner, cagiran tarayici yoluna duser."""
-    for aday in (os.path.join(ROOT, "Apprentice-Panel.exe"),
-                 os.path.join(ROOT, "dist", "Apprentice-Panel.exe")):
+    for aday in (os.path.join(ROOT, "Apprentice-WebPanel.exe"),
+                 os.path.join(ROOT, "dist", "Apprentice-WebPanel.exe")):
         if os.path.isfile(aday):
             try:
                 subprocess.Popen([aday, "--kok", ROOT, "--port", str(port)], cwd=ROOT,
