@@ -44,6 +44,13 @@ the pipeline, the metrics, and a **diff view** of every version of every file it
 also talk to both models from it — free-form chat with the local apprentice, and with Claude as
 the supervisor. See [Panel](#panel) below.
 
+![Apprentice Panel](docs/panel.png)
+
+The diff view answers the question that actually matters when you supervise — not *what did it
+write*, but **what did it change** between repair rounds:
+
+![Fark görünümü](docs/fark.png)
+
 ## Use
 
 Add the supervisor rule to your project (`python kur.py --kural <project>`), then simply describe the
@@ -83,6 +90,8 @@ Kurulum masaüstüne **Apprentice Panel** kısayolu bırakır; kısayol `Apprent
 açar. Tarayıcı değil, **kendi penceresi** (WebView2; Electron yok, ek bağımlılık yok). Panel çırağı iş üstünde
 gösterir ve iki modelle de konuşmanızı sağlar.
 
+![Apprentice Panel](docs/panel.png)
+
 **Sekiz bölüm:** İŞLER · BORU HATTI · OLAY AKIŞI · ÇIRAK · METRİKLER · İŞ ÖZETİ ·
 USTA·CLAUDE · DOSYALAR
 
@@ -99,6 +108,9 @@ ayrı bir penceredir — kod, panel alanını kaplamaz.
 onarım turlarında birkaç kez yazılır; her yazım bir **sürümdür**. Görüntüleyicideki `± fark`
 düğmesi iki sürüm arasındaki değişikliği gösterir: yeşil `+` / kırmızı `−` satırlar, `+18 −9`
 özeti, değişmeyen uzun bloklar katlanmış. Sürüm seçiciden herhangi bir turu açabilirsiniz.
+Panelden doğrudan farka gitmek için derin bağlantı: `/dosya?is=<iş>&yol=<dosya>&kip=fark`
+
+![Fark görünümü](docs/fark.png)
 
 **Model kapsülü** (sağ üst). Çırak modeli oradan seçilir — görev kutusundaki seçiciyle aynı
 seçimdir. `▶` seçili modeli önceden ısıtır, `⏏` bellekten boşaltır. Model yüklemesi 30–60 sn

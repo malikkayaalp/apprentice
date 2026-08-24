@@ -68,7 +68,7 @@ select:hover{{color:var(--metin);border-color:var(--vurgu)}}
 </header>
 <div id="kod"></div>
 <script>
-const IS={is_json}, YOL={yol_json};
+const IS={is_json}, YOL={yol_json}, ACILIS_KIP={kip_json};
 /* TEK GECISLI TARAYICI. YASANDI: eskiden zincirleme replace vardi - once dizge gecisi
    <span class="st"> yaziyor, hemen ardindan anahtar kelime gecisi KENDI YAZDIGI etiketin
    icindeki 'class' kelimesini boyuyordu ('class' KW listesinde!). HTML parcalaniyor,
@@ -113,7 +113,7 @@ function ciz(metin, eski){{
 /* FARK GORUNUMU: denetleyenin asil sorusu "ne yazdi" degil "NE DEGISTIRDI"dir. Ayni dosya
    onarim turlarinda birkac kez yazilir; her 'write' olayi bir SURUMDUR. Kod kipinde eski bir
    surumun tam hali, fark kipinde iki surum arasi degisiklik gosterilir. */
-let son=null, pano="", kip="kod", surumler=[], secim=0, cizilenSel="", farkImza="";
+let son=null, pano="", kip=ACILIS_KIP, surumler=[], secim=0, cizilenSel="", farkImza="";
 function el(k){{return document.getElementById(k)}}
 function selYaz(){{
   const s=el("surumSec"), n=surumler.length, imza=kip+":"+n;
@@ -224,6 +224,9 @@ const yolla = m => {{ try{{ window.chrome.webview.postMessage(m); }}catch(e){{}}
   document.getElementById("pKapat").onclick=()=>{{ if(KABUK) yolla("kapat"); else window.close(); }};
   if(!KABUK) document.getElementById("pBuyult").style.display="none";
 }})();
+if(kip==="fark"){{                       // derin baglanti: ?kip=fark ile acildi
+  const b=el("bKip"); b.textContent="📄 kod"; b.classList.add("etkin");
+}}
 document.getElementById("yenile").onclick=cek;
 document.getElementById("kopyala").onclick=()=>navigator.clipboard.writeText(pano||son||"");
 el("bKip").onclick=()=>{{
@@ -240,11 +243,14 @@ cek();
 </script></body></html>"""
 
 
-def sayfa(jid: str, yol: str) -> str:
+def sayfa(jid: str, yol: str, kip: str = "kod") -> str:
+    """kip="fark" ile sayfa DOGRUDAN fark gorunumunde acilir (derin baglanti):
+    /dosya?is=...&yol=...&kip=fark - panelden "ne degisti" sorusuna tek tikla gitmek icin."""
     ad = os.path.basename(yol) or "dosya"
     kacir = lambda s: s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     return SAYFA.format(ad=kacir(ad), bilgi=kacir("%s · %s" % (yol, jid[:15])),
-                        is_json=json.dumps(jid), yol_json=json.dumps(yol))
+                        is_json=json.dumps(jid), yol_json=json.dumps(yol),
+                        kip_json=json.dumps("fark" if kip == "fark" else "kod"))
 
 
 def _yol_gecerli(yol: str) -> str:

@@ -725,7 +725,7 @@ class Istek(BaseHTTPRequestHandler):
             elif yol.path == "/dosya":
                 # AYRI PENCERE goruntuleyici: dosya icerigi panel alanini kaplamasin
                 import goruntuleyici as G
-                self._gonder(G.sayfa(q.get("is", ""), q.get("yol", "")),
+                self._gonder(G.sayfa(q.get("is", ""), q.get("yol", ""), q.get("kip", "")),
                              "text/html; charset=utf-8")
             elif yol.path == "/api/dosya":
                 import goruntuleyici as G

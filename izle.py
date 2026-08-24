@@ -148,7 +148,13 @@ class IsDeposu:
                     if e.get(alan):
                         s["uyarilar"].append(etiket or str(e[alan]))
                 if e.get("ruff"):
-                    s["uyarilar"].extend("ruff: " + str(u) for u in e["ruff"][:4])
+                    # ruff LISTE'dir (code_runner: ruff_rapor[:12] or None). Tek bir dizge
+                    # gelirse harf harf gezilir ve ozete "ruff: t", "ruff: e"... diye cop
+                    # satirlar dokulurdu - eski/bozuk kayit da ozetı bozmasin.
+                    ruff = e["ruff"]
+                    if isinstance(ruff, str):
+                        ruff = [ruff]
+                    s["uyarilar"].extend("ruff: " + str(u) for u in list(ruff)[:4])
             elif t == "error":
                 s["hatalar"].append(e.get("message", ""))
                 s["derleme"] = "calistirilamadi"
