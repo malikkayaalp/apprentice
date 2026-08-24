@@ -280,10 +280,17 @@ def renkle(satir: str) -> list:
 def sistem_satiri() -> str:
     parcalar = []
     try:
-        out = subprocess.run(["ollama", "ps"], capture_output=True, text=True, timeout=4).stdout
-        satirlar = [x for x in out.splitlines()[1:] if x.strip()]
-        parcalar.append(("model: " + satirlar[0].split()[0].split("/")[-1][:40]) if satirlar
-                        else "model: yuklu degil")
+        # 'ollama ps' KOMUTU degil API: komut farkli sunucu ornegine baglanabiliyor
+        # (olculdu: model API'de yukluyken CLI bos tablo gosterdi - cift serve mirasi).
+        import urllib.request
+        with urllib.request.urlopen("http://localhost:11434/api/ps", timeout=4) as r:
+            modeller = (json.load(r).get("models") or [])
+        if modeller:
+            m = modeller[0]
+            parcalar.append("model: %s (%.0f GB yuklu)" % (
+                m.get("name", "?").split("/")[-1][:40], m.get("size", 0) / 1e9))
+        else:
+            parcalar.append("model: yuklu degil")
     except Exception:
         parcalar.append("ollama: erisilemedi")
     try:
