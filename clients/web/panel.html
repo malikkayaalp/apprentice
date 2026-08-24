@@ -17,7 +17,7 @@
   --kod:#c8d8b0; --mor:#c9a0e8; --mono:"Cascadia Code","Consolas",monospace; --f:1;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%;overflow:hidden}
+html,body{height:100%;overflow:hidden;display:flex;flex-direction:column;height:100vh;overflow:hidden}
 body{
   background:
     radial-gradient(1200px 600px at 75% -10%, rgba(217,119,87,.13), transparent 60%),
@@ -63,15 +63,26 @@ body::before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.5;
 /* Acilir listedeki secenekler: bazi Chromium surumleri color-scheme'i tam uygulamiyor */
 select option,select optgroup{background:var(--panel);color:var(--metin)}
 select option:checked{background:var(--vurgu);color:#1a1512}
-#dizilim,html.tekKip #ust>*:not(#logo):not(.bosluk){display:none!important}
+#dizilim,#tekBar{display:none}
+html.tekKip #tekBar{display:flex;align-items:center;gap:6px;padding:5px 6px 5px 12px;
+  background:linear-gradient(180deg,rgba(28,24,20,.98),rgba(20,17,14,.95));
+  border-bottom:1px solid var(--cizgi);cursor:grab;user-select:none;flex-shrink:0;
+  font:600 11.5px var(--mono);letter-spacing:1px;color:var(--vurgu2)}
+html.tekKip #tekBar .tbBos{flex:1}
+html.tekKip #tekBar .tbDug{padding:2px 8px;border-radius:6px;cursor:pointer;color:var(--soluk)}
+html.tekKip #tekBar .tbDug:hover{background:rgba(255,255,255,.08);color:var(--metin)}
+html.tekKip #tekBar .tbDug.etkin{color:var(--vurgu);background:rgba(217,119,87,.15)}
+html.tekKip #tekBar .tbKapat:hover{background:rgba(224,108,95,.25);color:#fff}
+html.tekKip #ust{display:none!important}
+html.tekKip #ust>*:not(#logo):not(.bosluk){display:none!important}
 html.tekKip #ust{padding:0 10px;min-height:30px}
 html.tekKip #logo{font-size:12px;opacity:.55}
 html.tekKip #raf{display:none!important}
-html.tekKip #alan{height:calc(100% - 30px)}
+html.tekKip #alan{flex:1}
 html.tekKip .kart{border-radius:0;border:none;box-shadow:none}
 html.tekKip .kart .kapat{display:none}
 html.tekKip .tutamak{display:none}
-#raf{display:flex;align-items:center;gap:7px;padding:5px 12px;background:rgba(20,17,14,.9);
+#raf{flex-shrink:0;display:flex;align-items:center;gap:7px;padding:5px 12px;background:rgba(20,17,14,.9);
   border-top:1px solid var(--cizgi2);font-size:11px;flex-wrap:wrap}
 #raf .rafEt{color:var(--soluk);opacity:.75}
 #raf .rafCip{padding:2px 9px;border:1px solid var(--cizgi2);border-radius:20px;cursor:pointer;
@@ -261,7 +272,6 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
   <button id="yerlesimSifirla">yerleşimi sıfırla</button>
 </div>
 
-<div id="raf" style="display:none"></div>
 <div id="alan">
   <div class="kart" data-p="isler"><div class="kbaslik">İŞLER</div>
     <div class="kgovde"><div id="isListe"></div></div><div class="tutamak"></div></div>
@@ -380,6 +390,7 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
 </div>
 <input type="file" id="uEkSecici" multiple style="display:none">
 <input type="file" id="kEkSecici" multiple accept=".py,.md,.txt,.json,.csv,.html,.js,.ts,.cs,.yaml,.yml,.xml,.toml,.ini,.sql,.sh,.bat,.css" style="display:none">
+<div id="raf" style="display:none"></div>
 <div id="tost"></div>
 
 <script>
@@ -566,7 +577,7 @@ function _uygula(){
    Cerceveye sigmayan panel KUCULMEZ, RAFA iner: alttaki serit uzerinde adiyla durur,
    tiklayinca geri gelir. Boylece "yer bulamazsa ne olacak" sorusunun cevabi belli:
    panel kaybolmaz, kuculmez - rafta bekler. */
-function sigdir(){
+function sigdir(rafIzin){
   const alt=()=>{const a=aktifAdlar(); return a.length?Math.max(...a.map(x=>yerlesim[x].gy+yerlesim[x].gh)):0;};
   let koruma=0;
   while(alt()>SATIR&&koruma++<20){
@@ -577,6 +588,7 @@ function sigdir(){
       yerlesim[enAlt].gy=0; yerlesim[enAlt].gh=Math.min(SATIR,yerlesim[enAlt].gh);
       break;
     }
+    if(rafIzin===false)break;                  // SURUKLERKEN rafa indirme yok: onizleme tasabilir
     rafPaneller.add(enAlt); gizliPaneller.add(enAlt);
     sikistir(); itele(); sikistir();
   }
@@ -598,7 +610,7 @@ function rafCiz(){
     panelKaydet(); duzenle(); kaydet(); dizilimOzellesti();
   });
 }
-function duzenle(){itele();sikistir();itele();sigdir();uygula()}
+function duzenle(rafIzin){itele();sikistir();itele();sigdir(rafIzin);uygula()}
 
 /* TEK PANEL KIPI (?tek=akis): ayni sayfa, yalnizca o panel tam pencere. Tum yoklama ve
    cizim kodu aynen calisir - ayri bir arayuz yazmaya gerek yok. Native kabuk bu adresi
@@ -612,7 +624,56 @@ if(TEK&&PANEL_ADLARI[TEK]){
   yerlesim[TEK]={gx:0,gy:0,gw:SUTUN,gh:SATIR};
   document.title=PANEL_ADLARI[TEK]+" — Apprentice";
   const bis=URLP.get("is"); if(bis){seciliIs=bis; otoSec=false;}
+  addEventListener("DOMContentLoaded",()=>tekBarKur(TEK, URLP.get("ustte")==="1"));
 }
+
+/* TEK PANEL KIPINDE KENDI BASLIK CUBUGUMUZ: kabuk pencereyi CERCEVESIZ acar (Windows baslik
+   cubugu yok - kullanici istegi). TASIMA RISKI (kullanici uyardi): cerceve kalkinca pencere
+   tasinamaz hale gelebilir. Bu yuzden tasima ACIKCA burada yapilir: serit uzerinde fare
+   hareketi piksel farki olarak host'a gonderilir, host pencereyi o kadar kaydirir.
+   Kanal: window.chrome.webview.postMessage -> "tasi:dx,dy" | "kapat" | "buyult" | "ustte:0/1" */
+function tekBarKur(ad, ustteBaslangic){
+  const kabuk = !!(window.chrome && window.chrome.webview);
+  const yolla = m => { try{ window.chrome.webview.postMessage(m); }catch(e){} };
+  const bar=document.createElement("div");
+  bar.id="tekBar";
+  bar.innerHTML='<span class="tbAd">'+(PANEL_ADLARI[ad]||ad)+'</span><span class="tbBos"></span>'+
+    '<span class="tbDug" id="tbUstte" title="hep üstte kalsın">📌</span>'+
+    '<span class="tbDug" id="tbBuyult" title="büyüt / geri al">▢</span>'+
+    '<span class="tbDug tbKapat" id="tbKapat" title="kapat">✕</span>';
+  document.body.insertBefore(bar, document.body.firstChild);
+
+  let sx=0, sy=0, tasiniyor=false;
+  bar.addEventListener("pointerdown", e=>{
+    if(e.target.closest(".tbDug")) return;
+    tasiniyor=true; sx=e.screenX; sy=e.screenY;
+    bar.setPointerCapture(e.pointerId);
+    bar.style.cursor="grabbing";
+  });
+  bar.addEventListener("pointermove", e=>{
+    if(!tasiniyor) return;
+    const dx=e.screenX-sx, dy=e.screenY-sy;
+    if(dx||dy){ sx=e.screenX; sy=e.screenY; if(kabuk) yolla("tasi:"+dx+","+dy); }
+  });
+  const birak = e=>{ if(!tasiniyor)return; tasiniyor=false; bar.style.cursor="";
+    try{bar.releasePointerCapture(e.pointerId)}catch(_){} };
+  bar.addEventListener("pointerup", birak);
+  bar.addEventListener("pointercancel", birak);
+  bar.addEventListener("dblclick", e=>{ if(!e.target.closest(".tbDug")&&kabuk) yolla("buyult"); });
+
+  let ustte=!!ustteBaslangic;
+  const yansit=()=>document.getElementById("tbUstte").classList.toggle("etkin",ustte);
+  yansit();
+  document.getElementById("tbKapat").onclick=()=>{ if(kabuk) yolla("kapat"); else window.close(); };
+  document.getElementById("tbBuyult").onclick=()=>{ if(kabuk) yolla("buyult"); };
+  document.getElementById("tbUstte").onclick=()=>{
+    ustte=!ustte; yansit();
+    if(kabuk) yolla("ustte:"+(ustte?"1":"0"));
+    else tost("hep üstte: yalnız uygulama penceresinde çalışır");
+  };
+  if(!kabuk) document.getElementById("tbBuyult").style.display="none";
+}
+
 function kaydet(){localStorage.setItem("apprentice_yerlesim_v4",JSON.stringify(yerlesim))}
 function panelKaydet(){localStorage.setItem("apprentice_gizli_paneller",JSON.stringify([...gizliPaneller]));
   localStorage.setItem("apprentice_raf",JSON.stringify([...rafPaneller]))}
@@ -708,14 +769,44 @@ document.querySelectorAll(".kart").forEach(k=>{
     if(e.target.closest(".kek")||e.target.closest(".kapat"))return;
     const p=yerlesim[ad], h=hucre();
     const sx=e.clientX,sy=e.clientY,ox=p.gx,oy=p.gy;
+    // Surukleme oncesi durumu sakla: sigmayan bir birakis YER DEGISTIRMEYE cevrilir
+    const yedek=JSON.parse(JSON.stringify(yerlesim));
     surukluAd=ad; k.classList.add("tasiniyor");
     function tasi(ev){
       const ngx=Math.max(0,Math.min(SUTUN-p.gw,ox+Math.round((ev.clientX-sx)/h.w)));
       const ngy=Math.max(0,Math.min(SATIR-p.gh,oy+Math.round((ev.clientY-sy)/h.h)));
-      if(ngx!==p.gx||ngy!==p.gy){p.gx=ngx;p.gy=ngy;duzenle()}
+      if(ngx!==p.gx||ngy!==p.gy){p.gx=ngx;p.gy=ngy;duzenle(false)}   // onizlemede rafa indirme yok
     }
-    function birak(){removeEventListener("pointermove",tasi);removeEventListener("pointerup",birak);
-      k.classList.remove("tasiniyor");surukluAd=null;duzenle();kaydet();dizilimOzellesti()}
+    function birak(){
+      removeEventListener("pointermove",tasi);removeEventListener("pointerup",birak);
+      k.classList.remove("tasiniyor");
+      const hedefX=p.gx, hedefY=p.gy;
+      surukluAd=null;
+      duzenle(false);
+      const adlar=aktifAdlar();
+      const alt=adlar.length?Math.max(...adlar.map(x=>yerlesim[x].gy+yerlesim[x].gh)):0;
+      if(alt>SATIR){
+        /* SIGMADI. Panel KUCULTULMEZ ve kimse KAYBOLMAZ: birakilan yerdeki panelle YER
+           DEGISTIRILIR (tiling pencere yoneticilerinin davranisi). Boylece ekranda hep ayni
+           paneller kalir - kullanici "panel yok oldu" demez. Hedefte panel yoksa surukleme
+           geri alinir. */
+        const eskiKutu={...yedek[ad]};
+        for(const x in yedek)yerlesim[x]={...yedek[x]};
+        const hedef=aktifAdlar().find(x=>x!==ad&&
+          hedefX < yerlesim[x].gx+yerlesim[x].gw && hedefX+eskiKutu.gw > yerlesim[x].gx &&
+          hedefY < yerlesim[x].gy+yerlesim[x].gh && hedefY+eskiKutu.gh > yerlesim[x].gy);
+        if(hedef){
+          const b={...yerlesim[hedef]};
+          yerlesim[hedef]={...eskiKutu};
+          yerlesim[ad]={...b};
+          tost("↔ "+(PANEL_ADLARI[ad]||ad)+" ile "+(PANEL_ADLARI[hedef]||hedef)+" yer değiştirdi");
+        }else{
+          tost("sığmadı — panel eski yerine döndü");
+        }
+        duzenle(false);
+      }
+      kaydet();dizilimOzellesti();
+    }
     addEventListener("pointermove",tasi);addEventListener("pointerup",birak);e.preventDefault();
   });
   const tut=k.querySelector(".tutamak");
@@ -726,7 +817,7 @@ document.querySelectorAll(".kart").forEach(k=>{
     function boyut(ev){
       const ngw=Math.max(3,Math.min(SUTUN-p.gx,ow+Math.round((ev.clientX-sx)/h.w)));
       const ngh=Math.max(2,Math.min(SATIR-p.gy,oh+Math.round((ev.clientY-sy)/h.h)));
-      if(ngw!==p.gw||ngh!==p.gh){p.gw=ngw;p.gh=ngh;duzenle()}
+      if(ngw!==p.gw||ngh!==p.gh){p.gw=ngw;p.gh=ngh;duzenle(false)}
     }
     function birak(){removeEventListener("pointermove",boyut);removeEventListener("pointerup",birak);
       k.classList.remove("tasiniyor");surukluAd=null;duzenle();kaydet();dizilimOzellesti()}

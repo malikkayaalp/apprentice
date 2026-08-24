@@ -22,6 +22,15 @@ internal static class Program
         ApplicationConfiguration.Initialize();
         try
         {
+            // "--tek <panel>": dogrudan TEK PANEL penceresi (cercevesiz). Kisayol/otomasyon
+            // icin: Apprentice-WebPanel.exe --tek akis [--ustte]
+            var tekIx = Array.IndexOf(args, "--tek");
+            if (tekIx >= 0 && tekIx + 1 < args.Length)
+            {
+                Application.Run(new TekPencereBaslatici(args, args[tekIx + 1],
+                                                        Array.IndexOf(args, "--ustte") >= 0));
+                return;
+            }
             Application.Run(new PanelForm(args));
         }
         catch (Exception e)
@@ -41,6 +50,27 @@ internal static class Hata
         MessageBox.Show(metin, "Apprentice - " + baslik, MessageBoxButtons.OK, MessageBoxIcon.Error);
     }
 }
+
+/// <summary>"--tek akis": gorunmez bir tasiyici, sunucuyu hazirlar ve CERCEVESIZ panel
+/// penceresini acar; o pencere kapaninca uygulama biter.</summary>
+internal sealed class TekPencereBaslatici : Form
+{
+    public TekPencereBaslatici(string[] args, string panel, bool ustte)
+    {
+        Opacity = 0; ShowInTaskbar = false; WindowState = FormWindowState.Minimized;
+        Load += async (_, _) =>
+        {
+            var ana = new PanelForm(args) { Opacity = 0, ShowInTaskbar = false };
+            await ana.SadeceSunucu();                     // sunucu ayakta mi, degilse baslat
+            var ortam = await CoreWebView2Environment.CreateAsync(null, PanelForm.EvKlasoruDis());
+            var alt = new AltPencere(string.Format("http://127.0.0.1:{0}/?tek={1}{2}",
+                                                   ana.Port, panel, ustte ? "&ustte=1" : ""), ortam);
+            alt.FormClosed += (_, _) => Close();
+            alt.Show();
+        };
+    }
+}
+
 
 internal sealed class PanelForm : Form
 {
@@ -70,6 +100,26 @@ internal sealed class PanelForm : Form
     }
 
     // ---------------------------------------------------------------- yerlesim
+    public int Port => _port;
+    public static string EvKlasoruDis() => EvKlasoru();
+
+    /// <summary>Pencere acmadan: kurulumu bul, sunucu ayakta degilse baslat.</summary>
+    public async Task SadeceSunucu()
+    {
+        _kok = KurulumBul(Array.Empty<string>());
+        if (_kok == "")
+        {
+            Hata.Goster("kurulum bulunamadi", @"clients\web\panel.py bulunamadi", null);
+            return;
+        }
+        if (await AyaktaMi(_port)) return;
+        var deneme = _port;
+        while (deneme < _port + 12 && PortDolu(deneme) && !await AyaktaMi(deneme)) deneme++;
+        _port = deneme;
+        if (!await AyaktaMi(_port) && !SunucuyuBaslat()) return;
+        for (var i = 0; i < 150 && !await AyaktaMi(_port); i++) await Task.Delay(80);
+    }
+
     private static string EvKlasoru()
     {
         var ev = Environment.GetEnvironmentVariable("APPRENTICE_HOME");
@@ -366,8 +416,14 @@ internal sealed class PanelForm : Form
 }
 
 /// <summary>
-/// Dosya goruntuleyici penceresi: panelden window.open ile acilan kendi adresimiz burada
-/// GERCEK bir uygulama penceresi olur (panel alanini kaplamaz - kullanici istegi).
+/// Disari alinan panel/dosya penceresi. CERCEVESIZ: Windows baslik cubugu yok, kapatma ve
+/// tasima bizim arayuzumuzde (kullanici istegi: "windows cercevesi olmadan, kapatma tusunu
+/// biz koyalim"). Sayfa ile host arasinda kucuk bir mesaj kanali var:
+///   kapat        -> pencere kapanir
+///   ustte:1/0    -> hep ustte ac/kapa
+///   surukle      -> pencereyi fareyle tasi (baslik cubugu yok, HTML seridi tasiyicidir)
+///   buyult       -> tam ekran / geri al
+/// Kenarlardan boyutlandirma WndProc'ta HitTest ile saglanir.
 /// </summary>
 internal sealed class AltPencere : Form
 {
@@ -375,20 +431,32 @@ internal sealed class AltPencere : Form
     private readonly CoreWebView2Environment _ortam;
     public event EventHandler<CoreWebView2> Hazir;
 
+    private const int KENAR = 6;                     // boyutlandirma kenari (piksel)
+    private const int WM_NCHITTEST = 0x0084;
+    private const int WM_NCLBUTTONDOWN = 0x00A1;
+    private const int HTCLIENT = 1, HTLEFT = 10, HTRIGHT = 11, HTTOP = 12, HTTOPLEFT = 13,
+                      HTTOPRIGHT = 14, HTBOTTOM = 15, HTBOTTOMLEFT = 16, HTBOTTOMRIGHT = 17,
+                      HTCAPTION = 2;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool ReleaseCapture();
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+
+    private readonly string _uri;
+
     public AltPencere(string uri, CoreWebView2Environment ortam)
     {
+        _uri = uri;
         _ortam = ortam;
         Text = "Apprentice";
-        // "&ustte=1": kullanici paneli disari alirken "hep ustte kalsin" dediyse pencere
-        // diger uygulamalarin uzerinde durur (kod yazarken izlemek icin).
-        if (uri.Contains("ustte=1"))
-        {
-            TopMost = true;
-            Text = "Apprentice (üstte)";
-        }
+        FormBorderStyle = FormBorderStyle.None;      // CERCEVESIZ: baslik cubugu HTML'de
+        ShowInTaskbar = true;
         BackColor = Color.FromArgb(0x14, 0x12, 0x10);
-        Size = new Size(1020, 760);
+        Size = new Size(940, 700);
+        MinimumSize = new Size(360, 220);
         StartPosition = FormStartPosition.CenterParent;
+        if (uri.Contains("ustte=1")) TopMost = true;
         try { Icon = Icon.ExtractAssociatedIcon(Environment.ProcessPath ?? Application.ExecutablePath); }
         catch { }
         _web.Dock = DockStyle.Fill;
@@ -400,10 +468,70 @@ internal sealed class AltPencere : Form
             var w = _web.CoreWebView2;
             w.Settings.AreDefaultContextMenusEnabled = false;
             w.Settings.IsStatusBarEnabled = false;
+            w.Settings.AreDevToolsEnabled = true;
+            w.WebMessageReceived += (_, e) => MesajIsle(e.TryGetWebMessageAsString() ?? "");
             w.DocumentTitleChanged += (_, _) =>
-                Text = (string.IsNullOrWhiteSpace(w.DocumentTitle) ? "Apprentice" : w.DocumentTitle)
-                       + (TopMost ? "  (üstte)" : "");
-            Hazir?.Invoke(this, w);          // WebView2 sayfayi kendisi yukler (NewWindow)
+                Text = string.IsNullOrWhiteSpace(w.DocumentTitle) ? "Apprentice" : w.DocumentTitle;
+            if (Hazir != null)
+            {
+                Hazir.Invoke(this, w);      // NewWindowRequested: sayfayi WebView2 kendisi yukler
+            }
+            else
+            {
+                // Tek basina acildi (--tek): adresi BIZ yuklemeliyiz. Eksikti - pencere bos
+                // aciliyordu, dolayisiyla kendi baslik seridimiz de yoktu ve pencere tasinamiyordu.
+                _web.Source = new Uri(_uri);
+            }
         };
+    }
+
+    private void MesajIsle(string m)
+    {
+        if (m == "kapat") { Close(); return; }
+        if (m == "buyult")
+        {
+            WindowState = WindowState == FormWindowState.Maximized
+                ? FormWindowState.Normal : FormWindowState.Maximized;
+            return;
+        }
+        if (m.StartsWith("ustte:")) { TopMost = m.EndsWith("1"); return; }
+        if (m.StartsWith("tasi:"))
+        {
+            // CERCEVE YOK: pencere HTML seridinden tasinir. Kullanici uyardi ("cerceve
+            // kalkinca tasiyamama problemi olabilir") - bu yuzden tasima ACIK ve olculebilir:
+            // serit fare farkini gonderir, pencere o kadar kayar.
+            var p = m.Substring(5).Split(',');
+            if (p.Length == 2 && int.TryParse(p[0], out var dx) && int.TryParse(p[1], out var dy))
+            {
+                if (WindowState == FormWindowState.Maximized) WindowState = FormWindowState.Normal;
+                Location = new Point(Location.X + dx, Location.Y + dy);
+            }
+            return;
+        }
+        if (m == "surukle")            // yedek yol: native baslik surukleme
+        {
+            ReleaseCapture();
+            SendMessage(Handle, WM_NCLBUTTONDOWN, HTCAPTION, IntPtr.Zero);
+        }
+    }
+
+    protected override void WndProc(ref Message m)
+    {
+        base.WndProc(ref m);
+        if (m.Msg != WM_NCHITTEST || (int)m.Result != HTCLIENT) return;
+        // Kenarlardan boyutlandirma (cerceve olmadigi icin elle)
+        var n = PointToClient(new Point(m.LParam.ToInt32() & 0xFFFF, m.LParam.ToInt32() >> 16));
+        bool sol = n.X <= KENAR, sag = n.X >= ClientSize.Width - KENAR;
+        bool ust = n.Y <= KENAR, altk = n.Y >= ClientSize.Height - KENAR;
+        int kod = HTCLIENT;
+        if (sol && ust) kod = HTTOPLEFT;
+        else if (sag && ust) kod = HTTOPRIGHT;
+        else if (sol && altk) kod = HTBOTTOMLEFT;
+        else if (sag && altk) kod = HTBOTTOMRIGHT;
+        else if (sol) kod = HTLEFT;
+        else if (sag) kod = HTRIGHT;
+        else if (ust) kod = HTTOP;
+        else if (altk) kod = HTBOTTOM;
+        if (kod != HTCLIENT) m.Result = (IntPtr)kod;
     }
 }
