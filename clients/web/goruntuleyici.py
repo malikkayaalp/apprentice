@@ -69,15 +69,36 @@ select:hover{{color:var(--metin);border-color:var(--vurgu)}}
 <div id="kod"></div>
 <script>
 const IS={is_json}, YOL={yol_json};
-const KW=/\\b(def|class|if|elif|else|for|while|return|import|from|raise|try|except|finally|with|as|in|not|and|or|is|None|True|False|lambda|pass|break|continue|yield|self|public|private|protected|static|void|var|new|using|namespace|int|float|string|bool|foreach|null|this|override|virtual|async|await|const|let|function)\\b/g;
+/* TEK GECISLI TARAYICI. YASANDI: eskiden zincirleme replace vardi - once dizge gecisi
+   <span class="st"> yaziyor, hemen ardindan anahtar kelime gecisi KENDI YAZDIGI etiketin
+   icindeki 'class' kelimesini boyuyordu ('class' KW listesinde!). HTML parcalaniyor,
+   ekrana ham `class="st">` dokuluyordu (kullanici ekran goruntusuyle bildirdi).
+   Cozum: once BELIRTEC bulunur, sonra kacirilip etiketlenir - uretilen HTML bir daha
+   taranmaz. Yan fayda: dizgenin ICINDEKI kelimeler artik anahtar kelime sanilmiyor. */
 function kacir(s){{return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}}
+const KW_KUME=new Set(("def class if elif else for while return import from raise try except "+
+ "finally with as in not and or is None True False lambda pass break continue yield self "+
+ "public private protected static void var new using namespace int float string bool "+
+ "foreach null this override virtual async await const let function").split(" "));
+const BELIRTEC=/(#[^\\n]*|\\/\\/[^\\n]*)|("(?:\\\\.|[^"\\\\])*"?|'(?:\\\\.|[^'\\\\])*'?)|(\\d+(?:\\.\\d+)?)|([A-Za-z_]\\w*)/g;
 function renkle(s){{
-  return kacir(s)
-    .replace(/(#.*$|\\/\\/.*$)/g,'<span class="cm">$1</span>')
-    .replace(/(&#39;[^&]*?&#39;|"[^"\\n]*")/g,'<span class="st">$1</span>')
-    .replace(KW,'<span class="kw">$&</span>')
-    .replace(/\\b(\\d+\\.?\\d*)\\b/g,'<span class="nu">$1</span>')
-    .replace(/\\b([a-zA-Z_][\\w]*)\\s*\\(/g,'<span class="fn">$1</span>(');
+  s=String(s==null?"":s);
+  let cikti="", i=0, m;
+  BELIRTEC.lastIndex=0;
+  while((m=BELIRTEC.exec(s))!==null){{
+    cikti+=kacir(s.slice(i,m.index));
+    if(m[1])      cikti+='<span class="cm">'+kacir(m[1])+'</span>';
+    else if(m[2]) cikti+='<span class="st">'+kacir(m[2])+'</span>';
+    else if(m[3]) cikti+='<span class="nu">'+kacir(m[3])+'</span>';
+    else{{
+      const k=m[4];
+      if(KW_KUME.has(k))                   cikti+='<span class="kw">'+k+'</span>';
+      else if(s[BELIRTEC.lastIndex]==="(") cikti+='<span class="fn">'+k+'</span>';
+      else                                 cikti+=kacir(k);
+    }}
+    i=BELIRTEC.lastIndex;
+  }}
+  return cikti+kacir(s.slice(i));
 }}
 function ciz(metin, eski){{
   const s=metin.split("\\n"), e=(eski||"").split("\\n");

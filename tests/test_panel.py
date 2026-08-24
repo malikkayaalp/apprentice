@@ -817,11 +817,68 @@ console.log("MAKINE-OK");
     return True
 
 
+def vurgulayici_sozlesmesi() -> bool:
+    """Iki sozdizimi vurgulayicisi da METNI BOZMAMALI ve ETIKET SIZDIRMAMALI.
+
+    YASANDI (kullanici ekran goruntusuyle bildirdi): goruntuleyicide docstring'li her satir
+    `class="st">""class="st">"Bos liste...` diye ham HTML dokuyordu. Sebep: zincirleme
+    replace - once dizge gecisi <span class="st"> yaziyor, hemen ardindan anahtar kelime
+    gecisi KENDI YAZDIGI etiketin icindeki 'class' kelimesini boyuyordu ('class' anahtar
+    kelime listesinde). Uretilen HTML'in yeniden taranmasi bu sinifin tamamini doguruyor.
+
+    Sozdizimi testi bunu goremez (JS gecerli), goz de her satirda fark etmez. Bu test
+    DEGISMEZ KURALA bakar: etiketler soyulunca geriye TAM OLARAK kaynak metin kalmali,
+    span'lar dengeli olmali, ic ice bozuk etiket olmamali. Kosum: tests/js/renk_sozlesme.js"""
+    node = shutil.which("node")
+    if not node:
+        print("vurgulayici sozlesmesi: node yok, atlandi")
+        return True
+    sys.path.insert(0, os.path.join(ROOT, "clients", "web"))
+    import goruntuleyici as G
+    with open(os.path.join(ROOT, "tests", "js", "renk_sozlesme.js"), encoding="utf-8") as f:
+        surus = f.read()
+
+    gjs = re.search(r"<script>(.*?)</script>", G.sayfa("i", "a.py"), re.S).group(1)
+    goruntuleyici = gjs[gjs.index("function kacir("):gjs.index("function ciz(")]
+
+    with open(SAYFA, encoding="utf-8") as f:
+        pjs = "\n".join(re.findall(r"<script>(.*?)</script>", f.read(), re.S))
+    kw = pjs[pjs.index("const KW="):pjs.index("\n", pjs.index("const KW="))]
+    panel = pjs[pjs.index("function kacir("):pjs.index("function renklendir2(")]
+
+    kod = (surus
+           + "\n(function(){\n" + goruntuleyici + "\ndene('goruntuleyici renkle', renkle);\n})();\n"
+           + "(function(){\n" + kw + "\n" + panel + "\ndene('panel renklendir', renklendir);\n})();\n"
+           + "console.log('RENK-OK');\n")
+    with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as f:
+        f.write(kod)
+        yol = f.name
+    try:
+        r = subprocess.run([node, yol], capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=60,
+                           creationflags=0x08000000 if os.name == "nt" else 0)
+        assert "RENK-OK" in (r.stdout or ""), \
+            "VURGULAYICI SOZLESMESI KALDI:\n%s" % ((r.stderr or r.stdout or "")[:900])
+    finally:
+        os.unlink(yol)
+
+    # Sablon Python tarafinda da temiz olmali: SAYFA ham olmayan bir dizge, gecersiz kacis
+    # ("\\/" gibi) Python tarafindan yenir ve JS'e BOZUK desen gider (yasandi).
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", SyntaxWarning)
+        with open(os.path.join(ROOT, "clients", "web", "goruntuleyici.py"), encoding="utf-8") as f:
+            compile(f.read(), "goruntuleyici.py", "exec")
+    print("vurgulayici sozlesmesi: ok (iki vurgulayici da metni koruyor, etiket sizdirmiyor)")
+    return True
+
+
 def main() -> int:
     ok = (js_sozdizimi() and metin_isleyicileri() and kaynak_denetimi() and id_butunlugu() and uc_sozlesmesi() and ust_bar_gorunur() and yerlesim_butun() and dizilimler_butun()
           and yerlesim_motoru() and sunucu_uclari() and calisma_dizini_kurallari() and sohbet_uclari()
           and goruntuleyici_sayfasi() and fark_gorunumu()
-          and animasyon_tanimlari() and model_kapsulu())
+          and animasyon_tanimlari() and model_kapsulu()
+          and vurgulayici_sozlesmesi())
     print("SONUC:", "GECTI" if ok else "KALDI")
     return 0 if ok else 1
 

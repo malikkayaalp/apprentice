@@ -882,7 +882,9 @@ function kacir(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>
 function renklendir(satir){
   let s=kacir(satir);
   s=s.replace(/(#[^\n]*|\/\/[^\n]*)/g,'␁yorum␂$1␃');
-  s=s.replace(/(&quot;[^&]*?&quot;|'[^'\n]*')/g,'␁str␂$1␃');
+  // YASANDI: desen &quot; ariyordu ama kacir() tirnak KACIRMAZ - cift tirnakli dizgeler
+  // panelde HIC boyanmiyordu. Artik gercek tirnak aranir (kacis dizileri de anlasilir).
+  s=s.replace(/("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*')/g,'␁str␂$1␃');
   s=s.replace(KW,'␁kw␂$&␃');
   s=s.replace(/\b(\d[\d_.]*)\b/g,'␁sayi␂$1␃');
   return s.replace(/␁(\w+)␂/g,'<span class="tk-$1">').replace(/␃/g,'</span>');
