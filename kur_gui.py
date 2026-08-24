@@ -186,19 +186,21 @@ class Sihirbaz(tk.Tk):
         # alt: dugmeler
         alt = ttk.Frame(self, padding=(16, 8))
         alt.pack(fill="x")
-        self.btn_ollama = ttk.Button(alt, text="Ollama'yı indir", command=lambda: webbrowser.open("https://ollama.com/download"))
+        # PAKETLEME SIRASI ONEMLI: pack alani daralinca EN SON paketlenen kirpilir. Ana
+        # dugmeler ("Kur"/"Kapat") once paketlenir - yasandi (iki kez): sola dugme eklendikce
+        # "Kur" once "K"ya, sonra "Kı"ya kirpildi. Uzun aciklama etiketi de kaldirildi:
+        # "Bir projeye bagla" zaten tiklaninca tam aciklama kutusu gosteriyor.
+        self.btn_kapat = ttk.Button(alt, text="Kapat", command=self.destroy)
+        self.btn_kapat.pack(side="right")
+        self.btn_kur = ttk.Button(alt, text="Kur", command=self._baslat, style="Vurgu.TButton")
+        self.btn_kur.pack(side="right", padx=(0, 8))
+        self.btn_ollama = ttk.Button(alt, text="Ollama'yı indir",
+                                     command=lambda: webbrowser.open("https://ollama.com/download"))
         self.btn_kural = ttk.Button(alt, text="Bir projeye bağla…", command=self._kural)
         self.btn_kural.pack(side="left")
         ttk.Button(alt, text="Tanı", command=self._tani).pack(side="left", padx=(8, 0))
         self.btn_panel = ttk.Button(alt, text="Paneli aç", command=self._panel)
         self.btn_panel.pack(side="left", padx=(8, 0))
-        ttk.Label(alt, text="Proje klasörüne AGENTS.md + .cursor/rules/apprentice.mdc yazar; IDE o projede\n"
-                            "usta rolünü otomatik uygular (kodu kendisi yazmaz, worker_run'a verir).",
-                  style="Alt.TLabel", font=(FONT, 8)).pack(side="left", padx=(10, 0))
-        self.btn_kapat = ttk.Button(alt, text="Kapat", command=self.destroy)
-        self.btn_kapat.pack(side="right")
-        self.btn_kur = ttk.Button(alt, text="Kur", command=self._baslat, style="Vurgu.TButton")
-        self.btn_kur.pack(side="right", padx=(0, 8))
 
     def _gozat(self):
         d = filedialog.askdirectory(initialdir=os.path.dirname(self.kok_var.get()) or os.path.expanduser("~"))
