@@ -623,10 +623,205 @@ def calisma_dizini_kurallari() -> bool:
         p.terminate()
 
 
+def fark_gorunumu() -> bool:
+    """FARK (diff) motoru + sayfa sozlesmesi.
+
+    Denetleyenin sorusu "ne yazdi" degil "NE DEGISTIRDI"dir: ayni dosya onarim turlarinda
+    birkac kez yazilir, her 'write' olayi bir SURUM'dur. Bu test hem sayilari (kac ekleme,
+    kac silme, katlama) hem de sayfanin uclarla sozlesmesini denetler."""
+    sys.path.insert(0, os.path.join(ROOT, "clients", "web"))
+    import goruntuleyici as G
+    d = tempfile.mkdtemp()
+    jd = os.path.join(d, "is1")
+    os.makedirs(jd)
+    v1 = "def f():\n    return 1\n" + "\n".join("x%d = %d" % (i, i) for i in range(20))
+    v2 = v1.replace("return 1", "return 2") + "\ny = 99\n"
+    with open(os.path.join(jd, "events.jsonl"), "w", encoding="utf-8") as fh:
+        for t, c in ((1, v1), (2, v2)):
+            fh.write(json.dumps({"type": "write", "path": "src/a.py", "after": c, "t": t}) + "\n")
+        fh.write(json.dumps({"type": "write", "path": "src/b.py", "after": "pass\n"}) + "\n")
+        fh.write('{bozuk json\n')                       # cop satir akisi bozmamali
+
+    s = G.surumler(d, "is1", "src/a.py")
+    assert [x["no"] for x in s["surumler"]] == [1, 2], s
+    assert len(G.surumler(d, "is1", "src/b.py")["surumler"]) == 1, "dosyalar karisti"
+
+    f2 = G.fark(d, "is1", "src/a.py")                   # varsayilan: son surum vs onceki
+    assert (f2["a"], f2["b"]) == (1, 2) and not f2["ilk_yazim"], f2
+    assert (f2["eklenen"], f2["silinen"]) == (2, 1), (f2["eklenen"], f2["silinen"])
+    assert any(x["tur"] == "@" for x in f2["satirlar"]), "degismeyen uzun blok katlanmali"
+    assert all(x["tur"] in " +-@" for x in f2["satirlar"]), "bilinmeyen satir turu"
+
+    ilk = G.fark(d, "is1", "src/a.py", b=1)             # ilk surum: tamami eklenmis sayilir
+    assert ilk["ilk_yazim"] and ilk["silinen"] == 0, ilk
+    assert ilk["eklenen"] == len(v1.splitlines()), ilk["eklenen"]
+
+    assert G.fark(d, "is1", "src/a.py", b=99)["b"] == 2, "surum numarasi sinirlanmali"
+    assert G.oku(d, "is1", "src/a.py", surum=1)["icerik"] == v1, "surum icerigi yanlis"
+    assert G.oku(d, "is1", "src/a.py", surum=9).get("hata"), "olmayan surum hata vermeli"
+    assert G.fark(d, "is1", "src/yok.py").get("hata"), "kayitsiz dosya hata vermeli"
+
+    for kotu in ("../../gizli.txt", "src/../../x", "C:/Windows/win.ini", ""):
+        for r in (G.fark(d, "is1", kotu), G.surumler(d, "is1", kotu),
+                  G.oku(d, "is1", kotu, surum=1)):
+            assert r.get("hata") == "gecersiz yol", (kotu, r)
+
+    # sayfa <-> uc sozlesmesi: sayfanin cagirdigi her uc panel.py'de karsilanmali
+    h = G.sayfa("is1", "src/a.py")
+    with open(os.path.join(ROOT, "clients", "web", "panel.py"), encoding="utf-8") as fh:
+        sunucu = fh.read()
+    for uc in ("/api/dosya_surumler", "/api/dosya_fark"):
+        assert uc in h, "goruntuleyici sayfasi %s ucunu cagirmiyor" % uc
+        assert ('"%s"' % uc) in sunucu, "panel.py %s ucunu karsilamiyor" % uc
+    assert "&surum=" in h, "kod kipinde surum secimi sayfada yok"
+    for kimlik in ("bKip", "surumSec", "ozet"):
+        assert ('id="%s"' % kimlik) in h, "fark arayuzunde #%s ogesi yok" % kimlik
+    print("fark gorunumu: ok (surumler, +/- sayilari, katlama, yol reddi, uc sozlesmesi)")
+    return True
+
+
+def animasyon_tanimlari() -> bool:
+    """Kullanilan HER animasyon adinin @keyframes tanimi var mi?
+
+    YASANDI: `.nokta.bekle{animation:nabiz 1.2s infinite}` yaziliydi ama 'nabiz' hicbir yerde
+    tanimlanmamisti - "kontrol ediliyor" noktasi HIC yanip sonmedi. Tarayici boyle bir hatayi
+    sessizce yutar (gecersiz animasyon = animasyon yok), konsola bile yazmaz. Bu test o
+    sinifin tamamina bakar: panel + goruntuleyici."""
+    sys.path.insert(0, os.path.join(ROOT, "clients", "web"))
+    import goruntuleyici as G
+    kaynaklar = [("panel.html", open(SAYFA, encoding="utf-8").read()),
+                 ("goruntuleyici", G.sayfa("is1", "a.py"))]
+    toplam = 0
+    for ad, metin in kaynaklar:
+        css = "\n".join(re.findall(r"<style>(.*?)</style>", metin, re.S))
+        tanimli = set(re.findall(r"@keyframes\s+([\w-]+)", css))
+        kullanilan = set()
+        for d in re.findall(r"animation\s*:\s*([^;}\"']+)", css):
+            for parca in d.split(","):
+                for jeton in parca.strip().split():
+                    # sure/sayi/anahtar sozcuk degil, ad olan ilk jeton
+                    if re.match(r"^[a-zA-Z][\w-]*$", jeton) and jeton not in (
+                            "infinite", "linear", "ease", "ease-in", "ease-out", "ease-in-out",
+                            "alternate", "alternate-reverse", "reverse", "normal", "none",
+                            "forwards", "backwards", "both", "running", "paused", "step-start",
+                            "step-end", "steps", "cubic-bezier"):
+                        kullanilan.add(jeton)
+                        break
+        eksik = kullanilan - tanimli
+        assert not eksik, "%s: @keyframes TANIMSIZ animasyon: %s" % (ad, ", ".join(sorted(eksik)))
+        toplam += len(kullanilan)
+    print("animasyon tanimlari: ok (%d animasyon adi, hepsinin @keyframes'i var)" % toplam)
+    return True
+
+
+def model_kapsulu() -> bool:
+    """Ust seritteki MODEL KAPSULU: secici + ▶/⏏ geri bildirim isiklari.
+
+    Kullanici: "model secme islemi mesaj gonderme gibi oluyor... sag ustteki modelin aktif
+    oldugunu gosteren yerden de model secebiliriz" ve "eject/play'e basinca bir isik falan
+    olsun, cunku model gec yukleniyor, bir sey oluyor mu olmuyor mu anlasilmiyor."
+
+    Bu test: (1) secicinin var ve iki secicinin BAGLI oldugunu, (2) dugmelerin secili modeli
+    sunucuya gonderdigini, (3) sunucunun onu kabul ettigini, (4) isik durum makinesinin
+    GERCEKTEN calistigini (Node'da kosturarak), (5) mesgulken yoklama dongusunun
+    DURMADIGINI denetler."""
+    with open(SAYFA, encoding="utf-8") as f:
+        html = f.read()
+    js = "\n".join(re.findall(r"<script>(.*?)</script>", html, re.S))
+
+    # 1) secici var, iki gorunum tek gercek
+    assert 'id="modelSec"' in html, "model kapsulunde secici yok"
+    assert "function modelSenkron" in js, "iki secici baglanmamis"
+    assert '$("#modelSec").onchange' in js, "kapsul secicisi dinlenmiyor"
+    assert "modelSenkron(ad)" in js, "#kModel secimi kapsule yansimiyor"
+
+    # 2) dugmeler secili modeli yolluyor
+    assert 'mesgulBasla("yukle"' in js and 'mesgulBasla("eject"' in js, "isik yakilmiyor"
+    y = js[js.index('$("#yukle").onclick'):js.index('$("#eject").onclick')]
+    assert "/api/yukle" in y and "JSON.stringify({model:model})" in y, \
+        "▶ secili modeli gondermiyor: %s" % y[:200]
+
+    # 3) sunucu tarafi kabul ediyor
+    with open(os.path.join(ROOT, "clients", "web", "panel.py"), encoding="utf-8") as f:
+        sunucu = f.read()
+    assert "def _model_yukle(model: str" in sunucu, "_model_yukle model parametresi almiyor"
+    assert "def _model_bosalt(model: str" in sunucu, "_model_bosalt model parametresi almiyor"
+    assert '_model_yukle(str(veri.get("model")' in sunucu, "/api/yukle govdeyi okumuyor"
+
+    # 4) MESGULKEN DONGU DURMAMALI (yasandi: erken return panelin geri kalanini dondururdu)
+    d = js.index("if(mesgul){", js.index("async function isleriCek"))
+    blok = js[d:js.index("\n    }", d)]
+    assert "return" not in blok, "mesgul dalinda return var - yoklama dongusu 5 dk donar:\n" + blok
+
+    # 5) durum makinesi Node'da GERCEKTEN kosuyor mu?
+    node = shutil.which("node")
+    if not node:
+        print("model kapsulu: ok (node yok, durum makinesi kosturulmadi)")
+        return True
+    bas, sonu = js.index("let mesgul=null;"), js.index("setInterval(mesgulCiz,1000);")
+    makine = js[bas:sonu]
+    surus = """
+const _o={};
+function _el(id){ if(!_o[id]){ const s=new Set(); _o[id]={id,value:"",textContent:"",title:"",
+  className:"", classList:{add:c=>s.add(c), remove:c=>s.delete(c), contains:c=>s.has(c),
+  toggle:(c,v)=>{ v?s.add(c):s.delete(c); return !!v }}}; } return _o[id]; }
+function $(q){ return _el(String(q).replace("#","")); }
+let TOST=[]; function tost(m){ TOST.push(String(m)); }
+function setTimeout(){}
+function ONAY(k,a){ if(!k) throw new Error("SOZLESME: "+a); }
+""" + makine + """
+// --- yukleme: isik ONCE yanar (istek donmeden), sayac isler ---
+mesgulBasla("yukle","kutup/qwen3-coder-next:q4");
+ONAY($("#modelKapsul").classList.contains("mesgul"), "kapsul isigi yanmadi");
+ONAY($("#yukle").classList.contains("calisiyor"), "play dugmesi donmuyor");
+ONAY(!$("#eject").classList.contains("calisiyor"), "eject bosuna donuyor");
+ONAY(/yükleniyor/.test($("#modelAd").textContent), "kapsulde 'yukleniyor' yazmiyor: "+$("#modelAd").textContent);
+ONAY(/\\d+ sn/.test($("#modelAd").textContent), "sayac yok: "+$("#modelAd").textContent);
+ONAY($("#modelNokta").className==="nokta bekle", "nokta nabza gecmedi");
+ONAY(mesgul && mesgul.tur==="yukle", "mesgul durumu tutulmuyor");
+// --- bitis: isik soner, yesil parlar, sure bildirilir ---
+mesgulBitir(true);
+ONAY(mesgul===null, "mesgul temizlenmedi");
+ONAY(!$("#modelKapsul").classList.contains("mesgul"), "isik sonmedi");
+ONAY(!$("#yukle").classList.contains("calisiyor"), "play donmeye devam ediyor");
+ONAY($("#modelKapsul").classList.contains("tamam"), "bitiste yesil parlama yok");
+ONAY(TOST.some(t=>/sn/.test(t)), "sure bildirilmedi: "+TOST.join("|"));
+// --- ikinci kez bitirmek zarar vermemeli ---
+mesgulBitir(true);
+// --- eject isigi ayri dugmede ---
+mesgulBasla("eject","");
+ONAY($("#eject").classList.contains("calisiyor"), "eject dugmesi donmuyor");
+ONAY(!$("#yukle").classList.contains("calisiyor"), "play bosuna donuyor");
+ONAY(/boşaltılıyor/.test($("#modelAd").textContent), "eject metni yok");
+mesgulBitir(false,"yüklü model yoktu");
+ONAY(!$("#modelKapsul").classList.contains("mesgul"), "basarisiz bitiste isik sonmedi");
+// --- iki secici tek gercek ---
+$("#modelSec").value="a:1"; $("#kModel").value="";
+modelSenkron("b:2");
+ONAY($("#modelSec").value==="b:2" && $("#kModel").value==="b:2", "seciciler senkron degil");
+ONAY(secilenModel()==="b:2", "secilenModel yanlis");
+console.log("MAKINE-OK");
+"""
+    with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as f:
+        f.write(surus)
+        yol = f.name
+    try:
+        r = subprocess.run([node, yol], capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=60,
+                           creationflags=0x08000000 if os.name == "nt" else 0)
+        assert "MAKINE-OK" in (r.stdout or ""), \
+            "isik durum makinesi KALDI:\n%s\n%s" % ((r.stdout or "")[-400:], (r.stderr or "")[-600:])
+    finally:
+        os.unlink(yol)
+    print("model kapsulu: ok (secici bagli, ▶/⏏ secili modeli yolluyor, isik makinesi kosuyor)")
+    return True
+
+
 def main() -> int:
     ok = (js_sozdizimi() and metin_isleyicileri() and kaynak_denetimi() and id_butunlugu() and uc_sozlesmesi() and ust_bar_gorunur() and yerlesim_butun() and dizilimler_butun()
           and yerlesim_motoru() and sunucu_uclari() and calisma_dizini_kurallari() and sohbet_uclari()
-          and goruntuleyici_sayfasi())
+          and goruntuleyici_sayfasi() and fark_gorunumu()
+          and animasyon_tanimlari() and model_kapsulu())
     print("SONUC:", "GECTI" if ok else "KALDI")
     return 0 if ok else 1
 

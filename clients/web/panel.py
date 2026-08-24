@@ -442,14 +442,17 @@ def _model_kart(ad: str) -> dict:
     return kart
 
 
-def _model_yukle() -> dict:
-    """On-isitma: varsayilan isci modelini simdiden RAM'e al (ilk isin ~1 dk yukleme
-    bedelini pesin oder). Ollama zaten tembel yukler; bu dugme yalnizca konfor."""
+def _model_yukle(model: str = "") -> dict:
+    """On-isitma: isci modelini simdiden RAM'e al (ilk isin ~1 dk yukleme bedelini pesin
+    oder). model verilmezse yapilandirmadaki varsayilan isitilir.
+
+    Kullanici geri bildirimi: "model secme islemi mesaj gonderme gibi oluyor" - artik ust
+    seritteki ▶ dugmesi SECILI modeli isitir, gorev kutusuna girmeye gerek yok."""
     try:
         import importlib, urllib.request
         os.environ["APPRENTICE_HOME"] = HOME   # --home her zaman kazanir (setdefault ezmiyordu)
         srv = importlib.import_module("server.apprentice_server")
-        model = srv.config.env_or(["APPRENTICE_MODEL", "UNITY_CODE_MODEL"], "ollama.model")
+        model = str(model or "").strip() or             srv.config.env_or(["APPRENTICE_MODEL", "UNITY_CODE_MODEL"], "ollama.model")
 
         def isit():
             try:
@@ -466,10 +469,14 @@ def _model_yukle() -> dict:
         return {"hata": str(e)[:200]}
 
 
-def _model_bosalt() -> dict:
-    """Eject: yuklu modelleri RAM/VRAM'den indir (keep_alive: 0). Sonraki is yeniden yukler."""
+def _model_bosalt(model: str = "") -> dict:
+    """Eject: yuklu modelleri RAM/VRAM'den indir (keep_alive: 0). Sonraki is yeniden yukler.
+    model verilirse YALNIZ o indirilir (birden fazla ornek yukluyken ise yarar)."""
     try:
         yuklu = [m.get("name") for m in _ollama_get("/api/ps").get("models", [])]
+        istenen = str(model or "").strip()
+        if istenen:
+            yuklu = [a for a in yuklu if a == istenen] or                     [a for a in yuklu if a.split(":")[0] == istenen.split(":")[0]]
         for ad in yuklu:
             _ollama_get("/api/generate", {"model": ad, "keep_alive": 0})
         return {"bosaltilan": yuklu}
@@ -684,6 +691,14 @@ def _usta_cevap(uid: str) -> dict:
         return {"hata": "istek yok"}
 
 
+def _sayi(deger, varsayilan: int = 0) -> int:
+    """Sorgu dizesinden guvenli tamsayi: cop deger panelde 500 dogurmasin."""
+    try:
+        return int(str(deger))
+    except (TypeError, ValueError):
+        return varsayilan
+
+
 class Istek(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -714,7 +729,17 @@ class Istek(BaseHTTPRequestHandler):
                              "text/html; charset=utf-8")
             elif yol.path == "/api/dosya":
                 import goruntuleyici as G
-                self._gonder(G.oku(DEPO.jobs_dir, q.get("is", ""), q.get("yol", "")))
+                self._gonder(G.oku(DEPO.jobs_dir, q.get("is", ""), q.get("yol", ""),
+                                   _sayi(q.get("surum"))))
+            elif yol.path == "/api/dosya_surumler":
+                # ayni dosya onarim turlarinda birkac kez yazilir; kac surum var?
+                import goruntuleyici as G
+                self._gonder(G.surumler(DEPO.jobs_dir, q.get("is", ""), q.get("yol", "")))
+            elif yol.path == "/api/dosya_fark":
+                # "ne yazdi" degil "NE DEGISTIRDI": iki surum arasi fark (stdlib difflib)
+                import goruntuleyici as G
+                self._gonder(G.fark(DEPO.jobs_dir, q.get("is", ""), q.get("yol", ""),
+                                    _sayi(q.get("a")), _sayi(q.get("b"))))
             elif yol.path == "/api/hazir":
                 self._gonder({"hazir": True})       # baslatici bunu yoklar (anlik)
             elif yol.path == "/api/isler":
@@ -853,9 +878,9 @@ class Istek(BaseHTTPRequestHandler):
             elif yolu == "/api/oksuz_temizle":
                 self._gonder(_oksuz_temizle())
             elif yolu == "/api/eject":
-                self._gonder(_model_bosalt())
+                self._gonder(_model_bosalt(str(veri.get("model") or "")))
             elif yolu == "/api/yukle":
-                self._gonder(_model_yukle())
+                self._gonder(_model_yukle(str(veri.get("model") or "")))
             elif yolu == "/api/kural_yaz":
                 # secili calisma alanina denetci kurallarini yaz (AGENTS.md + Cursor .mdc)
                 try:

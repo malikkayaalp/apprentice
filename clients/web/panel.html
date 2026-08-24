@@ -56,6 +56,22 @@ body::before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.5;
 .nokta.uyari{background:var(--sari);box-shadow:0 0 8px var(--sari)}
 .nokta.bekle{background:var(--soluk);animation:nabiz 1.2s infinite}
 @keyframes nefes{0%,100%{opacity:1}50%{opacity:.35}}
+/* YASANDI: .nokta.bekle 'nabiz' animasyonunu cagiriyordu ama nabiz hic tanimlanmamisti -
+   "kontrol ediliyor" noktasi hic yanip sonmuyordu. Tanimlandi. */
+@keyframes nabiz{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.3;transform:scale(.7)}}
+@keyframes donuyor{to{transform:rotate(360deg)}}
+/* MODEL KAPSULU ISIKLARI: yukleme 30-60 sn surer; kullanici "bir sey oluyor mu?" diye
+   sormasin diye kapsul nabiz atar, dugme doner, sayac isler, bitince yesil parlar. */
+#modelKapsul.mesgul{border-color:var(--sari);box-shadow:0 0 12px rgba(233,184,92,.28)}
+#modelKapsul.tamam{border-color:var(--yesil);box-shadow:0 0 14px rgba(111,194,138,.45);
+  transition:box-shadow .4s}
+#yukle.calisiyor,#eject.calisiyor{display:inline-block;animation:donuyor 1.1s linear infinite;
+  color:var(--sari)}
+#yukle:hover,#eject:hover{color:var(--metin)}
+#modelKapsul select{background:transparent;border:none;color:var(--metin);font:600 11.5px var(--mono);
+  cursor:pointer;max-width:210px;padding:1px 2px;border-radius:5px}
+#modelKapsul select:hover{background:rgba(255,255,255,.07)}
+#modelKapsul select:focus{outline:1px solid var(--vurgu)}
 .olcekbar{width:90px;height:6px;border-radius:6px;background:rgba(255,255,255,.08);overflow:hidden}
 .olcekbar i{display:block;height:100%;width:0%;border-radius:6px;
   background:linear-gradient(90deg,var(--cyan),var(--vurgu));transition:width .8s ease}
@@ -277,8 +293,11 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
 <body>
 <div id="ust">
   <div id="logo">APPRENTICE</div>
-  <div class="pill"><span class="nokta" id="modelNokta"></span><span id="modelAd">—</span>
-    <span id="yukle" title="çırağı önceden yükle (ısıt)" style="cursor:pointer;margin-left:4px">▶</span>
+  <div class="pill" id="modelKapsul"><span class="nokta" id="modelNokta"></span>
+    <span id="modelAd">—</span>
+    <select id="modelSec" title="çırak modelini buradan seç — görev kutusundaki seçimle aynıdır">
+      <option value="">varsayılan</option></select>
+    <span id="yukle" title="seçili modeli şimdi yükle (ısıt)" style="cursor:pointer;margin-left:4px">▶</span>
     <span id="eject" title="modeli RAM/VRAM'den boşalt" style="cursor:pointer;margin-left:2px">⏏</span></div>
   <div class="pill" id="oksuzPill" style="display:none;cursor:pointer;border-color:var(--sari);color:var(--sari)"
     title="Ollama'nın kaydında olmayan ama RAM tutan artık süreçler — tıkla, temizle">⚠ <b id="oksuzMetin"></b></div>
@@ -1083,7 +1102,24 @@ async function isleriCek(){
     // model kapsulu: olcum HENUZ gelmediyse "kontrol ediliyor" (eskiden hemen "yüklü değil"
     // yazip kullaniciyi yaniltiyordu); birden fazla ornek yukluyse UYARI (bellek iki katina cikar)
     const orn=sis.ornekler||[];
-    if(sis.model===undefined||sis.model===null&&sis.vram&&!sis.vram[1]){
+    // ISIGI SONDURME: dugme geri donunce degil, model GERCEKTEN yuklenince/inince sonsun.
+    // (Ollama'ya istek aninda doner, yukleme arka planda 30-60 sn surer - kullanicinin
+    // "bir sey oluyor mu olmuyor mu anlasilmiyor" dedigi tam bu bosluk.)
+    if(mesgul){
+      const gecti=Date.now()-mesgul.t0;
+      const hedef=(mesgul.model||"").split("/").pop().split(":")[0];
+      const suan=(sis.model||"").split("/").pop().split(":")[0];
+      if(mesgul.tur==="yukle" && sis.model && (!hedef||hedef===suan)) mesgulBitir(true);
+      else if(mesgul.tur==="eject" && !orn.length && !sis.model) mesgulBitir(true);
+      else if(gecti>MESGUL_SINIR) mesgulBitir(false,"model "+(mesgul.tur==="yukle"?
+        "yüklenmedi":"boşalmadı")+" — Ollama çalışıyor mu? (⚠ tanı kapsülüne bak)");
+      else mesgulCiz();
+    }
+    // DIKKAT: burada return YOK - mesgulken de is listesi/VRAM/oksuz yoklamasi surmeli
+    // (5 dk boyunca panelin geri kalani donardi). Yalniz kapsul METNI ezilmez.
+    if(mesgul){
+      /* sayac mesgulCiz'de yazildi */
+    }else if(sis.model===undefined||sis.model===null&&sis.vram&&!sis.vram[1]){
       $("#modelAd").textContent="kontrol ediliyor…"; $("#modelNokta").className="nokta bekle";
     }else if(orn.length>1){
       $("#modelAd").textContent="⚠ "+orn.length+" model bellekte · "+sis.toplam_gb+" GB";
@@ -1312,19 +1348,65 @@ $("#uPrompt").addEventListener("keydown",e=>{
   if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();ustaGonder();}});
 
 /* --------------- CIRAK: gorev girisi --------------- */
+/* MODEL KAPSULU = model SECME yeri. Kullanici geri bildirimi: "model seçme işlemi model seç
+   mesaj gönder gibi oluyor... sağ üstteki modelin aktif olduğunu gösteren yerden de model
+   seçebiliriz". Kapsuldeki secim ile gorev kutusundaki #kModel AYNI secimdir (iki gorunum).
+   Ayrica ▶/⏏ basilinca ISIK yanar: model yuklemesi 30-60 sn surer, kullanici "bir şey oluyor
+   mu olmuyor mu" anlayamiyordu - artik sayac isler, nokta nabiz atar, dugme doner. */
+let mesgul=null;                        // {tur:"yukle"|"eject", model, t0}
+const MESGUL_SINIR=300000;              // 5 dk: soguk yukleme bile bu sureyi asmaz
+function secilenModel(){ const s=$("#modelSec"); return s?s.value:""; }
+function modelSenkron(ad){              // iki secici tek gercek: hangisi degisirse oteki uysun
+  const a=$("#modelSec"), b=$("#kModel");
+  if(a&&a.value!==ad) a.value=ad;
+  if(b&&b.value!==ad) b.value=ad;
+}
+function mesgulBasla(tur, model){
+  mesgul={tur:tur, model:model||"", t0:Date.now()};
+  $("#modelKapsul").classList.add("mesgul");
+  $("#yukle").classList.toggle("calisiyor", tur==="yukle");
+  $("#eject").classList.toggle("calisiyor", tur==="eject");
+  mesgulCiz();
+}
+function mesgulBitir(basarili, not){
+  if(!mesgul) return;
+  const gecen=Math.round((Date.now()-mesgul.t0)/1000), tur=mesgul.tur;
+  mesgul=null;
+  $("#modelKapsul").classList.remove("mesgul");
+  $("#yukle").classList.remove("calisiyor");
+  $("#eject").classList.remove("calisiyor");
+  if(basarili){
+    $("#modelKapsul").classList.add("tamam");
+    setTimeout(()=>$("#modelKapsul").classList.remove("tamam"),1600);
+    tost((tur==="yukle"?"▶ hazır — ":"⏏ boşaltıldı — ")+gecen+" sn");
+  }else if(not) tost(not);
+}
+function mesgulCiz(){                   // sayac: "bir sey oluyor mu?" sorusunun cevabi
+  if(!mesgul) return;
+  const g=Math.round((Date.now()-mesgul.t0)/1000);
+  const ad=(mesgul.model||"").split("/").pop().slice(0,22);
+  $("#modelAd").textContent=(mesgul.tur==="yukle"?"⏳ yükleniyor":"⏏ boşaltılıyor")+
+    (ad?" "+ad:"")+" · "+g+" sn";
+  $("#modelNokta").className="nokta bekle";
+}
+setInterval(mesgulCiz,1000);            // sayac akmali: yoklama 2 sn'de bir, goz her saniye
 async function modelleriYukle(){
   try{
     const r=await(await fetch("/api/modeller")).json();
-    const s=$("#kModel");
-    s.innerHTML='<option value="">model: varsayılan ('+
-      ((r.varsayilan||"").split("/").pop().slice(0,24)||"?")+')</option>'+
-      (r.modeller||[]).map(m=>'<option value="'+m.ad+'">'+m.ad.split("/").pop().slice(0,36)+
-        ' · '+m.gb+' GB</option>').join("");
+    const vad=(r.varsayilan||"").split("/").pop().slice(0,24)||"?";
+    const secenekler=(r.modeller||[]).map(m=>'<option value="'+kacir(m.ad)+'">'+
+        kacir(m.ad.split("/").pop().slice(0,36))+' · '+m.gb+' GB</option>').join("");
+    const onceki=($("#kModel")&&$("#kModel").value)||"";
+    $("#kModel").innerHTML='<option value="">model: varsayılan ('+kacir(vad)+')</option>'+secenekler;
+    const s=$("#modelSec");
+    if(s) s.innerHTML='<option value="">varsayılan ('+kacir(vad)+')</option>'+secenekler;
+    modelSenkron(onceki);
+    if(!(r.modeller||[]).length && s) s.title="Ollama'da model yok — önce bir model indir";
   }catch(e){}
 }
 $("#kModel").onchange=async e=>{
   const kap=$("#kModelKart"); kap.textContent="";
-  const ad=e.target.value; if(!ad)return;
+  const ad=e.target.value; modelSenkron(ad); if(!ad)return;
   try{
     const k=await(await fetch("/api/model_kart?ad="+encodeURIComponent(ad))).json();
     const p=k.parametreler||{};
@@ -1335,6 +1417,15 @@ $("#kModel").onchange=async e=>{
       ((k.yetenekler||[]).includes("thinking")?"; DÜŞÜNEN model — düşünme kapalı koşar, ölçüldü: açıkken boşa token":"")+
       ((k.yetenekler||[]).includes("tools")?"":"; ⚠ ARAÇ DESTEĞİ YOK — görev kipi çalışmayabilir, sohbet kipi olur")+")</span>";
   }catch(e){}
+};
+/* Kapsulden secim: gorev kutusundaki seciciyi de ayni degere getirir ve model KARTINI
+   tazeler (ctx/yetenek uyarilari orada cikar). Boylece "model sec" icin gorev kutusunu
+   acmak gerekmez - kullanici istegi. */
+$("#modelSec").onchange=e=>{
+  const ad=e.target.value;
+  modelSenkron(ad);
+  const k=$("#kModel"); if(k&&k.onchange) k.onchange({target:k});
+  tost(ad?("model: "+ad.split("/").pop().slice(0,32)+" — ▶ ile şimdi yükle"):"model: varsayılan");
 };
 $("#kMod").onchange=e=>{
   const sohbet=e.target.value==="sohbet";
@@ -1485,20 +1576,26 @@ $("#kEkSecici").onchange=async e=>{
   eklerCiz(kEkler,"#kEkler"); e.target.value="";
 };
 $("#yukle").onclick=async()=>{
-  tost("▶ çırak yükleniyor (~1 dk)…");
+  if(mesgul){tost("zaten "+(mesgul.tur==="yukle"?"yükleniyor":"boşaltılıyor")+"…");return}
+  const model=secilenModel();
+  mesgulBasla("yukle", model);                 // ISIK ONCE yansin: istek donene kadar bile
   try{
     const r=await(await fetch("/api/yukle",{method:"POST",headers:{"Content-Type":"application/json"},
-      body:"{}"})).json();
-    tost(r.hata?("HATA: "+r.hata):("▶ yükleniyor: "+(r.model||"").split("/").pop().slice(0,30)+
-      " — nokta yeşile dönünce hazır"));
-  }catch(e){tost("HATA: "+e);}
+      body:JSON.stringify({model:model})})).json();
+    if(r.hata){mesgulBitir(false,"HATA: "+r.hata);return}
+    if(r.model) mesgul.model=r.model;           // sunucu varsayilani cozdu: adi gorunsun
+    tost("▶ "+(r.model||"model").split("/").pop().slice(0,30)+" yükleniyor — nokta yeşile dönünce hazır");
+  }catch(e){mesgulBitir(false,"HATA: "+e);}
 };
 $("#eject").onclick=async()=>{
+  if(mesgul){tost("zaten "+(mesgul.tur==="yukle"?"yükleniyor":"boşaltılıyor")+"…");return}
+  mesgulBasla("eject", "");
   try{
     const r=await(await fetch("/api/eject",{method:"POST",headers:{"Content-Type":"application/json"},
-      body:"{}"})).json();
-    tost(r.hata?("HATA: "+r.hata):("⏏ boşaltıldı: "+((r.bosaltilan||[]).map(x=>x.split("/").pop()).join(", ")||"yüklü model yoktu")));
-  }catch(e){}
+      body:JSON.stringify({})})).json();
+    if(r.hata){mesgulBitir(false,"HATA: "+r.hata);return}
+    if(!(r.bosaltilan||[]).length) mesgulBitir(false,"⏏ yüklü model yoktu");
+  }catch(e){mesgulBitir(false,"HATA: bağlantı yok");}
 };
 $("#akis").addEventListener("wheel",()=>{const a=$("#akis");
   dibeKilit=a.scrollTop+a.clientHeight>=a.scrollHeight-60;});
