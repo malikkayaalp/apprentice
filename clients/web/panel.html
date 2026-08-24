@@ -631,7 +631,8 @@ async function olaylariCek(){
       imlecN=r.toplam||imlecN;
       if(r.canli&&r.canli.trim()){
         if(!r.canli.startsWith(daktiloHedef)){daktiloCiz=0;$("#dmetin").innerHTML="";}
-        daktiloHedef=r.canli; $("#daktiloDurum").textContent="● akıyor";
+        daktiloHedef=r.canli;
+        $("#daktiloDurum").textContent=s.durum==="calisiyor"?"● akıyor":"son üretim (iş bitti)";
       }else if(s.durum==="calisiyor"&&s.canli===false){
         $("#daktiloDurum").textContent="bu işte canlı akış kapalı";
         if(!daktiloHedef)$("#dmetin").innerHTML='<span class="bekliyor">bu iş CANLI KİP KAPALI '+
