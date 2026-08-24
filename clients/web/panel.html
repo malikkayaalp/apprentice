@@ -230,6 +230,8 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
   <div class="pill"><span class="nokta" id="modelNokta"></span><span id="modelAd">—</span>
     <span id="yukle" title="çırağı önceden yükle (ısıt)" style="cursor:pointer;margin-left:4px">▶</span>
     <span id="eject" title="modeli RAM/VRAM'den boşalt" style="cursor:pointer;margin-left:2px">⏏</span></div>
+  <div class="pill" id="oksuzPill" style="display:none;cursor:pointer;border-color:var(--sari);color:var(--sari)"
+    title="Ollama'nın kaydında olmayan ama RAM tutan artık süreçler — tıkla, temizle">⚠ <b id="oksuzMetin"></b></div>
   <div class="pill" id="kokPill" title="çırağın çalışma alanı — tıkla, klasör seç"
     style="cursor:pointer">📁 <b id="kokAd">—</b></div>
   <div class="pill">VRAM <b id="vramT">—</b><div class="olcekbar"><i id="vramBar"></i></div></div>
@@ -823,6 +825,8 @@ function isSec(id){
   $("#dmetin").innerHTML='<span class="bekliyor">bekleniyor…</span>';
 }
 async function isleriCek(){
+  // KORUMA (yasandi): HTML'de olmayan bir id'ye dokunmak bu dongudeki hatayi firlatiyor ve
+  // panel TAMAMEN duruyordu ("hicbir hareket yok"). Hata artik yutulur, dongu devam eder.
   try{
     const r=await(await fetch("/api/isler")).json();
     const sis=r.sistem||{};
@@ -848,12 +852,12 @@ async function isleriCek(){
     // Ollama'nin kaydinda gorunmez, panel "model yuklu degil" der - kullanici "RAM neden
     // sisti?" diye sorar (yasandi: 13 GB). Artik gorunur ve tek tikla temizlenir.
     const oks=sis.oksuz||[], op=$("#oksuzPill");
-    if(oks.length){
+    if(op&&oks.length){
       op.style.display="";
       $("#oksuzMetin").textContent=oks.reduce((a,b)=>a+b.gb,0).toFixed(1)+" GB artık süreç";
       op.title="Ollama kapatılınca öksüz kalan "+oks.length+" llama-server süreci RAM tutuyor "+
         "(PID "+oks.map(o=>o.pid).join(", ")+"). Tıkla → temizle.";
-    }else op.style.display="none";
+    }else if(op)op.style.display="none";
     if(sis.vram&&sis.vram[1]){$("#vramT").textContent=(sis.vram[0]/1024).toFixed(1)+"/"+(sis.vram[1]/1024).toFixed(1)+"G";
       $("#vramBar").style.width=(100*sis.vram[0]/sis.vram[1])+"%";}
     $("#gpuT").textContent="%"+(sis.gpu||0); $("#gpuBar").style.width=(sis.gpu||0)+"%";
@@ -1149,6 +1153,14 @@ async function kokGoster(){
     const k=r.kok||""; $("#kokAd").textContent=k.length>34?"…"+k.slice(-32):k;
     $("#kokPill").title="çırağın çalışma alanı: "+k+" — tıkla, klasör seç";}catch(e){}
 }
+const _op=$("#oksuzPill");
+if(_op)_op.onclick=async()=>{
+  const r=await(await fetch("/api/oksuz_temizle",{method:"POST",
+    headers:{"Content-Type":"application/json"},body:"{}"})).json();
+  tost(r.hata?("HATA: "+r.hata):("🧹 "+(r.kazanilan_gb||0)+" GB serbest bırakıldı ("+
+    (r.kapanan||[]).length+" süreç)"));
+  isleriCek();
+};
 $("#kokPill").onclick=async()=>{
   tost("📁 klasör seçme penceresi açıldı (görev çubuğuna bakın)…");
   try{

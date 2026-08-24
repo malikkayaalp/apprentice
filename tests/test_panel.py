@@ -57,6 +57,47 @@ def js_sozdizimi() -> bool:
     return True
 
 
+def id_butunlugu() -> bool:
+    """JS'in aradigi HER id HTML'de var mi? (ve HTML'deki id'ler kullaniliyor mu?)
+
+    YASANDI: JS'e $("#oksuzPill") eklendi ama HTML'e o oge eklenmedi. Yoklama dongusu her
+    turda "null.style" hatasi firlatti; hata dongunun ustunde yakalanmadigi icin PANEL
+    TAMAMEN DONDU - kullanici "panelde hicbir hareket yok" dedi. Sozdizimi testi bunu
+    goremez (kod gecerli), tarayici da sessizce cokuyor. Bu test tam o bosluga bakar."""
+    with open(SAYFA, encoding="utf-8") as f:
+        html = f.read()
+    bloklar = re.findall(r"<script>(.*?)</script>", html, re.S)
+    js = "\n".join(bloklar)
+    govde = re.sub(r"<script>.*?</script>", "", html, flags=re.S)
+
+    tanimli = set(re.findall(r'id="([\w-]+)"', govde))
+    # JS icinde olusturulan ogeler de sayilir (innerHTML/insertAdjacentHTML ile eklenenler)
+    tanimli |= set(re.findall(r"id=[\\\"']([\w-]+)", js))
+    tanimli |= set(re.findall(r'\.id\s*=\s*"([\w-]+)"', js))
+
+    aranan = set(re.findall(r'\$\("#([\w-]+)"\)', js))
+    aranan |= set(re.findall(r'getElementById\("([\w-]+)"\)', js))
+
+    eksik = sorted(aranan - tanimli)
+    assert not eksik, ("JS'in aradigi ama HTML'de OLMAYAN id: %s -> yoklama dongusu "
+                       "null hatasiyla durur ve panel donar" % eksik)
+    print("id butunlugu: ok (%d id aranıyor, hepsi tanimli)" % len(aranan))
+
+    # Yoklama donguleri hata yutuyor mu (tek bir istisna paneli dondurmesin)
+    for fn in ("isleriCek", "olaylariCek", "ustaChatCek"):
+        i = js.find("async function %s(" % fn)
+        assert i > 0, "%s bulunamadi" % fn
+        # govde: bir sonraki ust duzey fonksiyona kadar (sabit pencere yetmiyordu - isleriCek
+        # 60+ satir; catch penceresin disinda kaliyordu)
+        adaylar = [x for x in (js.find("\nasync function ", i + 10),
+                               js.find("\nfunction ", i + 10)) if x > 0]
+        govde_fn = js[i:min(adaylar) if adaylar else len(js)]
+        assert "try{" in govde_fn and "catch" in govde_fn, \
+            "%s hata yutmuyor - tek istisna tum paneli durdurur" % fn
+    print("yoklama donguleri: ok (uc dongu de hata yutuyor)")
+    return True
+
+
 def yerlesim_butun() -> bool:
     """VARSAYILAN izgara: panel dikdortgenleri cakismamali, sutun tasmamali."""
     with open(SAYFA, encoding="utf-8") as f:
@@ -319,7 +360,7 @@ def calisma_dizini_kurallari() -> bool:
 
 
 def main() -> int:
-    ok = (js_sozdizimi() and yerlesim_butun() and dizilimler_butun()
+    ok = (js_sozdizimi() and id_butunlugu() and yerlesim_butun() and dizilimler_butun()
           and yerlesim_motoru() and sunucu_uclari() and calisma_dizini_kurallari())
     print("SONUC:", "GECTI" if ok else "KALDI")
     return 0 if ok else 1
