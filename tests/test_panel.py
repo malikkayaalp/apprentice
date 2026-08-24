@@ -98,6 +98,76 @@ def id_butunlugu() -> bool:
     return True
 
 
+def uc_sozlesmesi() -> bool:
+    """JS'in cagirdigi HER uc sunucuda var mi, ve HTML-JS yapisi butun mu?
+
+    YASANDI: JS'e yeni uc/oge eklenip sunucu/HTML tarafi unutulunca panel SESSIZCE bozuluyor
+    (donuyor ya da dugme is gormuyor). Bu test o baglari sozlesme gibi denetler."""
+    with open(SAYFA, encoding="utf-8") as f:
+        html = f.read()
+    js = "\n".join(re.findall(r"<script>(.*?)</script>", html, re.S))
+    with open(os.path.join(ROOT, "clients", "web", "panel.py"), encoding="utf-8") as f:
+        sunucu = f.read()
+
+    # 1) fetch("/api/...") -> sunucuda o yol var mi
+    cagrilan = set(re.findall(r'fetch\("(/[\w/]+)', js))
+    cagrilan |= set(re.findall(r'window\.open\("(/[\w]+)', js))
+    for yol in sorted(cagrilan):
+        assert ('== "%s"' % yol) in sunucu or ("'%s'" % yol) in sunucu, \
+            "JS '%s' ucunu cagiriyor ama panel.py'de boyle bir yol YOK" % yol
+    print("uc sozlesmesi: ok (%d uc, hepsi sunucuda var)" % len(cagrilan))
+
+    # 2) her panel adinin bir karti, her kartin basligi/govdesi/tutamagi var mi
+    adlar = set(re.findall(r"(\w+):\"", re.search(r"const PANEL_ADLARI=\{(.*?)\};", js, re.S).group(1)))
+    for ad in sorted(adlar):
+        # kart govdesi: bir sonraki karta ya da izgara kapanisina kadar (son kart icin
+        # sabit bir "sonraki oge" varsaymak kirilgan - dosya sirasi degisiyor)
+        kart = re.search(r'<div class="kart" data-p="%s">(.*?)(?=<div class="kart"|<input type="file")'
+                         % ad, html, re.S)
+        assert kart, "%s paneli icin .kart ogesi YOK (dizilimlerde adi geciyor)" % ad
+        govde = kart.group(1)
+        assert 'class="kbaslik"' in govde, "%s: baslik cubugu yok (kapat/disari dugmesi eklenemez)" % ad
+        assert 'class="kgovde"' in govde, "%s: govde yok" % ad
+        assert 'class="tutamak"' in govde, "%s: boyutlandirma tutamagi yok" % ad
+    print("panel yapisi: ok (%d panelin karti, basligi, govdesi, tutamagi tam)" % len(adlar))
+
+    # 3) VARSAYILAN/dizilim tablolari ile PANEL_ADLARI ayni kumeyi kullanmali
+    vars_ = set(re.findall(r"(\w+):\{gx:", re.search(r"const VARSAYILAN=\{(.*?)\};", js, re.S).group(1)))
+    assert vars_ == adlar, "VARSAYILAN ile PANEL_ADLARI ayni degil: %s" % (vars_ ^ adlar)
+    print("panel kumeleri: ok (VARSAYILAN == PANEL_ADLARI)")
+    return True
+
+
+def ust_bar_gorunur() -> bool:
+    """Ust bardaki denetimler KAZAYLA gizlenmis olmasin.
+
+    YASANDI (iki kez): (1) '#tekBar{display:none}' kurali yazilirken secici '#dizilim,#tekBar'
+    olarak birlesti ve DIZILIM SECICI (hazir presetler) tamamen kayboldu - kullanici "hazir
+    presetler nerede?" dedi. (2) Ust bar tasinca son ogeler 0 piksele coktu. Bu test her iki
+    sinifi da yakalar: kritik denetimler ne CSS ile gizlenmis olabilir ne de ezilebilir."""
+    with open(SAYFA, encoding="utf-8") as f:
+        html = f.read()
+    stil = "\n".join(re.findall(r"<style>(.*?)</style>", html, re.S))
+    kritik = ["#dizilim", "#panelEkle", "#yerlesimKaydet", "#yerlesimSifirla", "#fontKontrol"]
+    for kimlik in kritik:
+        # "html.tekKip ..." disindaki KOSULSUZ display:none kurallarini ara
+        for kural in re.findall(r"([^{}]+)\{([^{}]*)\}", stil):
+            secici, govde = kural[0].strip(), kural[1]
+            if "display:none" not in govde.replace(" ", ""):
+                continue
+            if secici.startswith("html.tekKip") or ".tekKip" in secici:
+                continue                      # tek panel kipinde gizlenmeleri normal
+            parcalar = [x.strip() for x in secici.split(",")]
+            assert kimlik not in parcalar,                 ("%s KOSULSUZ gizlenmis: '%s{%s}' - arayuzde gorunmez olur"
+                 % (kimlik, secici[:60], govde.strip()[:40]))
+    # ezilmeye karsi: ust bar sarmali ve cocuklari daralmamali
+    ust = re.search(r"#ust\{([^}]*)\}", stil)
+    assert ust and "flex-wrap:wrap" in ust.group(1).replace(" ", ""),         "#ust sarmiyor - yer yetmeyince son denetimler 0 piksele coker"
+    assert re.search(r"#ust\s*>\s*\*\{[^}]*flex-shrink:\s*0", stil),         "#ust cocuklarinda flex-shrink:0 yok - denetimler ezilir"
+    print("ust bar denetimleri: ok (%d kritik oge gizlenmemis, bar sariyor)" % len(kritik))
+    return True
+
+
 def yerlesim_butun() -> bool:
     """VARSAYILAN izgara: panel dikdortgenleri cakismamali, sutun tasmamali."""
     with open(SAYFA, encoding="utf-8") as f:
@@ -367,7 +437,7 @@ def calisma_dizini_kurallari() -> bool:
 
 
 def main() -> int:
-    ok = (js_sozdizimi() and id_butunlugu() and yerlesim_butun() and dizilimler_butun()
+    ok = (js_sozdizimi() and id_butunlugu() and uc_sozlesmesi() and ust_bar_gorunur() and yerlesim_butun() and dizilimler_butun()
           and yerlesim_motoru() and sunucu_uclari() and calisma_dizini_kurallari())
     print("SONUC:", "GECTI" if ok else "KALDI")
     return 0 if ok else 1
