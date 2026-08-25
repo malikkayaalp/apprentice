@@ -687,6 +687,34 @@ def _kuyruk_kur():
 
 
 
+
+# ---------------------------------------------------------------- canli akis (SSE, madde 15)
+def _akis_imzasi() -> str:
+    """Panelin ILGILENDIGI her seyin ucuz bir ozeti: is klasorleri + kuyruk dosyasi.
+
+    Dosya ICERIGI okunmaz, yalnizca mtime/boyut - saniyede bir kez cagrilacak bir islev
+    icin icerik ozeti pahaliya gelir. Yanlis pozitif zararsizdir: panel bir kez fazladan
+    tazeler. Yanlis NEGATIF zararlidir, o yuzden boyut da katilir (ayni saniyede eklenen
+    satir mtime'i degistirmeyebilir)."""
+    parcalar = []
+    try:
+        jd = os.path.join(HOME, "jobs")
+        for ad in sorted(os.listdir(jd), reverse=True)[:20]:      # en yeni 20 is yeter
+            try:
+                st = os.stat(os.path.join(jd, ad, "events.jsonl"))
+                parcalar.append("%s:%d:%d" % (ad, st.st_mtime_ns, st.st_size))
+            except OSError:
+                parcalar.append(ad)
+    except OSError:
+        pass
+    try:
+        st = os.stat(os.path.join(HOME, "kuyruk.json"))
+        parcalar.append("k:%d:%d" % (st.st_mtime_ns, st.st_size))
+    except OSError:
+        pass
+    return "|".join(parcalar)
+
+
 def _olcum_gecmisi() -> dict:
     """Arsivdeki kampanya kosulari (yol haritasi 14: benchmark UI).
 
@@ -1038,6 +1066,8 @@ class Istek(BaseHTTPRequestHandler):
                 import goruntuleyici as G
                 self._gonder(G.oku(DEPO.jobs_dir, q.get("is", ""), q.get("yol", ""),
                                    _sayi(q.get("surum"))))
+            elif yol.path == "/api/akis":
+                return self._olay_akisi()
             elif yol.path == "/api/olcum":
                 self._gonder(_olcum_gecmisi())
             elif yol.path == "/api/kuyruk":
@@ -1104,6 +1134,41 @@ class Istek(BaseHTTPRequestHandler):
                 self._gonder({"hata": "yok"}, kod=404)
         except Exception as e:  # noqa: BLE001
             self._gonder({"hata": str(e)[:300]}, kod=500)
+
+    def _olay_akisi(self):
+        """SSE: 'bir sey degisti' bildirimi. VERI TASIMAZ - bilerek.
+
+        NEDEN VERI DEGIL BILDIRIM: olay akisinin istemci tarafinda kazanilmis yaris
+        duzeltmeleri var (ucusta is degisirse cevabi at, imlec, dibe kilit). Veriyi SSE'ye
+        tasimak o mantigi bastan yazmak demekti; bildirim kanali ise mevcut - sinanmis -
+        cekme yollarini oldugu gibi birakir, yalnizca 2 saniyelik yoklama gecikmesini kaldirir.
+
+        YOKLAMA KALDIRILMADI, SEYRELTILDI: SSE koparsa (vekil, uyku, sunucu yeniden baslatma)
+        panel sessizce olmemeli. Istemci baglantiyi kaybederse yoklamayi hizlandirir."""
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Accel-Buffering", "no")     # arada vekil varsa tamponlamasin
+        self.send_header("Connection", "close")
+        self.end_headers()
+        onceki, son_nabiz = None, time.time()
+        try:
+            while True:
+                simdi = _akis_imzasi()
+                if simdi != onceki:
+                    onceki = simdi
+                    self.wfile.write(b"event: degisti\ndata: {}\n\n")
+                    self.wfile.flush()
+                    son_nabiz = time.time()
+                elif time.time() - son_nabiz > 15:
+                    # NABIZ: sessiz baglanti vekiller/tarayici tarafindan kapatilabilir.
+                    # Yorum satiri istemciye olay olarak gitmez, baglantiyi acik tutar.
+                    self.wfile.write(b": nabiz\n\n")
+                    self.wfile.flush()
+                    son_nabiz = time.time()
+                time.sleep(0.4)
+        except Exception:      # noqa: BLE001 - istemci kapatti; bu NORMAL, gurultu yapma
+            return
 
     def _sohbet_akisi(self, veri: dict):
         """Cirak sohbetini TOKEN TOKEN akit (Ollama stream -> chunked yanit).

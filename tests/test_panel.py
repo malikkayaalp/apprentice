@@ -1468,12 +1468,79 @@ def kuyruk_uclari() -> bool:
     return True
 
 
+def canli_akis() -> bool:
+    """SSE ucu (yol haritasi 15): BILDIRIM kanali, veri kanali DEGIL.
+
+    Cakilan sozlesme:
+      1. text/event-stream doner ve ILK olayi hemen gonderir (baglanti kuruldu isareti).
+      2. Diskte bir degisiklik olunca yeni olay gelir - yoklama gecikmesini beklemeden.
+      3. Olay VERI TASIMAZ. Veriyi mevcut - sinanmis - cekme yollari getirir; olay akisinin
+         yaris duzeltmeleri (ucusta is degisirse cevabi at, imlec, dibe kilit) korunur.
+      4. Istemci tarafinda yoklama KALDIRILMAZ, SEYRELTILIR: SSE koparsa panel olmemeli."""
+    ev = os.path.join(ROOT, ".apprentice_test_home", "sse_unit")
+    shutil.rmtree(ev, ignore_errors=True)
+    os.makedirs(os.path.join(ev, "jobs"), exist_ok=True)
+    port = 8892
+    p = subprocess.Popen([sys.executable, os.path.join(ROOT, "clients", "web", "panel.py"),
+                          "--port", str(port), "--home", ev],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, cwd=ROOT,
+                         creationflags=0x08000000 if os.name == "nt" else 0)
+    try:
+        for _ in range(100):
+            time.sleep(0.1)
+            try:
+                urllib.request.urlopen("http://127.0.0.1:%d/api/hazir" % port, timeout=1).read()
+                break
+            except Exception:
+                continue
+        else:
+            print("canli akis: panel kalkmadi")
+            return False
+
+        r = urllib.request.urlopen("http://127.0.0.1:%d/api/akis" % port, timeout=20)
+        try:
+            assert "text/event-stream" in (r.headers.get("Content-Type") or ""), r.headers.items()
+            assert r.readline() == b"event: degisti\n", "ilk olay gelmedi"
+            assert r.readline() == b"data: {}\n", "olay govdesi bos olmali (bildirim kanali)"
+            r.readline()
+
+            # DISKTE DEGISIKLIK -> yeni olay. Yoklama araligini (2 sn) BEKLEMEDEN gelmeli.
+            jd = os.path.join(ev, "jobs", "yeni")
+            os.makedirs(jd, exist_ok=True)
+            t0 = time.time()
+            with open(os.path.join(jd, "events.jsonl"), "w", encoding="utf-8") as f:
+                f.write('{"type":"system"}\n')
+            assert r.readline() == b"event: degisti\n", "degisiklik bildirilmedi"
+            gecen = time.time() - t0
+            assert gecen < 1.5, "bildirim cok gec geldi: %.2f sn" % gecen
+        finally:
+            r.close()
+    finally:
+        p.terminate()
+        try:
+            p.wait(timeout=5)
+        except Exception:
+            p.kill()
+
+    # ISTEMCI: yoklama kaldirilmamis, SEYRELTILMIS olmali
+    with open(os.path.join(ROOT, "clients", "web", "panel.html"), encoding="utf-8") as f:
+        h = f.read()
+    assert "AKIS.bagli?8000:2000" in h, "SSE koparsa is yoklamasi hizlanmiyor"
+    assert "AKIS.bagli?12000:4000" in h, "SSE koparsa kuyruk yoklamasi hizlanmiyor"
+    assert "new EventSource" in h and 'addEventListener("degisti"' in h, "SSE istemcisi yok"
+    # KOPUNCA yeniden baglanma EventSource'a birakilmali - elle close() ussel geri
+    # cekilmeyi kaybettirir ve sunucuyu dover.
+    assert "AKIS.kaynak.close()" not in h, "onerror'da elle kapatma var - geri cekilme kaybolur"
+    print("canli akis: ok (SSE bildirir, veri tasimaz, yoklama seyreltilmis)")
+    return True
+
+
 def main() -> int:
     ok = (js_sozdizimi() and metin_isleyicileri() and kaynak_denetimi() and id_butunlugu() and uc_sozlesmesi() and ust_bar_gorunur() and yerlesim_butun() and dizilimler_butun()
           and yerlesim_motoru() and sunucu_uclari() and calisma_dizini_kurallari() and sohbet_uclari()
           and goruntuleyici_sayfasi() and fark_gorunumu()
           and animasyon_tanimlari() and model_kapsulu()
-          and vurgulayici_sozlesmesi() and sahiplik_kurali() and karar_uclari() and bayat_surec_uyarisi() and karar_rozeti() and tekrar_dene_basarili() and inceleme_ekrani() and ollama_adresi() and kuyruk_uclari())
+          and vurgulayici_sozlesmesi() and sahiplik_kurali() and karar_uclari() and bayat_surec_uyarisi() and karar_rozeti() and tekrar_dene_basarili() and inceleme_ekrani() and ollama_adresi() and kuyruk_uclari() and canli_akis())
     print("SONUC:", "GECTI" if ok else "KALDI")
     return 0 if ok else 1
 

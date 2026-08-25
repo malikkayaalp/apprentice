@@ -1328,7 +1328,7 @@ async function isleriCek(){
     }
     if(otoSec&&gorunur.length)isSec(gorunur[0].id);
   }catch(e){}
-  setTimeout(isleriCek,2000);
+  setTimeout(isleriCek, AKIS.bagli?8000:2000);
 }
 
 /* KUYRUK (yol haritasi 10). Ayni yoklama ritmine binmez: kuyruk YAVAS degisir (is basina
@@ -1383,7 +1383,7 @@ async function kuyrukCiz(){
       ? "⏸ "+kacir(sorunlu[sorunlu.length-1].sebep)
       : (ogeler.length>12?"… ve "+(ogeler.length-12)+" iş daha":"");
   }catch(e){}
-  setTimeout(kuyrukCiz,4000);
+  setTimeout(kuyrukCiz, AKIS.bagli?12000:4000);
 }
 /* OLCUM GECMISI. YOKLAMA YOK: arsiv yalnizca kampanya kosunca degisir (saatte bir olur
    olursa) - saniyede bir istek atmak anlamsiz. Acilista bir kez, sonra elle yenile. */
@@ -1420,6 +1420,38 @@ async function olcumCiz(){
     $("#olcTablo").innerHTML=h;
   }catch(e){}
 }
+/* CANLI AKIS (SSE, yol haritasi 15). Sunucu "bir sey degisti" der; veriyi yine mevcut
+   cekme yollari getirir. Boylece olay akisindaki kazanilmis yaris duzeltmeleri (ucusta is
+   degisirse cevabi at, imlec, dibe kilit) OLDUGU GIBI kalir - yalnizca 2 saniyelik yoklama
+   gecikmesi kalkar.
+
+   YOKLAMA KALDIRILMADI, SEYRELTILDI: SSE koparsa (vekil, uykuya gecen makine, sunucu
+   yeniden baslatma) panel sessizce olmemeli. Bagliyken 8/12 sn, koparsa yine 2/4 sn. */
+const AKIS={bagli:false, kaynak:null, sonTetik:0};
+function akisTetikle(){
+  // Cok sayida olay art arda gelebilir (isci hizli yaziyor). Her biri icin ayri istek
+  // atmak yoklamadan daha pahaliya gelirdi - 150 ms'lik pencerede birlestiriyoruz.
+  const t=Date.now();
+  if(t-AKIS.sonTetik<150)return;
+  AKIS.sonTetik=t;
+  isleriCek(); olaylariCek(); kuyrukCiz();
+}
+function akisBagla(){
+  if(!window.EventSource)return;                 // cok eski tarayici: yoklama zaten var
+  try{
+    const es=new EventSource("/api/akis");
+    AKIS.kaynak=es;
+    es.addEventListener("degisti",akisTetikle);
+    es.onopen=()=>{AKIS.bagli=true};
+    es.onerror=()=>{
+      AKIS.bagli=false;                          // yoklama kendiliginden hizlanir
+      // EventSource kendi kendine yeniden baglanir; biz KAPATMIYORUZ. Kapatip elle
+      // yeniden acmak ussel geri cekilmeyi kaybettirir ve sunucuyu doverdi.
+    };
+  }catch(e){}
+}
+akisBagla();
+
 async function kuyrukIslem(yol,govde){
   try{
     await fetch(yol,{method:"POST",headers:{"Content-Type":"application/json"},
