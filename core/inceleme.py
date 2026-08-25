@@ -64,6 +64,61 @@ def _net_fark(ilk_once: str, son_sonra: str) -> tuple:
     return ekle, sil
 
 
+def _surec_canli(pid) -> bool | None:
+    """PID hala yasiyor mu? None = bilinmiyor.
+
+    NEDEN os.kill DEGIL: bu projede her alt surec CREATE_NO_WINDOW (0x08000000) ile
+    baslatilir - MS-DOS penceresi acilmasin diye (kazanilmis bir duzeltme). O bayrakla
+    baslatilmis bir Python surecinde os.kill(pid, 0) Windows'ta
+
+        OSError [WinError 87] The parameter is incorrect
+
+    veriyor - KENDI pid'i icin bile. Panel sunucusu tam o bayrakla kosuyor, yani
+    os.kill'e dayanan canlilik denetimi uretimde HER ISI OKSUZ gosterirdi. Gece
+    kusatmasinin batarya asamasi bunu daha kosu baslamadan yakaladi (test dogrudan
+    kosunca geciyor, koşucu altinda kaliyordu - fark tam bu bayrakti).
+
+    Windows'ta ctypes ile OpenProcess + GetExitCodeProcess kullanilir: ek paket yok,
+    surec baslatilmaz, bayraktan etkilenmez.
+    KENAR DURUM: 259 ile cikmis bir surec STILL_ACTIVE ile ayni gorunur - nadir ve
+    zararsiz (en fazla "olu sahip canli sanilir", tersi degil)."""
+    try:
+        pid = int(pid)
+    except (TypeError, ValueError):
+        return None
+    if pid <= 0:
+        return None
+    if os.name != "nt":
+        try:
+            os.kill(pid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True          # baskasinin sureci ama VAR
+        except OSError:
+            return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+        SORGU = 0x1000                       # PROCESS_QUERY_LIMITED_INFORMATION
+        HALA_CALISIYOR = 259                 # STILL_ACTIVE
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        k32.OpenProcess.restype = wintypes.HANDLE
+        h = k32.OpenProcess(SORGU, False, pid)
+        if not h:
+            return False                     # acilamiyorsa surec yok (ya da erisim yok)
+        try:
+            kod = wintypes.DWORD()
+            if not k32.GetExitCodeProcess(h, ctypes.byref(kod)):
+                return None
+            return kod.value == HALA_CALISIYOR
+        finally:
+            k32.CloseHandle(h)
+    except Exception:  # noqa: BLE001
+        return None                          # bilinmiyor - "olu" DEMEYIZ
+
+
 def _sahiplik(is_kaydi: dict) -> dict:
     """TEK YAZAR KURALI: is kaydina yalniz SAHIBI yazar; baskasi okur.
 
@@ -77,14 +132,8 @@ def _sahiplik(is_kaydi: dict) -> dict:
         kaynak = is_kaydi.get("kaynak") or ""
         sahip = {"rol": "panel" if kaynak == "web-panel" else ("mcp" if not kaynak else "?"),
                  "pid": None}
-    pid, canli = sahip.get("pid"), None
-    if pid:
-        try:                            # Windows + POSIX: sinyal 0 varligi yoklar
-            os.kill(int(pid), 0)
-            canli = True
-        except (OSError, ValueError, TypeError):
-            canli = False
-    sahip["canli"] = canli              # None = bilinmiyor (pid kaydedilmemis)
+    pid = sahip.get("pid")
+    sahip["canli"] = _surec_canli(pid) if pid else None   # None = bilinmiyor
     return sahip
 
 

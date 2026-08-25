@@ -12,7 +12,7 @@ Uc kural denetlenir:
      kabuk kosan iste geri alma MUMKUN DEGIL denir ve sebebi yazilir.
 """
 from __future__ import annotations
-import json, os, sys, tempfile
+import json, os, subprocess, sys, tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -261,9 +261,66 @@ def karar_kaydi() -> bool:
     return True
 
 
+def surec_canliligi() -> bool:
+    """Sahip surec canli mi? Denetim CREATE_NO_WINDOW ALTINDA da dogru calismali.
+
+    YASANDI: ilk surum os.kill(pid, 0) kullaniyordu. Bu projede her alt surec
+    CREATE_NO_WINDOW (0x08000000) ile baslatilir - MS-DOS penceresi acilmasin diye. O
+    bayrakla baslatilmis bir Python surecinde os.kill(pid, 0) Windows'ta
+    "OSError [WinError 87] The parameter is incorrect" veriyor, KENDI pid'i icin bile.
+    Panel sunucusu tam o bayrakla kosuyor: canlilik denetimi uretimde HER ISI OKSUZ
+    gosterirdi. Test dogrudan kosunca geciyordu, kosucu altinda kaliyordu - fark bayrakti.
+
+    Bu yuzden test denetimi ALT SURECTE, O BAYRAKLA kosar. Ayni surecte kosturmak
+    hicbir sey olcmez."""
+    kod = (
+        "import os, subprocess, sys, time\n"
+        "sys.path.insert(0, r'%s')\n" % ROOT +
+        "from core.inceleme import _surec_canli\n"
+        "kurban = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(20)'],\n"
+        "                          creationflags=0x08000000)\n"
+        "time.sleep(0.8)\n"
+        "sonuc = {'kendi': _surec_canli(os.getpid()), 'kurban': _surec_canli(kurban.pid)}\n"
+        "kurban.kill(); kurban.wait(); time.sleep(0.5)\n"
+        "sonuc['oldurulen'] = _surec_canli(kurban.pid)\n"
+        "sonuc['olmayan'] = _surec_canli(999999)\n"
+        "sonuc['bozuk'] = _surec_canli('abc')\n"
+        "sonuc['sifir'] = _surec_canli(0)\n"
+        "try:\n"
+        "    os.kill(os.getpid(), 0); sonuc['os_kill'] = 'ok'\n"
+        "except Exception as e: sonuc['os_kill'] = type(e).__name__\n"
+        "import json; open(r'%s', 'w').write(json.dumps(sonuc))\n"
+    )
+    with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+        cikti = f.name
+    try:
+        r = subprocess.run([sys.executable, "-c", kod % cikti], cwd=ROOT, timeout=90,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                           creationflags=0x08000000 if os.name == "nt" else 0)
+        with open(cikti, encoding="utf-8") as f:
+            s = json.load(f)
+    except Exception as e:  # noqa: BLE001
+        raise AssertionError("alt surec kosmadi: %s / %s" % (e, (r.stderr or b"")[:200])) from None
+    finally:
+        try:
+            os.unlink(cikti)
+        except OSError:
+            pass
+
+    assert s["kendi"] is True, "kendi sureci OLU sayildi: %s" % s
+    assert s["kurban"] is True, "yasayan surec olu sayildi: %s" % s
+    assert s["oldurulen"] is False, "oldurulmus surec CANLI sayildi: %s" % s
+    assert s["olmayan"] is False, "olmayan pid canli sayildi: %s" % s
+    # bozuk girdi: "bilinmiyor" denir, "olu" DENMEZ
+    assert s["bozuk"] is None and s["sifir"] is None, "gecersiz pid icin hukum verildi: %s" % s
+    print("surec canliligi: ok (CREATE_NO_WINDOW altinda dogru; os.kill orada %s veriyor)"
+          % s["os_kill"])
+    return True
+
+
 def main() -> int:
     ok = (net_fark() and geri_alma_ispati() and devir_kanitla() and kapsam_ve_dogrulama()
-          and beyan_kanittan_ayri() and uc_baglandi() and karar_kaydi())
+          and beyan_kanittan_ayri() and uc_baglandi() and karar_kaydi() and surec_canliligi())
     print("SONUC:", "GECTI" if ok else "KALDI")
     return 0 if ok else 1
 
