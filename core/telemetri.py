@@ -120,6 +120,10 @@ def is_telemetri(jobs_dir: str, jid: str) -> dict:
         "devir_onerildi": bool((inc.get("devir_onerisi") or {}).get("var")),
         "turlar": turlar,                       # her onarim turunun hata SINIFI
         "son_hata_siniflari": son_siniflar,     # is bitince kalan hatalar
+        # KABUL KRITERI, dogrulayicidan AYRI olcum: derleme/ruff gecse de kriter
+        # tutmamis olabilir. Olculdu: `dama` iki turda da 11/12 aldi, dogrulayici temizdi
+        # ve telemetri "ilk tur basari %100" dedi - basarisiz ise basarili diyordu.
+        "kabul": _kabul_durumu(inc),
         "dosya_sayisi": len(inc.get("degisen_dosyalar") or []),
         "kapsam_ihlali": sum(1 for d in inc.get("degisen_dosyalar") or [] if d.get("kapsam_disi")),
         "sure": inc.get("sure") or 0,
@@ -128,6 +132,17 @@ def is_telemetri(jobs_dir: str, jid: str) -> dict:
         "ilk_istem_tok": k.get("ilk_prompt_tokens") or 0,
         "model_cagrisi": k.get("model_cagrisi") or 0,
     }
+
+
+def _kabul_durumu(inc: dict) -> str:
+    """"gecti" | "kaldi" | "denetlenmedi" | "kritersiz".
+
+    "denetlenmedi" MESRU ve ONEMLI bir deger: kriter verilmis ama kimse bakmamis demek.
+    Bunu "gecti" saymak, olculmemis bir seyi olculmus gibi raporlamaktir."""
+    for d in inc.get("dogrulama") or []:
+        if d.get("ad") == "kabul kriterleri":
+            return {"gecti": "gecti", "kaldi": "kaldi"}.get(d.get("durum"), "denetlenmedi")
+    return "kritersiz"
 
 
 def _yuzde(pay: int, payda: int) -> float:
@@ -189,6 +204,11 @@ def toplu(jobs_dir: str, n: int = 100) -> dict:
         "duraganlik": _yuzde(sum(1 for r in kayitlar if r["duragan"]), N),
         "devir_onerisi": _yuzde(sum(1 for r in kayitlar if r["devir_onerildi"]), N),
         "kapsam_ihlali_olan_is": sum(1 for r in kayitlar if r["kapsam_ihlali"]),
+        # KABUL KRITERI kirilimi - dogrulayici basarisiyla KARISTIRILMAMALI
+        "kabul_gecti": sum(1 for r in kayitlar if r["kabul"] == "gecti"),
+        "kabul_kaldi": sum(1 for r in kayitlar if r["kabul"] == "kaldi"),
+        "kabul_denetlenmedi": sum(1 for r in kayitlar if r["kabul"] == "denetlenmedi"),
+        "kritersiz_is": sum(1 for r in kayitlar if r["kabul"] == "kritersiz"),
         "ort_istem_tok": round(sum(r["istem_tok"] for r in olculen) / len(olculen)) if olculen else 0,
         "ort_uretim_tok": round(sum(r["uretim_tok"] for r in olculen) / len(olculen)) if olculen else 0,
         "ort_sure": round(sum(r["sure"] for r in kayitlar) / N, 1),
@@ -200,6 +220,12 @@ def toplu(jobs_dir: str, n: int = 100) -> dict:
         "bitmis_is": len(bitmis),
         "ornek_atlandi": atlanan,
     }
+    denetsiz = ozet["kabul_denetlenmedi"]
+    if denetsiz:
+        ozet["kabul_uyarisi"] = (
+            "%d iste kabul kriteri verilmis ama DENETLENMEMIS - basari yuzdeleri yalniz "
+            "DOGRULAYICIYI (derleme/ruff/test) olcer, kriterin tutup tutmadigini DEGIL"
+            % denetsiz)
     if N < 20:
         ozet["uyari"] = ("orneklem KUCUK (%d is) - yuzdeler gurultu; karar vermeden once "
                          "en az 20-30 gercek is biriksin" % N)
@@ -220,6 +246,8 @@ def yazdir(jobs_dir: str, n: int = 100) -> None:
     print("  duraganlik          %5.1f%%" % o["duraganlik"])
     print("  usta onerisi        %5.1f%%" % o["devir_onerisi"])
     print("  kapsam ihlali       %d is" % o["kapsam_ihlali_olan_is"])
+    print("  kabul kriteri       %d gecti · %d kaldi · %d DENETLENMEDI · %d kritersiz"
+          % (o["kabul_gecti"], o["kabul_kaldi"], o["kabul_denetlenmedi"], o["kritersiz_is"]))
     print("  ortalama            %s istem tok · %s uretim · %s sn"
           % (o["ort_istem_tok"], o["ort_uretim_tok"], o["ort_sure"]))
     if o["hata_siniflari"]:
@@ -233,7 +261,7 @@ def yazdir(jobs_dir: str, n: int = 100) -> None:
         for ad, m in sorted(o["modeller"].items(), key=lambda x: -x[1]["n"]):
             print("      %-34s n=%-3d basari %%%-5.1f ilk tur %%%-5.1f  %.0f sn"
                   % (ad[:34], m["n"], m["basari_yuzde"], m["ilk_tur_yuzde"], m["ort_sure"]))
-    for anahtar in ("uyari", "taksonomi_uyarisi"):
+    for anahtar in ("uyari", "taksonomi_uyarisi", "kabul_uyarisi"):
         if o.get(anahtar):
             print("  ! %s" % o[anahtar])
 

@@ -312,6 +312,15 @@ def kosu(c: Client, ad: str, g: dict, tur_siniri: int) -> dict:
                        "arac": len(rep.get("araclar", [])), "gizli": "%d/%d" % (gecen, toplam),
                        "hatalar": hatalar[:8],
                        "dosya": [d["yol"] for d in rep.get("yazilan_dosyalar", [])]})
+        # Gizli kontroller = kabul kriterlerinin denetimi; sonucu isin kaydina yaz
+        # (ayri dosya - olay gunlugunun sahibi isi kosan surectir).
+        try:
+            from core.inceleme import kabul_yaz
+            if rep.get("is_id"):
+                kabul_yaz(os.path.join(HOME, "jobs"), rep["is_id"], gecen, toplam,
+                          hatalar, "zorluk_kampanya")
+        except Exception:
+            pass
         print("    tur %d: %-16s %4.0f s | prompt %6s | uretim %5s | gizli %s%s" % (
             tur, rep.get("derleme_durumu"), sure, ku.get("prompt_tokens"), ku.get("gen_tokens"),
             "%d/%d" % (gecen, toplam), ("  dosya " + str(turlar[-1]["dosya"])) if tur == 1 else ""), flush=True)

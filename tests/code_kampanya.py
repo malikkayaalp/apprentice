@@ -209,6 +209,18 @@ def main() -> int:
                     "gizli_gecen": gecen, "gizli_toplam": len(son),
                     "gizli": [{"ad": x, "gecti": ok, "detay": d} for x, ok, d in son],
                     "fazla_dosya": fazla, "is_id": rep.get("is_id")})
+                # GIZLI KONTROLLER = kabul kriterlerinin denetimi. Sonucu ISIN kaydina
+                # yaz ki telemetri gorsun. Olay gunlugune DEGIL ayri dosyaya yazilir:
+                # gunlugun sahibi isi kosan surectir (tek yazar kurali), denetim bizim.
+                # Yasandi: bu yazilmadigi icin `dama` iki turda da 11/12 aldigi halde
+                # telemetri "ilk tur basari %100, hic hata yok" diyordu.
+                try:
+                    from core.inceleme import kabul_yaz
+                    if rep.get("is_id"):
+                        kabul_yaz(os.path.join(HOME, "jobs"), rep["is_id"], gecen, len(son),
+                                  [x for x, ok, _ in son if not ok], "code_kampanya")
+                except Exception:
+                    pass
                 print("   tur %d: %s, isci %.0fs, onarim %s, gizli %d/%d%s" % (
                     tur, rep.get("derleme_durumu"), rep.get("sure", 0), rep.get("tur_sayisi"),
                     gecen, len(son), (", FAZLA DOSYA %s" % fazla) if fazla else ""))

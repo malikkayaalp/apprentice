@@ -163,6 +163,74 @@ def _kapsam_disi(yol: str, kapsam: dict) -> bool:
     return True
 
 
+KABUL_DOSYASI = "kabul.json"       # kabul kriterlerini DENETLEYENIN dosyasi
+
+
+def kabul_oku(jobs_dir: str, jid: str) -> dict:
+    """Kabul kriterlerinin denetim sonucu (varsa).
+
+    KIM YAZAR: kriterleri denetleyen taraf - kampanya harness'i, usta, ya da ileride bir
+    dogrulayici. Isi KOSAN surec DEGIL, o yuzden events.jsonl'e degil AYRI dosyaya yazilir
+    (tek yazar kurali). inceleme.json karar icin ne ise, kabul.json denetim icin odur.
+
+    NEDEN GEREKLI: `kabul_kriterleri` bugun yalnizca TASINIYOR - iseme giriyor, is kaydina
+    yaziliyor, hicbir yerde denetlenmiyor. Derleme/ruff/test gecince sozlesme "gecti" diyor
+    ama kriterin tutup tutmadigini kimse bilmiyor. Olculdu (gece kusatmasi): `dama` gorevi
+    kabul kriterini iki turda da tutturamadi (11/12), telemetri "ilk tur basari %100, hic
+    hata yok" dedi. Yani sistem BASARISIZ bir ise BASARILI diyordu."""
+    try:
+        with open(os.path.join(jobs_dir, jid, KABUL_DOSYASI), encoding="utf-8") as f:
+            k = json.load(f)
+        return k if isinstance(k, dict) else {}
+    except Exception:
+        return {}
+
+
+def kabul_yaz(jobs_dir: str, jid: str, gecen: int, toplam: int,
+              basarisiz: list | None = None, kaynak: str = "") -> dict:
+    """Kabul denetimi sonucunu kaydet. Denetleyen taraf cagirir."""
+    jd = os.path.join(jobs_dir, jid)
+    if not os.path.isdir(jd):
+        return {"hata": "is bulunamadi"}
+    try:
+        gecen, toplam = int(gecen), int(toplam)
+    except (TypeError, ValueError):
+        return {"hata": "gecen/toplam sayi olmali"}
+    if toplam < 0 or gecen < 0 or gecen > toplam:
+        return {"hata": "gecersiz sayim: %s/%s" % (gecen, toplam)}
+    kayit = {"sema": SEMA, "gecen": gecen, "toplam": toplam,
+             "basarisiz": [str(x)[:200] for x in (basarisiz or [])][:20],
+             "kaynak": kaynak or "?", "t": time.time()}
+    try:
+        with open(os.path.join(jd, KABUL_DOSYASI), "w", encoding="utf-8", newline="\n") as f:
+            json.dump(kayit, f, ensure_ascii=False, indent=1)
+    except OSError as e:
+        return {"hata": str(e)[:150]}
+    return kayit
+
+
+def _kabul_satiri(jobs_dir: str, jid: str, kriterler: list) -> dict | None:
+    """DOGRULAMA listesine eklenecek "kabul kriterleri" satiri.
+
+    Uc hal, ucu de DURUST:
+      denetlendi + tuttu   -> gecti
+      denetlendi + tutmadi -> kaldi  (kac kriterin dustugu kanitta)
+      HIC denetlenmedi     -> yok    ("N kriter verildi, DOGRULANMADI")
+    Kriter verilmemisse satir HIC EKLENMEZ - denetlenecek bir sey yok."""
+    if not kriterler:
+        return None
+    k = kabul_oku(jobs_dir, jid)
+    if not k or not isinstance(k.get("toplam"), int):
+        return {"ad": "kabul kriterleri", "durum": "yok",
+                "kanit": "%d kriter verildi, DOGRULANMADI" % len(kriterler)}
+    gecen, toplam = int(k.get("gecen") or 0), int(k["toplam"])
+    tuttu = toplam > 0 and gecen >= toplam
+    kanit = "%d/%d kontrol" % (gecen, toplam)
+    if not tuttu and k.get("basarisiz"):
+        kanit += " · " + str(k["basarisiz"][0])[:80]
+    return {"ad": "kabul kriterleri", "durum": "gecti" if tuttu else "kaldi", "kanit": kanit}
+
+
 KARAR_DOSYASI = "inceleme.json"     # INCELEYENIN dosyasi (events.jsonl KOSUCUNUN)
 
 
@@ -266,6 +334,9 @@ def inceleme(jobs_dir: str, jid: str) -> dict:
                           "kanit": ("%d uyari" % len(ruff)) if ruff else "uyari yok"})
     else:
         dogrulama.append({"ad": "derleme", "durum": "yok", "kanit": "is bitmedi"})
+    ks = _kabul_satiri(jobs_dir, jid, kayit.get("kabul_kriterleri") or [])
+    if ks:
+        dogrulama.append(ks)
     kd = [d for d in degisen if d["kapsam_disi"]]
     dogrulama.append({"ad": "yazma kapsami",
                       "durum": "kaldi" if kd else ("gecti" if kapsam["sinirli"] else "yok"),
@@ -335,4 +406,6 @@ def inceleme(jobs_dir: str, jid: str) -> dict:
         "beyan": beyan[:600],            # modelin kendi ozeti - KANIT DEGIL, ayri alanda durur
         "geri_alinabilir": geri,
         "karar": karar_oku(jobs_dir, jid),
+        "kabul": kabul_oku(jobs_dir, jid),
+        "kabul_kriterleri": list(kayit.get("kabul_kriterleri") or []),
     }

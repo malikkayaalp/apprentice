@@ -20,7 +20,9 @@ try:      # pencereli exe/pythonw: sys.stdout None olabilir
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except Exception:
     pass
-from core.inceleme import SEMA, inceleme, karar_oku, karar_yaz  # noqa: E402
+from core.inceleme import (SEMA, inceleme, kabul_yaz, karar_oku,  # noqa: E402
+                           karar_yaz)
+from core.telemetri import toplu  # noqa: E402
 
 # V0, V1'den SATIR SAYISIYLA da farkli olmali. Yoksa "ilk once -> son sonra" ile "son turun
 # farki" ayni sayiyi verir ve test iki uygulamayi AYIRT EDEMEZ - test gecer ama hicbir sey
@@ -318,9 +320,75 @@ def surec_canliligi() -> bool:
     return True
 
 
+def kabul_denetimi() -> bool:
+    """Kabul kriterleri DENETLENDI mi, TUTTU mu? Ucu de ayri sey.
+
+    YASANDI (gece kusatmasi): `kabul_kriterleri` yalnizca TASINIYORDU - iseme giriyor, is
+    kaydina yaziliyor, hicbir yerde denetlenmiyordu. Derleme/ruff gecince sozlesme "gecti"
+    diyordu. `dama` gorevi kriteri iki turda da tutturamadi (11/12), telemetri "ilk tur
+    basari %100, hic hata yok" dedi: BASARISIZ ise BASARILI deniyordu.
+
+    Kural: denetlenmemis kriter "gecti" SAYILMAZ; "yok" denir ve sebebi yazilir."""
+    d = tempfile.mkdtemp()
+
+    def kur(jid, kriterler, ok=True):
+        jd = os.path.join(d, jid)
+        os.makedirs(jd, exist_ok=True)
+        with open(os.path.join(jd, "job.json"), "w", encoding="utf-8") as f:
+            json.dump({"id": jid, "durum": "bitti", "kabul_kriterleri": kriterler}, f,
+                      ensure_ascii=False)
+        with open(os.path.join(jd, "events.jsonl"), "w", encoding="utf-8") as f:
+            f.write(json.dumps({"type": "result", "ok": ok, "errors": [], "rounds": 0}) + "\n")
+
+    def satir(jid):
+        s = [x for x in inceleme(d, jid)["dogrulama"] if x["ad"] == "kabul kriterleri"]
+        return s[0] if s else None
+
+    # 1) KRITER VAR, DENETLENMEDI -> "gecti" DENMEZ
+    kur("denetsiz", ["bos listede cokmesin", "harf notu dondursun"])
+    s1 = satir("denetsiz")
+    assert s1 and s1["durum"] == "yok", s1
+    assert "DOGRULANMADI" in s1["kanit"] and "2 kriter" in s1["kanit"], s1
+
+    # 2) DENETLENDI ve TUTMADI -> kaldi, kac kontrolun dustugu KANITTA
+    kur("tutmadi", ["a", "b"])
+    kabul_yaz(d, "tutmadi", 11, 12, ["coklu atlama zorunlu degil"], "kampanya")
+    s2 = satir("tutmadi")
+    assert s2["durum"] == "kaldi" and "11/12" in s2["kanit"], s2
+    assert "coklu atlama" in s2["kanit"], "dusen kontrolun adi kanitta yok: %s" % s2
+
+    # 3) DENETLENDI ve TUTTU
+    kabul_yaz(d, "tutmadi", 12, 12, [], "kampanya")
+    assert satir("tutmadi")["durum"] == "gecti", satir("tutmadi")
+
+    # 4) KRITER YOK -> satir HIC eklenmez (denetlenecek sey yok)
+    kur("kritersiz", [])
+    assert satir("kritersiz") is None, "kritersiz iste kabul satiri uretildi"
+
+    # 5) GECERSIZ sayim reddedilir, mevcut kayit BOZULMAZ
+    for kotu in ((13, 12), (-1, 5), ("a", "b")):
+        assert kabul_yaz(d, "tutmadi", kotu[0], kotu[1]).get("hata"), kotu
+    assert satir("tutmadi")["durum"] == "gecti", "gecersiz sayim mevcut denetimi bozdu"
+    assert kabul_yaz(d, "olmayan_is", 1, 1).get("hata")
+
+    # 6) KABUL kaydi OLAY GUNLUGUNE yazilmaz (tek yazar kurali)
+    with open(os.path.join(d, "tutmadi", "events.jsonl"), encoding="utf-8") as f:
+        assert "kabul" not in f.read(), "kabul denetimi events.jsonl'e yazilmis"
+    assert os.path.exists(os.path.join(d, "tutmadi", "kabul.json"))
+
+    # 7) TELEMETRI dogrulayici basarisini kabul basarisiyla KARISTIRMAZ
+    o = toplu(d, 50)
+    assert o["kabul_gecti"] == 1 and o["kabul_denetlenmedi"] == 1, o
+    assert o["kritersiz_is"] == 1, o
+    assert "kabul_uyarisi" in o, "denetlenmemis kriter varken uyari yok"
+    assert "yalniz DOGRULAYICIYI" in o["kabul_uyarisi"], o["kabul_uyarisi"]
+    print("kabul denetimi: ok (denetlenmemis kriter 'gecti' sayilmiyor, telemetri ayiriyor)")
+    return True
+
+
 def main() -> int:
     ok = (net_fark() and geri_alma_ispati() and devir_kanitla() and kapsam_ve_dogrulama()
-          and beyan_kanittan_ayri() and uc_baglandi() and karar_kaydi() and surec_canliligi())
+          and beyan_kanittan_ayri() and uc_baglandi() and karar_kaydi() and surec_canliligi() and kabul_denetimi())
     print("SONUC:", "GECTI" if ok else "KALDI")
     return 0 if ok else 1
 
