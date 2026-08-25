@@ -1,5 +1,50 @@
 # STATE.md — iş devri (en yeni üstte; kendi OpenMemory kuralımızın bu depoya uygulanması)
 
+## 2026-08-25: INCELEME KATMANI (yol haritasi 1-7)
+
+Panel artik yalniz gostermiyor, KARAR aldiriyor. Kod: `core/inceleme.py`, `core/geri_al.py`,
+`core/telemetri.py`, panelde IS OZETI-SONUC panosu.
+
+**Mimari karar:** panel olay semasini BILMEZ. Araya `inceleme()` projeksiyonu kondu
+(`SEMA=1`). Bugun events.jsonl'den uretiliyor, yarin dugum tabanli orkestratorden
+uretilecek - panel degismeyecek. Timeline<->orkestrator carpismasi bu sayede ERTELEME
+yerine COZULDU.
+
+**TEK YAZAR KURALI:** is kaydina yalniz SAHIBI yazar (`job.json` -> `sahip: {rol, pid}`).
+Panel, sahibi olmadigi MCP islerine `usta_rapor` ekliyordu: iki surec ayni dosyaya append
+(Windows'ta satir yirtilabilir) + yazilan sey UYDURMA kanitti ("ustaya rapor gitti" - usta
+hic bakmamis olabilir). Inceleyenin karari AYRI dosyada: `inceleme.json`.
+
+**GERI ALMA uc yontemli:** git (is baslarken HEAD + kirli liste; `run_shell`'in gunluge
+girmeden yaptigi degisiklik de kapsanir) -> gunluk (kabuk kosmadiysa) -> yok (sebebi
+yazilir). Kullanicinin KENDI degisikligine ve is bittikten SONRA degismis dosyaya
+DOKUNULMAZ. `git reset --hard`/`git clean` KULLANILMAZ. Once PLAN, sonra onay, sonra uygula.
+
+**TELEMETRI:** `python -m core.telemetri`. Deterministik hata taksonomisi (regex, MODEL YOK);
+"bilinmeyen" mesru bir siniftir ve orani %25'i asarsa uyarir. Sahte veri elenir
+(`kaynak="ornek"`, `ortam="fake"`). ILK OLCUM: 9 gercek is, hepsi ilk turda gecmis -
+**elde basarisizlik verisi YOK**, taksonomi sahada sinanmadi.
+
+**Denenip ELENENLER (kutuphane):** portalocker (sahiplik kilitle degil KAYITLA cozuldu),
+msgspec (SEMA + sozlesme testi var), pluggy (`envs/<ad>/env.json` zaten var), tree-sitter
+(harita'nin kazandirdigi olculmedi), RapidFuzz (duraganlik TAM imza esitligi kullaniyor).
+ALINAN: Hypothesis (gelistirme bagimliligi). Bagimlilik yerine ucuz yol: pathspec ->
+`git check-ignore`, junitparser -> `--junitxml` + stdlib `xml.etree`.
+
+**Bu katmanda bulunan GERCEK hatalar** (hepsi test tarafindan, kullaniciya gitmeden):
+- `os.kill(pid, 0)` CREATE_NO_WINDOW altinda `WinError 87` veriyor -> canlilik denetimi
+  uretimde HER isi oksuz gosterirdi. ctypes/OpenProcess'e cevrildi.
+- `ntpath.join("D:/ws", "a/C:") == "C:"` -> goruntuleyici yol korumasinda kacis (Hypothesis
+  400 uretilmis girdide buldu).
+- Olay satiri `null` ise `.get()` cokuyordu; `kullanim` dizge ise telemetri cokuyordu.
+- Panel sureci BAYATLIYOR: panel.html diskten taze, panel.py surece bir kez yuklu. Artik
+  alti kaynagin ICERIK ozeti karsilastirilir, seritte "SUNUCUYU YENIDEN BASLAT" dugmesi var.
+
+**Bekleyenler:** yol haritasi 8+ (testleri HTML'den bagimsizlastir -> panel.html'i bol ->
+kuyruk -> timeline -> preset -> policy -> benchmark UI -> SSE -> kucuk modeller).
+8-9 ERTELENDI, tetikleyici: dosya ~130 KB'i gecerse ya da CSS cakismasindan ikinci hata
+cikarsa. README bu katmani ANLATMIYOR - guncellenmeli.
+
 ## 2026-08-24 (gece 4): WebView2 native kabuk + panel cerceveye sigiyor
 
 **Kabuk (urunlesme adim 1):** shell/ApprenticePanel - C#/WinForms + WebView2. panel.html
