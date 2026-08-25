@@ -65,6 +65,10 @@ DOGRULAMA = os.environ.get("APPRENTICE_DOGRULAMA", "tam")
 # tutuluyor ama DISIPLINDE tutulmuyor - dama gorevinde 11 dosya yazildi (10'u istenmeyen .bat/.sh).
 # Kriter metni yetmiyor; sinir araca konuluyor.
 YAZILABILIR = [x.strip() for x in os.environ.get("APPRENTICE_YAZILABILIR", "").split(",") if x.strip()]
+# ISE OZEL EK KLASORU (calisma agacinin DISINDA). Panelden yuklenen dosyalar artik projeye
+# YAZILMIYOR (denetim bulgusu 1: ayni adli dosyayi sessizce eziyordu). Cirak buradan
+# YALNIZCA OKUR - yazma hapsi degismez.
+EK_DIZIN = os.environ.get("APPRENTICE_EK_DIZIN", "")
 
 TEST_SATIRI_TAM = ("- Testleri run_tests ile kosarsin ({test}; test dosyalari test_*.py, "
                    "unittest.TestCase siniflari her iki kosucuda da calisir). Komutlari "
@@ -195,14 +199,40 @@ def kabuk_guvenli(cmd, kok: str = "") -> str:
 
 
 class Jail:
-    def __init__(self, root: str):
+    """Yol hapsi. YAZMA her zaman calisma dizinine kilitlidir; OKUMA'ya yalnizca isin
+    kendi EK KLASORU eklenebilir.
+
+    NEDEN EK KLASOR: panelden yuklenen dosyalar artik projeye yazilmiyor (denetim bulgusu 1
+    - ayni adli dosyayi sessizce eziyordu). Ise ozel, calisma agacinin DISINDA bir klasorde
+    duruyorlar. Cirak onlari okuyabilmeli, yoksa ek islevi biter.
+
+    SINIR DAR: tek klasor, YALNIZ OKUMA, gercek yol (realpath) ile karsilastirilir - bag
+    (symlink) ya da '..' ile baska yere cikilamaz. Yazma/silme oraya ASLA acilmaz; kabuk
+    korumasi da mutlak yolu zaten reddeder, yani ek klasoru kabuktan da gorunmez."""
+
+    def __init__(self, root: str, ek_dizin: str = ""):
         self.root = os.path.realpath(root)
+        self.ek_dizin = os.path.realpath(ek_dizin) if ek_dizin else ""
 
     def path(self, p: str) -> str:
+        """YAZMA/genel yol cozumu - daima calisma dizinine hapis."""
         full = os.path.realpath(os.path.join(self.root, p or ""))
         if full != self.root and not full.startswith(self.root + os.sep):
             raise ValueError("yol calisma dizini disinda: %s" % p)
         return full
+
+    def _ek_icinde(self, full: str) -> bool:
+        return bool(self.ek_dizin) and (full == self.ek_dizin
+                                        or full.startswith(self.ek_dizin + os.sep))
+
+    def oku_yolu(self, p: str) -> str:
+        """OKUMA yolu: calisma dizini VEYA isin ek klasoru. Baska hicbir yer."""
+        full = os.path.realpath(os.path.join(self.root, p or ""))
+        if full == self.root or full.startswith(self.root + os.sep):
+            return full
+        if self._ek_icinde(os.path.realpath(p or "")):
+            return os.path.realpath(p)
+        raise ValueError("yol calisma dizini disinda: %s" % p)
 
 
 def shell(cmd: list | str, cwd: str, timeout: int = SHELL_TIMEOUT) -> dict:
@@ -247,7 +277,9 @@ def make_dispatch(jail: Jail, written: list, em):
 
 def _run(jail: Jail, written: list, em, name: str, a: dict):
     if name == "read_file":
-        p = jail.path(a.get("path", ""))
+        # OKUMA: calisma dizini + isin ek klasoru. YAZMA hapsi degismez (write_file
+        # asagida hala jail.path kullanir) - ek klasorune yazilamaz, silinemez.
+        p = jail.oku_yolu(a.get("path", ""))
         if not os.path.isfile(p):
             return {"error": "dosya yok: %s" % a.get("path")}
         with open(p, encoding="utf-8", errors="replace") as f:
@@ -707,7 +739,7 @@ def main() -> int:
         if not os.path.isdir(a.workdir):
             em.emit("error", message="calisma dizini yok: %s" % a.workdir)
             return 1
-        jail = Jail(a.workdir)
+        jail = Jail(a.workdir, EK_DIZIN)
         em.emit("system", subtype="init", model=a.model, session_id=a.session, workdir=jail.root)
 
         # Proje hafizasi: calisma dizinindeki HAFIZA.md (usta yazar: proje kurallari, gecmis

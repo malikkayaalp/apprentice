@@ -160,7 +160,13 @@ def geri_alma_zor_durumlar() -> bool:
     os.remove(os.path.join(wd, "silinecek.py"))
 
     d = tempfile.mkdtemp()
+    # KABUK OLAYI SART: bu fikstur cirak'in dosya YARATTIGINI ve SILDIGINI canlandiriyor.
+    # Uretimde bunlar ancak iki yoldan olur: write_file (olay birakir) ya da run_shell
+    # (silme aracı YOK, yani silme yalnizca kabukla olur). Ikisi de yoksa o degisiklik
+    # cirak'in DEGILDIR - yeni kural (denetim bulgusu 2) onu kullanicinin duzenlemesi sayip
+    # korur. Kabuk olayi eklenmezse fikstur uretimde imkansiz bir durumu sinar.
     _is(d, "is1", [{"type": "write", "path": "kok.py", "before": "kok eski\n", "after": "kok YENI\n"},
+                   {"type": "tool", "name": "run_shell", "detail": "python uret_ve_sil.py"},
                    {"type": "result", "ok": True, "errors": [], "rounds": 0}],
         {"id": "is1", "durum": "bitti", "calisma_dizini": wd, "anlik": ag})
     p = plan(d, "is1")

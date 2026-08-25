@@ -43,18 +43,45 @@ def git_deposu_mu(workdir: str) -> bool:
     return bool(r and r.returncode == 0)
 
 
+def _gitb(workdir: str, *arg, timeout: int = 30):
+    """_git'in BAYT donen surumu. `--porcelain -z` ciktisi NUL ayracli ve KACISSIZDIR;
+    metne cevirip satirlara bolmek o guvenceyi bozar."""
+    try:
+        return subprocess.run(["git", "-C", workdir] + list(arg), capture_output=True,
+                              timeout=timeout, creationflags=PENCERESIZ)
+    except Exception:
+        return None
+
+
 def _kirli(workdir: str) -> dict:
-    """git status --porcelain -> {yol: durum}. Yollar '/' ile normallenir."""
-    r = _git(workdir, "status", "--porcelain", "--untracked-files=all")
+    """git status -> {yol: durum}. Yollar '/' ile normallenir.
+
+    `-z` KULLANILIR, cunku duz `--porcelain` cikisi:
+      - bosluk/ozel karakter iceren yolu TIRNAKLAR ve C-kacisi uygular ("src/\\303\\266.py"),
+      - yeniden adlandirmayi `"eski" -> "yeni"` diye yazar.
+    Eski ayristirma `satir[3:].strip().strip('"')` yapiyordu: tirnakli Unicode yolu
+    cozemiyor, yeniden adlandirmada ise `"yeni.py` gibi BAS TIRNAKLI bozuk yol uretiyordu -
+    o yol hicbir dosyayla eslesmedigi icin geri alma sessizce ISKALIYORDU.
+    `-z` ciktisi NUL ayracli, tirnaksiz, kacissizdir; yeniden adlandirmada iki kayit
+    ard arda gelir: once YENI ad, sonra ESKI ad."""
+    r = _gitb(workdir, "status", "--porcelain=v1", "-z", "--untracked-files=all")
     out: dict = {}
     if not r or r.returncode != 0:
         return out
-    for satir in (r.stdout or "").splitlines():
-        if len(satir) < 4:
+    # Windows'ta yol baytlari sistem kod sayfasi olabilir; surrogateescape ile kayipsiz tut.
+    parcalar = (r.stdout or b"").split(b"\x00")
+    i = 0
+    while i < len(parcalar):
+        kayit = parcalar[i]
+        i += 1
+        if len(kayit) < 4:
             continue
-        durum, yol = satir[:2], satir[3:].strip().strip('"')
-        if " -> " in yol:                       # yeniden adlandirma: hedefi al
-            yol = yol.split(" -> ", 1)[1]
+        durum = kayit[:2].decode("ascii", "replace")
+        yol = kayit[3:].decode("utf-8", "surrogateescape")
+        if durum[0] in ("R", "C"):
+            # yeniden adlandirma/kopyalama: SONRAKI kayit ESKI addir, onu atla.
+            # Hedef (yeni ad) bizi ilgilendirir - degisiklik orada.
+            i += 1
         out[yol.replace("\\", "/")] = durum
     return out
 
@@ -116,9 +143,22 @@ def _olaylar(jobs_dir: str, jid: str) -> list:
     return out
 
 
-def _bitis(jobs_dir: str, jid: str) -> float:
-    """Isin BITIS ani (events.jsonl mtime). Olaylarda guvenilir zaman damgasi yok; tek-yazar
-    kurali sayesinde is bitince o dosyaya kimse eklemez, mtime dogru isarettir. 0 = bilinmiyor."""
+def _bitis(jobs_dir: str, jid: str, olaylar: list | None = None) -> float:
+    """Isin GERCEK bitis ani. 0 = bilinmiyor.
+
+    ONCE OLAYIN ZAMAN DAMGASI: `exit` (yoksa `result`) olayinin `t` alani. Bu, iscinin
+    gercekten durdugu andir.
+
+    NEDEN MTIME DEGIL: ilk surum events.jsonl'in mtime'ini kullaniyordu. Ama panel, is
+    bittikten SONRA dosyaya `usta_rapor` olayi ekliyor (panel.py:_usta_rapor_tamamla) -
+    mtime o anda ILERI kayiyor. Sonuc: kullanicinin isin bitisi ile usta raporu arasinda
+    yaptigi duzenleme "is SIRASINDA olmus" sayilip GERI ALINABILIYORDU. Yani koruma tam da
+    korumasi gereken pencerede delikti.
+
+    Olayda damga yoksa (eski kayit) mtime'a duseriz - o zaman da SLACK payi vardir."""
+    for e in reversed(olaylar or _olaylar(jobs_dir, jid)):
+        if e.get("type") in ("exit", "result") and isinstance(e.get("t"), (int, float)):
+            return float(e["t"])
     try:
         return os.path.getmtime(os.path.join(jobs_dir, jid, "events.jsonl"))
     except OSError:
@@ -162,6 +202,43 @@ def _oku(yol: str) -> str | None:
         return None
 
 
+def _zemin_degisti(workdir: str, ag: dict) -> str:
+    """Is baslarken kaydedilen git zemini hala ayni mi? Doner: sebep ('' = ayni).
+
+    Kayitli `head` bugune kadar HIC OKUNMUYORDU: `anlik()` kaydediyordu ama `uygula()`
+    duz `git checkout -- <yol>` cagiriyordu - yani INDEKSTEN/GUNCEL HEAD'den geri yaziyordu.
+    Is sirasinda commit/checkout olduysa geri alma YANLIS icerigi yaziyordu."""
+    bas_head = str(ag.get("head") or "")
+    if not bas_head:
+        return ""                       # eski kayit: denetleyemeyiz, susariz (uydurma yok)
+    r = _git(workdir, "rev-parse", "HEAD")
+    simdi = (r.stdout or "").strip() if r and r.returncode == 0 else ""
+    if simdi and simdi != bas_head:
+        return ("is baslarken HEAD %s idi, simdi %s - is sirasinda commit/checkout yapilmis. "
+                "Dosyalari baska bir agacin uzerine geri yazmak tutarsiz sonuc verir; "
+                "geri alma DURDURULDU." % (bas_head[:10], simdi[:10]))
+    bas_dal = str(ag.get("dal") or "")
+    if bas_dal:
+        d = _git(workdir, "rev-parse", "--abbrev-ref", "HEAD")
+        simdi_dal = (d.stdout or "").strip() if d and d.returncode == 0 else ""
+        if simdi_dal and simdi_dal != bas_dal:
+            return ("is '%s' dalina yazildi, simdi '%s' dalindasin - geri alma DURDURULDU."
+                    % (bas_dal, simdi_dal))
+    return ""
+
+
+# NOT (denenip BIRAKILDI): dosyayi `git show <head>:<yol>` ile okuyup ham bayt yazmak.
+# Amac indekse dokunmamakti. AMA `git show` BLOB'u verir - satir sonu/temizleme suzgeclerini
+# (autocrlf, .gitattributes text=auto, smudge) UYGULAMAZ. Sonuc: LF yazilir, git CRLF bekler,
+# geri yazilan dosya HALA "degismis" gorunur ve ikinci geri alma ayni dosyayi tekrar yakalar.
+# Bunu mevcut senaryo testi yakaladi (`geri_alma_zor_durumlar`, "ikinci kez guvenli" adimi).
+# Dogrusu git'in KENDI checkout'u - ama GUNCEL HEAD'den degil, KAYITLI baslangic HEAD'inden:
+#     git checkout <baslangic_head> -- <yol>
+# Bu hem suzgecleri uygular hem de dogru surumu yazar. Indeksi de o surume ceker; zaten
+# yalnizca "is baslarken temiz olan" dosyalara dokundugumuz icin indeksin baslangic hali
+# tam olarak odur.
+
+
 def plan(jobs_dir: str, jid: str) -> dict:
     """Geri alma PLANI. HICBIR SEY DEGISTIRMEZ - ne yapilacagini soyler.
 
@@ -195,8 +272,16 @@ def plan(jobs_dir: str, jid: str) -> dict:
 
     # --- 1. YONTEM: GIT (kim degistirdiginden bagimsiz - run_shell boslugunu kapatir) ---
     if ag.get("yontem") == "git" and git_deposu_mu(workdir):
+        # ZEMIN DENETIMI: is BASLARKEN kaydedilen HEAD/dal hala gecerli mi?
+        # Degistiyse (commit, checkout, pull, rebase) dosyalari geri yazmak, dosyalari
+        # BASKA bir agacin uzerine koymak demektir - tutarsiz bir calisma agaci uretir.
+        # Yanlis icerik yazmaktansa DURUP SEBEBINI SOYLERIZ.
+        zemin_hata = _zemin_degisti(workdir, ag)
+        if zemin_hata:
+            return {"mumkun": False, "yontem": "yok", "sebep": zemin_hata,
+                    "eylemler": [], "atlanan": []}
         basta_kirli = set(ag.get("kirli") or [])
-        bitis = _bitis(jobs_dir, jid)
+        bitis = _bitis(jobs_dir, jid, olaylar)
         for yol, durum in sorted(_kirli(workdir).items()):
             tam = _guvenli(workdir, yol)
             if tam is None:
@@ -213,10 +298,27 @@ def plan(jobs_dir: str, jid: str) -> dict:
             if sebep:
                 atlanan.append({"yol": yol, "sebep": sebep})
                 continue
-            if durum.strip() == "??":
-                eylemler.append({"yol": yol, "eylem": "sil", "kaynak": "git"})
+            # KURAL 3: IS SIRASINDA degismis ama CIRAK YAZMAMIS dosya.
+            # Kabuk KOSMADIYSA cirak dosyayi ancak write_file ile degistirebilir - yani
+            # olay gunlugunde izi olur. Iz yoksa o degisiklik KULLANICININDIR ve is
+            # devam ederken yapilmistir; geri almak onun emegini siler.
+            # Kabuk KOSTUYSA ayirt edemeyiz (run_shell gunluge girmez): o zaman plana
+            # alinir ama "belirsiz" isaretiyle - kullanici ONAYLAMADAN once gorsun.
+            if yol not in yazimlar:
+                if not kabuk:
+                    atlanan.append({"yol": yol,
+                                    "sebep": "iş sırasında değişmiş ama çırak yazmamış "
+                                             "(kabuk koşmadı — bu senin düzenlemen)"})
+                    continue
+                belirsiz = True
             else:
-                eylemler.append({"yol": yol, "eylem": "geri_yaz", "kaynak": "git"})
+                belirsiz = False
+            ey = {"yol": yol, "kaynak": "git",
+                  "eylem": "sil" if durum.strip() == "??" else "geri_yaz"}
+            if belirsiz:
+                ey["belirsiz"] = ("çırağın yazma kaydı yok; kabuk (%s) koştuğu için "
+                                  "onun eseri olabilir" % ", ".join(kabuk))
+            eylemler.append(ey)
         return {"mumkun": bool(eylemler), "yontem": "git",
                 "sebep": ("git anlik goruntusu var: kabuk komutuyla yapilan degisiklik de "
                           "kapsanir" if eylemler else "geri alinacak degisiklik yok"),
@@ -272,7 +374,20 @@ def uygula(jobs_dir: str, jid: str, p: dict | None = None) -> dict:
             d = yazimlar.setdefault(y, {"ilk_once": e.get("before") or ""})
             d["son_sonra"] = e.get("after") or ""
 
-    bitis = _bitis(jobs_dir, jid)
+    olaylar_u = _olaylar(jobs_dir, jid)
+    bitis = _bitis(jobs_dir, jid, olaylar_u)
+    # Kayitli baslangic HEAD'i: geri yazma bunun uzerinden yapilir.
+    bas_head = ""
+    try:
+        with open(os.path.join(jobs_dir, jid, "job.json"), encoding="utf-8") as f:
+            ag_u = json.load(f).get("anlik") or {}
+        bas_head = str(ag_u.get("head") or "")
+        if ag_u.get("yontem") == "git":
+            z = _zemin_degisti(workdir, ag_u)
+            if z:      # PLAN ile UYGULA arasinda dal/HEAD degismis olabilir - yine bakariz
+                return {"hata": z, "yapildi": [], "basarisiz": [], "atlanan": []}
+    except Exception:  # noqa: BLE001
+        pass
     yapildi, basarisiz, atlanan = [], [], list(p.get("atlanan") or [])
     for ey in p.get("eylemler") or []:
         yol, tam = ey["yol"], _guvenli(workdir, ey["yol"])
@@ -292,8 +407,16 @@ def uygula(jobs_dir: str, jid: str, p: dict | None = None) -> dict:
                 if ey["eylem"] == "sil":
                     os.remove(tam)
                 else:
-                    # DOSYA BAZINDA geri yazma; `git reset --hard`/`git clean` KULLANILMAZ
-                    r = _git(workdir, "checkout", "--", yol)
+                    # IS BASLARKENKI icerik geri yazilir - GUNCEL HEAD/indeks DEGIL.
+                    # Eski surum `git checkout -- <yol>` cagiriyordu: (a) indeksten okur,
+                    # yani is sirasinda sahnelenmis bir degisiklik varsa ONU yazardi;
+                    # (b) is sirasinda commit olduysa YANLIS surumu yazardi; (c) dosyayi
+                    # ayrica SAHNELERDI. `git show <baslangic_head>:<yol>` uculunu de cozer.
+                    if not bas_head:
+                        basarisiz.append({"yol": yol, "sebep": "is baslangic HEAD'i kayitli degil "
+                                                               "(eski kayit) - geri yazilmadi"})
+                        continue
+                    r = _git(workdir, "checkout", bas_head, "--", yol)
                     if not r or r.returncode != 0:
                         basarisiz.append({"yol": yol,
                                           "sebep": (r.stderr if r else "git calismadi")[:120]})

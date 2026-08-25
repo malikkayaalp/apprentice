@@ -20,6 +20,7 @@ try:
 except Exception:
     pass
 from core.geri_al import anlik, plan, uygula, zemin  # noqa: E402
+from core.geri_al import _kirli as _kirli_disaridan  # noqa: E402
 
 PZ = 0x08000000 if os.name == "nt" else 0
 
@@ -264,9 +265,173 @@ def zemin_bilgisi() -> bool:
     return True
 
 
+def zemin_degisirse_durur() -> bool:
+    """IS SIRASINDA commit/checkout olduysa geri alma DURUR (denetim bulgusu 2).
+
+    Kayitli baslangic HEAD'i bugune kadar HIC OKUNMUYORDU: anlik() kaydediyor, uygula() ise
+    duz `git checkout -- <yol>` cagiriyordu - yani INDEKSTEN/GUNCEL HEAD'den geri yaziyordu.
+    Is sirasinda commit olduysa YANLIS icerik yaziliyordu."""
+    if not shutil.which("git"):
+        print("zemin degisirse durur: git yok, atlandi")
+        return True
+
+    # --- HEAD degisirse ---
+    wd = tempfile.mkdtemp()
+    _git(wd, "init", "-q"); _git(wd, "config", "user.email", "t@t"); _git(wd, "config", "user.name", "t")
+    _yaz(wd, "a.py", "v1\n")
+    _git(wd, "add", "-A"); _git(wd, "commit", "-qm", "ilk")
+    ag = anlik(wd)
+    _yaz(wd, "a.py", "cirak yazdi\n")
+    ev = _is(tempfile.mkdtemp(), wd, [
+        {"type": "write", "path": "a.py", "before": "v1\n", "after": "cirak yazdi\n"},
+        {"type": "result", "ok": True, "errors": [], "rounds": 0, "t": time.time()}], ag)
+    _git(wd, "add", "-A"); _git(wd, "commit", "-qm", "kullanici commit")   # HEAD ILERLEDI
+
+    p = plan(ev, "is1")
+    assert not p["mumkun"], "HEAD degismisken geri alma mumkun gorundu"
+    assert "HEAD" in p["sebep"] and "DURDURULDU" in p["sebep"], p["sebep"]
+    # BAYAT plan da uygulanmamali - uygula() zemini yeniden denetler
+    r = uygula(ev, "is1", {"mumkun": True, "eylemler": [
+        {"yol": "a.py", "eylem": "geri_yaz", "kaynak": "git"}]})
+    assert r.get("hata"), "HEAD degismisken bayat plan uygulandi: %s" % r
+    assert _oku(wd, "a.py") == "cirak yazdi\n", "HEAD degismisken dosyaya DOKUNULDU"
+
+    # --- DAL degisirse ---
+    wd2 = tempfile.mkdtemp()
+    _git(wd2, "init", "-q"); _git(wd2, "config", "user.email", "t@t"); _git(wd2, "config", "user.name", "t")
+    _yaz(wd2, "b.py", "v1\n")
+    _git(wd2, "add", "-A"); _git(wd2, "commit", "-qm", "ilk")
+    ag2 = anlik(wd2)
+    _yaz(wd2, "b.py", "cirak\n")
+    ev2 = _is(tempfile.mkdtemp(), wd2, [
+        {"type": "write", "path": "b.py", "before": "v1\n", "after": "cirak\n"},
+        {"type": "result", "ok": True, "errors": [], "rounds": 0, "t": time.time()}], ag2)
+    _git(wd2, "checkout", "-q", "-b", "baska-dal")
+    p2 = plan(ev2, "is1")
+    assert not p2["mumkun"] and "dal" in p2["sebep"], p2["sebep"]
+    print("zemin degisirse durur: ok (HEAD ve dal degisimi ayri ayri durdurdu)")
+    return True
+
+
+def baslangic_icerigi_geri_yazilir() -> bool:
+    """Geri yazma IS BASLANGICINDAKI icerigi kullanir - indeksi ya da guncel HEAD'i DEGIL.
+
+    `git checkout -- <yol>` once INDEKSE bakar: is sirasinda bir sey sahnelendiyse (cirak
+    ya da kabuk `git add` calistirdiysa) geri alma o BOZUK kaynagi yaziyordu. Ustelik
+    dosyayi ayrica sahneliyordu - kullanicinin stage durumunu degistirmek geri almanin
+    isi degil. `git show <baslangic_head>:<yol>` ikisini de cozer."""
+    if not shutil.which("git"):
+        print("baslangic icerigi: git yok, atlandi")
+        return True
+    wd = tempfile.mkdtemp()
+    _git(wd, "init", "-q"); _git(wd, "config", "user.email", "t@t"); _git(wd, "config", "user.name", "t")
+    _yaz(wd, "a.py", "BASLANGIC\n")
+    _git(wd, "add", "-A"); _git(wd, "commit", "-qm", "ilk")
+    ag = anlik(wd)
+
+    _yaz(wd, "a.py", "cirak yazdi\n")
+    _git(wd, "add", "a.py")            # INDEKS artik cirak'in icerigini tutuyor
+    ev = _is(tempfile.mkdtemp(), wd, [
+        {"type": "write", "path": "a.py", "before": "BASLANGIC\n", "after": "cirak yazdi\n"},
+        {"type": "result", "ok": True, "errors": [], "rounds": 0, "t": time.time()}], ag)
+    p = plan(ev, "is1")
+    assert p["mumkun"], p
+    r = uygula(ev, "is1", p)
+    assert not r["basarisiz"], r
+    assert _oku(wd, "a.py") == "BASLANGIC\n", \
+        "baslangic icerigi degil indeks/HEAD yazildi: %r" % _oku(wd, "a.py")
+    print("baslangic icerigi geri yazilir: ok (indeks kaynak DEGIL)")
+    return True
+
+
+def kullanici_is_sirasinda_duzenlerse() -> bool:
+    """IS SURERKEN kullanicinin degistirdigi/olusturdugu dosya KORUNUR.
+
+    Kabuk KOSMADIYSA cirak dosyayi ancak write_file ile degistirebilir - izi gunlukte olur.
+    Iz yoksa o degisiklik KULLANICININDIR. Kabuk KOSTUYSA ayirt edilemez; o zaman plana
+    girer ama BELIRSIZ isaretiyle - kullanici onaylamadan once gorsun."""
+    if not shutil.which("git"):
+        print("kullanici is sirasinda: git yok, atlandi")
+        return True
+    wd = tempfile.mkdtemp()
+    _git(wd, "init", "-q"); _git(wd, "config", "user.email", "t@t"); _git(wd, "config", "user.name", "t")
+    _yaz(wd, "cirak.py", "v1\n"); _yaz(wd, "benim.py", "benim v1\n")
+    _git(wd, "add", "-A"); _git(wd, "commit", "-qm", "ilk")
+    ag = anlik(wd)
+
+    _yaz(wd, "cirak.py", "cirak yazdi\n")                   # gunlukte VAR
+    _yaz(wd, "benim.py", "IS SURERKEN BEN DUZENLEDIM\n")    # gunlukte YOK -> kullanici
+    _yaz(wd, "YENI_NOTUM.md", "is surerken actim\n")        # gunlukte YOK -> kullanici
+    ev = _is(tempfile.mkdtemp(), wd, [
+        {"type": "write", "path": "cirak.py", "before": "v1\n", "after": "cirak yazdi\n"},
+        {"type": "result", "ok": True, "errors": [], "rounds": 0, "t": time.time()}], ag)
+
+    p = plan(ev, "is1")
+    yollar = {e["yol"] for e in p["eylemler"]}
+    atl = {a["yol"]: a["sebep"] for a in p["atlanan"]}
+    assert "cirak.py" in yollar, "cirak'in yazdigi dosya geri alinmiyor: %s" % p
+    assert "benim.py" not in yollar, "KULLANICININ is sirasindaki duzenlemesi geri alinacakti"
+    assert "YENI_NOTUM.md" not in yollar, "KULLANICININ yeni dosyasi silinecekti"
+    assert "kabuk" in atl.get("benim.py", ""), atl      # sebep: cirak yazmamis, kabuk kosmamis
+    uygula(ev, "is1", p)
+    assert "BEN DUZENLEDIM" in _oku(wd, "benim.py"), "kullanicinin emegi silindi"
+    assert os.path.exists(os.path.join(wd, "YENI_NOTUM.md")), "kullanicinin yeni dosyasi silindi"
+    assert _oku(wd, "cirak.py") == "v1\n", "cirak'in dosyasi geri alinmadi"
+
+    # KABUK KOSTUYSA: plana girer ama BELIRSIZ isaretiyle (run_shell boslugu kapali kalsin)
+    wd2 = tempfile.mkdtemp()
+    _git(wd2, "init", "-q"); _git(wd2, "config", "user.email", "t@t"); _git(wd2, "config", "user.name", "t")
+    _yaz(wd2, "x.py", "v1\n"); _git(wd2, "add", "-A"); _git(wd2, "commit", "-qm", "ilk")
+    ag2 = anlik(wd2)
+    _yaz(wd2, "kabuk_urunu.txt", "kabuk yazdi\n")
+    ev2 = _is(tempfile.mkdtemp(), wd2, [
+        {"type": "tool", "name": "run_shell", "detail": "python uret.py"},
+        {"type": "result", "ok": True, "errors": [], "rounds": 0, "t": time.time()}], ag2)
+    p2 = plan(ev2, "is1")
+    e2 = [e for e in p2["eylemler"] if e["yol"] == "kabuk_urunu.txt"]
+    assert e2, "kabuk urunu plana girmedi - run_shell boslugu geri acildi"
+    assert e2[0].get("belirsiz"), "kabuk kosarken belirsizlik isaretlenmemis: %s" % e2[0]
+    print("kullanici is sirasinda duzenlerse: ok (korundu; kabuk varsa belirsiz isaretli)")
+    return True
+
+
+def zor_yollar() -> bool:
+    """Bosluk, Unicode ve yeniden adlandirma iceren yollar DOGRU ayristirilir.
+
+    Eski ayristirma satir[3:].strip().strip(chr(34)) idi. git ozel karakterli yolu TIRNAKLAR
+    ve C-kacisi uygular; yeniden adlandirmayi 'eski -> yeni' bicimde yazar. Sonuc, bas
+    tirnakli bozuk bir yoldu ve hicbir dosyayla eslesmedigi icin geri alma SESSIZCE
+    iskaliyordu. Artik `--porcelain -z` (NUL ayracli, kacissiz) kullaniliyor."""
+    if not shutil.which("git"):
+        print("zor yollar: git yok, atlandi")
+        return True
+    wd = tempfile.mkdtemp()
+    _git(wd, "init", "-q"); _git(wd, "config", "user.email", "t@t"); _git(wd, "config", "user.name", "t")
+    _yaz(wd, "eski_ad.py", "tasinacak\n")
+    _git(wd, "add", "-A"); _git(wd, "commit", "-qm", "ilk")
+
+    bosluklu = "benim dosyam.py"
+    unicodelu = "ozel_ismi_s_g_u_ışğü.py"
+    _yaz(wd, bosluklu, "bosluk\n")
+    _yaz(wd, unicodelu, "unicode\n")
+    _git(wd, "mv", "eski_ad.py", "yeni_ad.py")
+
+    kirli = _kirli_disaridan(wd)
+    assert bosluklu in kirli, "bosluklu yol okunamadi: %s" % sorted(kirli)
+    assert unicodelu in kirli, "unicode yol okunamadi: %s" % sorted(kirli)
+    assert "yeni_ad.py" in kirli, "yeniden adlandirmanin HEDEFI okunamadi: %s" % sorted(kirli)
+    for y in kirli:
+        assert not y.startswith(chr(34)), "bozuk yol (bas tirnak): %r" % y
+        assert " -> " not in y, "yeniden adlandirma ayristirilmamis: %r" % y
+    print("zor yollar: ok (bosluk, unicode, yeniden adlandirma)")
+    return True
+
+
 def main() -> int:
     ok = (git_yolu() and kullanici_emegi_git() and bayat_plan() and gunluk_yolu()
-          and guvenlik() and zemin_bilgisi())
+          and guvenlik() and zemin_bilgisi() and zemin_degisirse_durur()
+          and baslangic_icerigi_geri_yazilir() and kullanici_is_sirasinda_duzenlerse()
+          and zor_yollar())
     print("SONUC:", "GECTI" if ok else "KALDI")
     return 0 if ok else 1
 

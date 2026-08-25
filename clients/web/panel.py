@@ -79,32 +79,11 @@ def _kok_sec() -> dict:
         return {"hata": str(e)[:200]}
 
 
-def _ekleri_kaydet(ekler: list, hedef_dir: str, yalniz_metin: bool) -> tuple:
-    """Panelden gelen ekleri diske yazar. Doner: (yollar, reddedilenler)."""
-    import base64
-    os.makedirs(hedef_dir, exist_ok=True)
-    yollar, red = [], []
-    for e in (ekler or [])[:6]:
-        ad = os.path.basename(str(e.get("ad") or "ek"))
-        if yalniz_metin and not ad.lower().endswith(METIN_UZANTILAR):
-            red.append(ad + " (cirak yalniz metin alir)")
-            continue
-        yol = os.path.join(hedef_dir, ad)
-        try:
-            if e.get("b64") is not None:
-                veri = base64.b64decode(str(e["b64"]).split(",")[-1])
-                if len(veri) > 8_000_000:
-                    red.append(ad + " (8 MB siniri)")
-                    continue
-                with open(yol, "wb") as f:
-                    f.write(veri)
-            else:
-                with open(yol, "w", encoding="utf-8", newline="\n") as f:
-                    f.write(str(e.get("icerik") or "")[:2_000_000])
-            yollar.append(yol)
-        except OSError as hata:
-            red.append("%s (%s)" % (ad, str(hata)[:60]))
-    return yollar, red
+# NOT: eski `_ekleri_kaydet` KALDIRILDI (denetim bulgusu 1). Ekleri hedef klasore adiyla
+# dogrudan yaziyordu; projede ayni adli dosya varsa SESSIZCE eziyordu ve bu, isin anlik
+# goruntusunden ONCE oldugu icin geri alma da kurtaramiyordu. Yerine core/ekler.py:
+# ad temizligi + ise ozel, calisma agacinin DISINDAKI klasor. Olu birakmak, bir sonraki
+# eklemede yanlislikla yeniden kullanilmaya davettir.
 
 
 def _oksuz_kosucular():
@@ -448,11 +427,11 @@ def _gorev_baslat(veri: dict) -> dict:
             not os.path.realpath(tam_dizin).startswith(kok_ger + os.sep):
         return {"hata": "calisma_dizini calisma alani disina cikiyor"}
     os.makedirs(tam_dizin, exist_ok=True)
-    # ekler: metin dosyalari dogrudan calisma dizinine - `ara` (RAG) otomatik indeksler
-    ek_yollar, ek_red = _ekleri_kaydet(veri.get("ekler") or [], tam_dizin, yalniz_metin=True)
-    if ek_yollar:
-        gorev += ("\n\nEKLI DOSYALAR (calisma dizininde, gerekirse read_file/ara ile kullan): "
-                  + ", ".join(os.path.basename(y) for y in ek_yollar))
+    # EKLER: is olusturulduktan SONRA, isin KENDI klasorune yazilir (asagida). Eskiden
+    # burada dogrudan calisma dizinine yaziliyordu - ayni adli proje dosyasini SESSIZCE
+    # eziyordu ve bu, anlik goruntuden ONCE oldugu icin geri alma da kurtaramiyordu.
+    ekler_istegi = veri.get("ekler") or []
+    ek_red: list = []
     # SOHBETI GOREVE TASI (istege bagli): sohbet kipi ile gorev kipi AYRI baglamdir; gorev her
     # seferinde TEMIZ oturumla baslar (olculdu: oturum surekliligi +%59 token, kalite dusuk).
     # Ama tasarimi sohbette konustuysan o baglam gerekir - o zaman SON ALISVERISLER goreve
@@ -489,6 +468,18 @@ def _gorev_baslat(veri: dict) -> dict:
                       "kaynak": "web-panel",
                       "baslik": str(veri.get("baslik") or "").strip()
                       or " ".join(gorev.split()[:6])[:48]}
+    # EKLER BURADA yazilir: is klasoru artik VAR (job.dir), yani ekler calisma agacinin
+    # DISINDA, ise ozel bir yere gider. Proje kirlenmez, anlik goruntu bozulmaz, geri alma
+    # yaniltilmaz. `job.start()` HENUZ cagrilmadi - gorev metnini hala degistirebiliriz ve
+    # anlik goruntu de start() icinde alinacagi icin ekler ondan ETKILENMEZ.
+    if ekler_istegi:
+        from core.ekler import METIN_UZANTILAR as _MU, gorev_notu, kaydet
+        ek_dizin = os.path.join(job.dir, "ekler")
+        ek_yollar, ek_red = kaydet(ekler_istegi, ek_dizin, uzantilar=_MU)
+        if ek_yollar:
+            job.ek_dizin = os.path.realpath(ek_dizin)
+            job.gorev += gorev_notu(ek_yollar)
+            job.ek_alanlar["ekler"] = [os.path.basename(y) for y in ek_yollar]
     job.start()
     if eski_ctx is None:
         os.environ.pop("APPRENTICE_CTX", None)
@@ -847,10 +838,12 @@ def _usta_istek(veri: dict) -> dict:
     kayit["effort"] = str(veri.get("effort") or "")
     kayit["cli"] = str(veri.get("cli") or "claude")
     sablon = str(veri.get("sablon") or "")
-    # ekler (resim dahil): calisma alanindaki panel_ekler/ altina; Claude yollariyla okur
-    ek_yollar, ek_red = _ekleri_kaydet(veri.get("ekler") or [],
-                                       os.path.join(AYAR.get("kok", HOME), "panel_ekler"),
-                                       yalniz_metin=False)
+    # EKLER PROJEYE YAZILMAZ (denetim bulgusu 1). Eskiden calisma alanindaki panel_ekler/
+    # altina gidiyordu - kullanicinin projesini kirletiyor ve ayni adli dosyayi eziyordu.
+    # Artik ev altinda, ISTEGE OZEL bir klasor: Claude CLI hapiste degil, tam yolla okur.
+    from core.ekler import kaydet as _ek_kaydet
+    ek_yollar, ek_red = _ek_kaydet(veri.get("ekler") or [],
+                                   os.path.join(HOME, "usta_ekler", uid))
     if ek_yollar:
         # talimat BASTA ve emir kipinde: sona eklenen not gorulup gecildi (yasandi -
         # Claude Read'i cagirmadan "gorsel yok" dedi). Yollar normalize edilir.

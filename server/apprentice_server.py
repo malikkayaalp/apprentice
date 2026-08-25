@@ -134,6 +134,11 @@ class Job:
         self.proc: subprocess.Popen | None = None
         self.done = False
         self.code: int | None = None
+        # Panelden yuklenen ekler ISIN KENDI klasorunde durur (calisma agacinin DISINDA).
+        # Denetim bulgusu 1: eskiden proje klasorune adiyla yaziliyor ve ayni adli dosyayi
+        # SESSIZCE eziyordu; ustelik anlik goruntuden ONCE oldugu icin geri alma da
+        # kurtaramiyordu. Bos = ek yok.
+        self.ek_dizin = ""
 
     @property
     def events_path(self):
@@ -191,6 +196,7 @@ class Job:
                  # olan dosyalar. Ucuz (iki git komutu, kopyalama yok). Sonradan "simdi kirli
                  # ama baslarken degildi" olan dosyalar isin eseridir - run_shell ile
                  # yapilmis degisiklik de buraya dusr, gunluk boslugu kapanir.
+                 "ek_dizin": self.ek_dizin,
                  "anlik": _anlik_goruntu(self.workdir)}
         # istemciler (panel) kaynak/baslik gibi alanlari ISI BASLATMADAN once ekler; izleyiciler
         # job.json'u bir kez okuyup onbellege aldigi icin sonradan yamalanan alan kaybolur.
@@ -217,6 +223,8 @@ class Job:
             env["APPRENTICE_HARITA"] = "1"
         if self.canli:
             env["APPRENTICE_CANLI"] = "1"
+        if self.ek_dizin:
+            env["APPRENTICE_EK_DIZIN"] = self.ek_dizin
         self.stderr_f = open(os.path.join(self.dir, "stderr.txt"), "w", encoding="utf-8")
         # stdin/stdout=DEVNULL SART: ikisi de MCP kanali. Olculdu: stdin miras alininca
         # cocuk Windows'ta ilk satirini bile yazmadan takildi (yalniz sunucu icinde).
