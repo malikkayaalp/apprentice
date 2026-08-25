@@ -124,6 +124,8 @@ def is_telemetri(jobs_dir: str, jid: str) -> dict:
         # tutmamis olabilir. Olculdu: `dama` iki turda da 11/12 aldi, dogrulayici temizdi
         # ve telemetri "ilk tur basari %100" dedi - basarisiz ise basarili diyordu.
         "kabul": _kabul_durumu(inc),
+        "oturum": inc.get("oturum") or "",
+        "kabul_basarisiz": list((inc.get("kabul") or {}).get("basarisiz") or []),
         "dosya_sayisi": len(inc.get("degisen_dosyalar") or []),
         "kapsam_ihlali": sum(1 for d in inc.get("degisen_dosyalar") or [] if d.get("kapsam_disi")),
         "sure": inc.get("sure") or 0,
@@ -143,6 +145,51 @@ def _kabul_durumu(inc: dict) -> str:
         if d.get("ad") == "kabul kriterleri":
             return {"gecti": "gecti", "kaldi": "kaldi"}.get(d.get("durum"), "denetlenmedi")
     return "kritersiz"
+
+
+def kabul_duraganligi(kayitlar: list) -> list:
+    """DENEMELER ARASI duraganlik: ayni oturumda, ard arda, AYNI kabul kontrolu dusuyor.
+
+    NEDEN CALISMA ZAMANI DEDEKTORU GORMUYOR: code_runner'in duraganlik denetimi TEST hata
+    imzalarini karsilastirir. Kampanya `dogrulama="derleme"` ile kosuyor - test yok, imza
+    yok, dedektor sessiz kaliyor. Ustelik ikinci tur ayri bir IS olarak aciliyor (denetci
+    disaridan geri bildirim verip worker_run'i yeniden cagiriyor), yani isci "onceki turu"
+    hic gormuyor. Duraganlik ancak ISLER ARASI bakinca gorunur - burasi o katman.
+
+    OLCULDU (2026-08-25): `dama` gorevi iki denemede de ayni kontrolu dusurdu
+        "kazanan bos tahtada | ifade: _kazanan() | beklenen: True | gelen: False"
+    ikinci denemede uretim 2600 -> 6050 token cikti, sure iki katina, sonuc AYNI (11/12).
+    Telemetri bunu "duraganlik %0" diye raporluyordu.
+
+    Doner: [{oturum, kontrol, deneme, isler[]}] - her biri BIR duraganlik olayidir."""
+    oturumlar: dict = {}
+    for r in kayitlar:
+        ot = r.get("oturum")
+        if ot and r.get("kabul_basarisiz"):
+            oturumlar.setdefault(ot, []).append(r)
+    out = []
+    for ot, isler in oturumlar.items():
+        isler.sort(key=lambda x: x.get("is_id") or "")     # is kimligi zaman damgali
+        if len(isler) < 2:
+            continue
+        # ard arda AYNI kontrol dusuyor mu (ilk hata metni imza kabul edilir)
+        seri, onceki = [], None
+        for r in isler:
+            imza = (r["kabul_basarisiz"] or [""])[0]
+            if imza and imza == onceki:
+                if not seri:
+                    seri = [isler[isler.index(r) - 1]]
+                seri.append(r)
+            else:
+                if len(seri) >= 2:
+                    out.append({"oturum": ot, "kontrol": onceki, "deneme": len(seri),
+                                "isler": [x["is_id"] for x in seri]})
+                seri = []
+            onceki = imza
+        if len(seri) >= 2:
+            out.append({"oturum": ot, "kontrol": onceki, "deneme": len(seri),
+                        "isler": [x["is_id"] for x in seri]})
+    return out
 
 
 def _yuzde(pay: int, payda: int) -> float:
@@ -209,6 +256,14 @@ def toplu(jobs_dir: str, n: int = 100) -> dict:
         "kabul_kaldi": sum(1 for r in kayitlar if r["kabul"] == "kaldi"),
         "kabul_denetlenmedi": sum(1 for r in kayitlar if r["kabul"] == "denetlenmedi"),
         "kritersiz_is": sum(1 for r in kayitlar if r["kabul"] == "kritersiz"),
+        # GERCEK BASARI: dogrulayici gecti VE kabul kriteri dusmedi. Yalniz kabul durumu
+        # BILINEN isler uzerinden hesaplanir - bilinmeyeni "gecti" saymak olculmemis seyi
+        # olculmus gibi raporlamaktir.
+        "gercek_basari": _yuzde(
+            sum(1 for r in kayitlar if r["gecti"] and r["kabul"] in ("gecti", "kritersiz")),
+            sum(1 for r in kayitlar if r["kabul"] != "denetlenmedi")),
+        "gercek_basari_n": sum(1 for r in kayitlar if r["kabul"] != "denetlenmedi"),
+        "kabul_duraganligi": kabul_duraganligi(kayitlar),
         "ort_istem_tok": round(sum(r["istem_tok"] for r in olculen) / len(olculen)) if olculen else 0,
         "ort_uretim_tok": round(sum(r["uretim_tok"] for r in olculen) / len(olculen)) if olculen else 0,
         "ort_sure": round(sum(r["sure"] for r in kayitlar) / N, 1),
@@ -241,8 +296,11 @@ def yazdir(jobs_dir: str, n: int = 100) -> None:
         print("HATA:", o["hata"])
         return
     print("SON %d IS" % o["n"])
-    print("  ilk tur basari      %5.1f%%" % o["ilk_tur_basari"])
-    print("  onarim sonrasi      %5.1f%%" % o["onarim_sonrasi_basari"])
+    print("  ilk tur (dogrulayici) %3.1f%%   <- yalniz derleme/ruff/test" % o["ilk_tur_basari"])
+    print("  onarim sonrasi        %3.1f%%" % o["onarim_sonrasi_basari"])
+    if o.get("gercek_basari_n"):
+        print("  GERCEK basari         %3.1f%%   <- kabul kriteri de tuttu (%d iste bilinir)"
+              % (o["gercek_basari"], o["gercek_basari_n"]))
     print("  duraganlik          %5.1f%%" % o["duraganlik"])
     print("  usta onerisi        %5.1f%%" % o["devir_onerisi"])
     print("  kapsam ihlali       %d is" % o["kapsam_ihlali_olan_is"])
@@ -256,6 +314,11 @@ def yazdir(jobs_dir: str, n: int = 100) -> None:
             print("      %-18s %3d  (%%%.1f)" % (ad, sayi, o["hata_sinifi_yuzde"][ad]))
     else:
         print("  hata siniflari:     (hic hata kaydi yok)")
+    kd = o.get("kabul_duraganligi") or []
+    if kd:
+        print("  DURAGANLIK (denemeler arasi): %d olay" % len(kd))
+        for x in kd[:4]:
+            print("      %d deneme, AYNI kontrol dustu: %s" % (x["deneme"], str(x["kontrol"])[:66]))
     if len(o["modeller"]) > 1:
         print("  modele gore:")
         for ad, m in sorted(o["modeller"].items(), key=lambda x: -x[1]["n"]):

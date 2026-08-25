@@ -17,6 +17,7 @@ try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except Exception:
     pass
+from core.inceleme import kabul_yaz  # noqa: E402
 from core.telemetri import is_telemetri, sinifla, siniflar, toplu  # noqa: E402
 
 # (metin, beklenen sinif) - hepsi harness'in GERCEKTEN urettigi bicimler
@@ -160,8 +161,70 @@ def toplu_olcum() -> bool:
     return True
 
 
+def gercek_basari_ve_duraganlik() -> bool:
+    """DOGRULAYICI basarisi ile GERCEK basari ayri olcumler; duraganlik DENEMELER ARASI.
+
+    YASANDI (2026-08-25): `dama` gorevi iki denemede de ayni kabul kontrolunu dusurdu
+    ("kazanan bos tahtada"), ikinci denemede uretim 2600 -> 6050 token cikti, sure iki
+    katina, sonuc AYNI (11/12). Telemetri "ilk tur basari %100, duraganlik %0" diyordu:
+      - basari sayisi yalniz DOGRULAYICIYA bakiyordu (derleme temizdi)
+      - calisma zamani duraganlik dedektoru TEST imzalarini karsilastirir; kampanya
+        `dogrulama="derleme"` ile kosuyor, test yok, imza yok -> sessiz. Ustelik her tur
+        AYRI IS olarak aciliyor, isci onceki turu hic gormuyor.
+    Duraganlik ancak ISLER ARASI bakinca gorunur."""
+    d = tempfile.mkdtemp()
+
+    def kur(jid, oturum, ok, gecen, toplam, dusen=None, kriter=("k1",)):
+        jd = os.path.join(d, jid)
+        os.makedirs(jd, exist_ok=True)
+        with open(os.path.join(jd, "job.json"), "w", encoding="utf-8") as f:
+            json.dump({"id": jid, "durum": "bitti", "oturum": oturum,
+                       "kabul_kriterleri": list(kriter)}, f, ensure_ascii=False)
+        with open(os.path.join(jd, "events.jsonl"), "w", encoding="utf-8") as f:
+            f.write(json.dumps({"type": "result", "ok": ok, "errors": [], "rounds": 0}) + "\n")
+        if toplam:
+            kabul_yaz(d, jid, gecen, toplam, list(dusen or []), "test")
+
+    # ayni oturum, iki deneme, AYNI kontrol dusuyor -> DURAGANLIK
+    kur("20260825-130209-a", "ot1", True, 11, 12, ["kazanan bos tahtada"])
+    kur("20260825-130424-b", "ot1", True, 11, 12, ["kazanan bos tahtada"])
+    # ayni oturum ama FARKLI kontrol dusuyor -> ilerleme var, duraganlik DEGIL
+    kur("20260825-140000-c", "ot2", True, 10, 12, ["kontrol A"])
+    kur("20260825-140100-d", "ot2", True, 11, 12, ["kontrol B"])
+    # tek denemede dusen -> duraganlik degil
+    kur("20260825-150000-e", "ot3", True, 5, 6, ["tek seferlik"])
+    # temiz isler
+    kur("20260825-160000-f", "ot4", True, 6, 6, [])
+    kur("20260825-160100-g", "ot5", True, 6, 6, [])
+    # kabul DENETLENMEMIS is: gercek basari paydasina GIRMEZ
+    kur("20260825-170000-h", "ot6", True, 0, 0, None)
+
+    o = toplu(d, 50)
+    assert o["n"] == 8, o["n"]
+    assert o["ilk_tur_basari"] == 100.0, "dogrulayici hepsinde temiz"
+    # GERCEK basari: kabul durumu BILINEN 7 is (a..g; h denetlenmedi, payda disi).
+    # Bunlarin besi dustu (a,b,c,d,e), ikisi gecti (f,g) -> 2/7
+    assert o["gercek_basari_n"] == 7, o["gercek_basari_n"]
+    assert o["gercek_basari"] == round(100.0 * 2 / 7, 1), o["gercek_basari"]
+    assert o["kabul_kaldi"] == 5 and o["kabul_gecti"] == 2, o
+    assert o["kabul_denetlenmedi"] == 1, o
+    assert o["gercek_basari"] < o["ilk_tur_basari"], "gercek basari dogrulayiciyi ASMAMALI"
+
+    kd = o["kabul_duraganligi"]
+    assert len(kd) == 1, "tam bir duraganlik olayi beklenirdi: %s" % kd
+    assert kd[0]["oturum"] == "ot1" and kd[0]["deneme"] == 2, kd[0]
+    assert "kazanan bos tahtada" in kd[0]["kontrol"], kd[0]
+    assert len(kd[0]["isler"]) == 2, kd[0]
+    # ilerleyen oturum (ot2) duraganlik SAYILMAZ - yanlis pozitif kullaniciyi yanlis yere bakti
+    assert all(x["oturum"] != "ot2" for x in kd), "farkli kontrol dusen oturum duragan sayildi"
+    print("gercek basari + duraganlik: ok (dogrulayici %.0f%% ama gercek %.1f%%, 1 duraganlik)"
+          % (o["ilk_tur_basari"], o["gercek_basari"]))
+    return True
+
+
 def main() -> int:
-    ok = siniflandirici() and is_kaydi() and toplu_olcum()
+    ok = (siniflandirici() and is_kaydi() and toplu_olcum()
+          and gercek_basari_ve_duraganlik())
     print("SONUC:", "GECTI" if ok else "KALDI")
     return 0 if ok else 1
 

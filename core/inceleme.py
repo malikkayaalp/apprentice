@@ -408,4 +408,7 @@ def inceleme(jobs_dir: str, jid: str) -> dict:
         "karar": karar_oku(jobs_dir, jid),
         "kabul": kabul_oku(jobs_dir, jid),
         "kabul_kriterleri": list(kayit.get("kabul_kriterleri") or []),
+        # OTURUM: ayni gorevin ard arda denemelerini birbirine baglar. Duraganligi
+        # DENEMELER ARASI gormek icin gerekli - tek is icine bakmak yetmez.
+        "oturum": kayit.get("oturum") or "",
     }
