@@ -826,17 +826,35 @@ def _usta_cevap(uid: str) -> dict:
         return {"hata": "istek yok"}
 
 
+# Panelin surece BIR KEZ yukledigi butun kaynaklar. Yalniz panel.py'ye bakmak yetmez:
+# arayuz yeni bir alan bekleyip core/inceleme.py eski kalirsa da ayni sessiz hata olur
+# (yasandi: karar rozeti core tarafinda degisti, panel.py'ye dokunulmadi).
+_IZLENEN_KAYNAKLAR = [os.path.abspath(__file__)] + [
+    os.path.join(ROOT, *p) for p in (
+        ("clients", "web", "goruntuleyici.py"),
+        ("core", "inceleme.py"), ("core", "geri_al.py"), ("core", "telemetri.py"),
+        ("server", "apprentice_server.py"),
+    )
+]
+
+
 def _kaynak_imza() -> str:
-    """Bu dosyanin (panel.py) ICERIK ozeti.
+    """Panelin yukledigi TUM kaynaklarin birlesik ICERIK ozeti.
 
     Neden mtime degil: dosya AYNI icerikle yeniden yazilabilir (surum kontrolu, gerileme
     sinamasi, editorun kaydetmesi) - o zaman mtime degisir ama kod degismez. Boyut+mtime
     kullanan ilk surum bu yuzden YANLIS ALARM verdi: "sunucu eski" dedi, eskimemisti."""
     try:
         import hashlib
-        with open(os.path.abspath(__file__), "rb") as f:
-            return hashlib.sha1(f.read()).hexdigest()[:16]
-    except OSError:
+        h = hashlib.sha1()
+        for yol in _IZLENEN_KAYNAKLAR:
+            try:
+                with open(yol, "rb") as f:
+                    h.update(f.read())
+            except OSError:
+                h.update(b"?")          # dosya yoksa da imza KARARLI kalsin
+        return h.hexdigest()[:16]
+    except Exception:  # noqa: BLE001
         return ""
 
 

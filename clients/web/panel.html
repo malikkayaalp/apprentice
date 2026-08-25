@@ -1418,6 +1418,20 @@ function incelemeCiz(r){
                    ve acik onay istenir; sunucu da onay:true olmadan islemi reddeder.
      tekrar dene - silmez/yaratmaz; ayni gorevi OZETLENMIS kanitla YENI is olarak baslatir.
    Karar events.jsonl'e yazilmaz (tek yazar kurali) - inceleme.json'a yazilir. */
+/* Rozet SON KARARI degil HIKAYEYI anlatir. YASANDI: kullanici once REDDET (kod geri
+   alindi) sonra KABUL ET dedi; rozet yalniz "✓ kabul edildi" yazdi ve is sanki kod
+   duruyormus gibi gorundu. Gecmis KAYITTA vardi, arayuzde yoktu - kayitta olan gercegi
+   ekranda saklamak bu projenin kuralina aykiri.
+   Saf fonksiyon: DOM'suz calisir, testte Node'da kosturuluyor. */
+function kararRozetMetni(kr){
+  if(!kr || !kr.durum) return "";
+  const su = kr.durum==="kabul" ? "✓ kabul edildi"
+                                : "↺ reddedildi — "+(kr.geri_alinan||0)+" dosya geri alındı";
+  const g=(kr.onceki||[]).slice().reverse().map(o=>
+    o.durum==="red" ? ("reddedilmişti"+(o.geri_alinan?" ("+o.geri_alinan+" dosya geri alındı)":""))
+                    : "kabul edilmişti");
+  return g.length ? su+" · daha önce "+g.join(", ") : su;
+}
 function kararCiz(r){
   const kap=$("#kararKutu");
   if(!kap) return;
@@ -1425,10 +1439,7 @@ function kararCiz(r){
   const gr=r.geri_alinabilir||{}, kr=r.karar||{};
   let h="";
   if(kr.durum){
-    h+='<div class="kararRozet '+kr.durum+'">'+
-       (kr.durum==="kabul" ? "✓ kabul edildi"
-                           : "↺ reddedildi — "+(kr.geri_alinan||0)+" dosya geri alındı")+
-       '</div>';
+    h+='<div class="kararRozet '+kr.durum+'">'+kacir(kararRozetMetni(kr))+'</div>';
   }
   h+='<div class="kararSira">'+
      '<button class="kbtn kabul" id="bKabul">KABUL ET</button>'+

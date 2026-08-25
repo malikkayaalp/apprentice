@@ -22,6 +22,28 @@ except Exception:
 
 SAYFA = os.path.join(ROOT, "clients", "web", "panel.html")
 
+KARAR_ROZET_SURUS = r"""
+function ONAY(k,a){ if(!k) throw new Error("SOZLESME: "+a); }
+let m;
+// 1) karar yoksa rozet de YOK
+ONAY(kararRozetMetni(null)==="", "karar yokken rozet cikti");
+ONAY(kararRozetMetni({})==="", "bos kararda rozet cikti");
+// 2) tek karar: sade
+ONAY(kararRozetMetni({durum:"kabul"})==="✓ kabul edildi", "kabul metni yanlis");
+m=kararRozetMetni({durum:"red", geri_alinan:2});
+ONAY(/reddedildi/.test(m) && /2 dosya/.test(m), "red metni yanlis: "+m);
+// 3) ASIL DURUM: once red (kod geri alindi) sonra kabul -> GECMIS GORUNMELI
+m=kararRozetMetni({durum:"kabul", onceki:[{durum:"red", geri_alinan:2}]});
+ONAY(/kabul edildi/.test(m), "son karar kayboldu: "+m);
+ONAY(/daha önce/.test(m) && /reddedil/.test(m), "GECMIS GIZLENDI: "+m);
+ONAY(/2 dosya/.test(m), "kac dosya geri alindigi kayboldu: "+m);
+// 4) coklu gecmis: EN YENI once yazilmali
+m=kararRozetMetni({durum:"red", geri_alinan:1,
+                   onceki:[{durum:"kabul"},{durum:"red", geri_alinan:3}]});
+ONAY(m.indexOf("3 dosya") < m.indexOf("kabul edilmişti"), "gecmis sirasi ters: "+m);
+console.log("ROZET-OK");
+"""
+
 
 def js_sozdizimi() -> bool:
     with open(SAYFA, encoding="utf-8") as f:
@@ -1090,6 +1112,24 @@ def bayat_surec_uyarisi() -> bool:
     # IMZA ICERIGE bagli olmali, mtime'a DEGIL. YASANDI: ilk surum boyut+mtime kullandi;
     # gerileme sinamasi dosyayi AYNI icerikle geri yazinca panel "sunucu eski" diye
     # YANLIS ALARM verdi ve kullaniciyi bosuna ugrastirdi.
+    # Denetim yalniz panel.py'yi degil, panelin YUKLEDIGI tum modulleri kapsamali:
+    # arayuz yeni alan bekleyip core/inceleme.py eski kalirsa da ayni sessiz hata olur.
+    assert len(P._IZLENEN_KAYNAKLAR) >= 4, P._IZLENEN_KAYNAKLAR
+    for gerek in ("inceleme.py", "geri_al.py", "panel.py"):
+        assert any(gerek in y for y in P._IZLENEN_KAYNAKLAR), "%s izlenmiyor" % gerek
+    cekirdek = os.path.join(ROOT, "core", "inceleme.py")
+    ci = P._kaynak_imza()
+    with open(cekirdek, encoding="utf-8", newline="") as f:
+        cham = f.read()
+    try:
+        with open(cekirdek, "w", encoding="utf-8", newline="") as f:
+            f.write(cham + "\n# gecici\n")
+        assert P._kaynak_imza() != ci, "core degisti ama imza degismedi"
+    finally:
+        with open(cekirdek, "w", encoding="utf-8", newline="") as f:
+            f.write(cham)
+    assert P._kaynak_imza() == ci, "core geri alindi ama imza donmedi"
+
     kaynak = os.path.join(ROOT, "clients", "web", "panel.py")
     once = P._kaynak_imza()
     # mtime'i ACIKCA farkli bir ana kur: os.utime(None) "simdi" yazar ve saniye
@@ -1120,12 +1160,46 @@ def bayat_surec_uyarisi() -> bool:
     return True
 
 
+def karar_rozeti() -> bool:
+    """Rozet SON KARARI degil HIKAYEYI anlatmali.
+
+    YASANDI: kullanici once REDDET dedi (kod geri alindi), sonra KABUL ET dedi. Rozet
+    yalniz "kabul edildi" yazdi - ekrana bakan "kod duruyor, kabul edilmis" sanirdi.
+    Oysa kod geri alinmisti ve bu KAYITTA duruyordu. Kayitta olan gercegi arayuzde
+    saklamak bu projenin beyan/kanit kuralina aykiri.
+
+    kararRozetMetni SAF fonksiyon (DOM'suz) - burada Node'da GERCEKTEN kosturulur."""
+    node = shutil.which("node")
+    if not node:
+        print("karar rozeti: node yok, atlandi")
+        return True
+    with open(SAYFA, encoding="utf-8") as f:
+        html = f.read()
+    js = "\n".join(re.findall(r"<script>(.*?)</script>", html, re.S))
+    bas = js.index("function kararRozetMetni(")
+    son = js.index("function kararCiz(", bas)
+    surus = js[bas:son] + KARAR_ROZET_SURUS
+    with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as f:
+        f.write(surus)
+        yol = f.name
+    try:
+        r = subprocess.run([node, yol], capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=60,
+                           creationflags=0x08000000 if os.name == "nt" else 0)
+        assert "ROZET-OK" in (r.stdout or ""), \
+            "ROZET SOZLESMESI KALDI:\n%s" % ((r.stderr or r.stdout or "")[:600])
+    finally:
+        os.unlink(yol)
+    print("karar rozeti: ok (gecmis gizlenmiyor, kac dosya geri alindigi duruyor)")
+    return True
+
+
 def main() -> int:
     ok = (js_sozdizimi() and metin_isleyicileri() and kaynak_denetimi() and id_butunlugu() and uc_sozlesmesi() and ust_bar_gorunur() and yerlesim_butun() and dizilimler_butun()
           and yerlesim_motoru() and sunucu_uclari() and calisma_dizini_kurallari() and sohbet_uclari()
           and goruntuleyici_sayfasi() and fark_gorunumu()
           and animasyon_tanimlari() and model_kapsulu()
-          and vurgulayici_sozlesmesi() and sahiplik_kurali() and karar_uclari() and bayat_surec_uyarisi())
+          and vurgulayici_sozlesmesi() and sahiplik_kurali() and karar_uclari() and bayat_surec_uyarisi() and karar_rozeti())
     print("SONUC:", "GECTI" if ok else "KALDI")
     return 0 if ok else 1
 

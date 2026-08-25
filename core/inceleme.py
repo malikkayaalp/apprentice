@@ -134,7 +134,13 @@ def karar_yaz(jobs_dir: str, jid: str, durum: str, ayrinti: dict | None = None) 
     kayit = {"sema": SEMA, "durum": durum, "t": time.time()}
     kayit.update(ayrinti or {})
     if eski.get("durum"):
-        kayit["onceki"] = [x for x in (eski.get("onceki") or [])][-4:] +                           [{"durum": eski["durum"], "t": eski.get("t")}]
+        # GECMISE geri_alinan da tasinir: "daha once reddedilmisti" yetmez, KAC DOSYANIN
+        # geri alindigi arayuzde gorunmeli - yoksa kod geri alinmis bir is "kabul edildi"
+        # diye gorunur ve kullanici kodun durdugunu sanir.
+        gecmis = {"durum": eski["durum"], "t": eski.get("t")}
+        if eski.get("geri_alinan"):
+            gecmis["geri_alinan"] = eski["geri_alinan"]
+        kayit["onceki"] = [x for x in (eski.get("onceki") or [])][-4:] + [gecmis]
     try:
         with open(os.path.join(jd, KARAR_DOSYASI), "w", encoding="utf-8", newline="\n") as f:
             json.dump(kayit, f, ensure_ascii=False, indent=1)

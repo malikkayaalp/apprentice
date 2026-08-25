@@ -239,10 +239,18 @@ def karar_kaydi() -> bool:
     assert k2["durum"] == "red" and k2["geri_alinan"] == 3, k2
     assert k2["onceki"] and k2["onceki"][-1]["durum"] == "kabul", k2
 
+    # GECMISE geri_alinan da tasinmali: "daha once reddedilmisti" yetmez, KAC DOSYANIN
+    # geri alindigi arayuzde gorunmeli - yoksa kod geri alinmis bir is "kabul edildi"
+    # diye gorunur ve kullanici kodun durdugunu sanir (yasandi).
+    k3 = karar_yaz(d, "is1", "kabul")
+    assert k3["onceki"][-1]["durum"] == "red", k3
+    assert k3["onceki"][-1].get("geri_alinan") == 3, "gecmiste kac dosya geri alindigi kayboldu"
+
     # GECERSIZ girdi: bu katman da reddetmeli
     for kotu in ("sacma", "", None, "KABUL"):
         assert karar_yaz(d, "is1", kotu).get("hata"), "gecersiz karar kabul edildi: %r" % kotu
-    assert karar_oku(d, "is1")["durum"] == "red", "gecersiz karar mevcut karari bozdu"
+    assert karar_oku(d, "is1")["durum"] == "kabul", "gecersiz karar mevcut karari bozdu"
+    assert karar_oku(d, "is1")["onceki"], "gecersiz karar gecmisi de bozdu"
     assert karar_yaz(d, "olmayan_is", "kabul").get("hata")
 
     # bozuk dosya: patlamaz, bos doner
