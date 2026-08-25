@@ -1049,12 +1049,53 @@ def karar_uclari() -> bool:
         shutil.rmtree(ev, ignore_errors=True)
 
 
+def bayat_surec_uyarisi() -> bool:
+    """Sunucu sureci diskteki panel.py'den ESKI ise panel UYARMALI.
+
+    YASANDI (uc kez, sonuncusu kullaniciya kadar gitti): panel.html her istekte DISKTEN
+    okunur ama panel.py surece BIR KEZ yuklenir. Depoyu guncelleyip paneli yeniden
+    baslatmazsan arayuz YENI, sunucu ESKI olur; yeni dugme olmayan bir ucu cagirir, 404
+    doner ve arayuz SESSIZCE bir sey yapmaz. Kullanici "REDDET'e bastim, bir sey olmadi"
+    dedi - dugme dogruydu, sunucu eskiydi.
+
+    Bu test uyarinin ZINCIRINI cakar: sunucu imzayi olcuyor mu, uc bunu doniyor mu,
+    arayuz seridi ve yoklamasi var mi."""
+    with open(os.path.join(ROOT, "clients", "web", "panel.py"), encoding="utf-8") as f:
+        sunucu = f.read()
+    for parca, aciklama in (("_kaynak_imza", "kaynak imzasi"), ("_BASLANGIC_IMZA", "baslangic imzasi"),
+                            ("def _bayat_mi", "bayat denetimi"), ('"bayat": _bayat_mi()', "uc yaniti")):
+        assert parca in sunucu, "sunucuda %s (%s) yok" % (parca, aciklama)
+
+    with open(SAYFA, encoding="utf-8") as f:
+        html = f.read()
+    assert 'id="bayatSerit"' in html, "uyari seridi yok"
+    assert "function bayatYokla" in html and "bayatYokla()" in html, "yoklama baglanmamis"
+    # SUREKLI de yoklanmali: panel ACIKKEN guncelleme yapilirsa (git pull) serit yine cikmali
+    assert re.search(r"setInterval\(\s*bayatYokla", html), "bayat yoklamasi bir kerelik kalmis"
+    assert "r.bayat" in html, "arayuz bayat alanini okumuyor"
+
+    # imza GERCEKTEN degisimi yakaliyor mu (dosya boyutu/zamani)
+    sys.path.insert(0, os.path.join(ROOT, "clients", "web"))
+    import panel as P
+    imza = P._kaynak_imza()
+    assert imza and "-" in imza, imza
+    assert P._bayat_mi() is False, "degismemis dosya bayat sayildi"
+    eski = P._BASLANGIC_IMZA
+    try:
+        P._BASLANGIC_IMZA = "0-0"        # sanki surec ESKI surumle baslamis
+        assert P._bayat_mi() is True, "degismis dosya bayat sayilmadi"
+    finally:
+        P._BASLANGIC_IMZA = eski
+    print("bayat surec uyarisi: ok (imza + uc + serit zinciri tam)")
+    return True
+
+
 def main() -> int:
     ok = (js_sozdizimi() and metin_isleyicileri() and kaynak_denetimi() and id_butunlugu() and uc_sozlesmesi() and ust_bar_gorunur() and yerlesim_butun() and dizilimler_butun()
           and yerlesim_motoru() and sunucu_uclari() and calisma_dizini_kurallari() and sohbet_uclari()
           and goruntuleyici_sayfasi() and fark_gorunumu()
           and animasyon_tanimlari() and model_kapsulu()
-          and vurgulayici_sozlesmesi() and sahiplik_kurali() and karar_uclari())
+          and vurgulayici_sozlesmesi() and sahiplik_kurali() and karar_uclari() and bayat_surec_uyarisi())
     print("SONUC:", "GECTI" if ok else "KALDI")
     return 0 if ok else 1
 

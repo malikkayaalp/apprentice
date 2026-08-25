@@ -826,6 +826,29 @@ def _usta_cevap(uid: str) -> dict:
         return {"hata": "istek yok"}
 
 
+def _kaynak_imza() -> str:
+    """Bu dosyanin (panel.py) diskteki imzasi: boyut + degisiklik zamani."""
+    try:
+        st = os.stat(os.path.abspath(__file__))
+        return "%d-%d" % (st.st_size, int(st.st_mtime))
+    except OSError:
+        return ""
+
+
+_BASLANGIC_IMZA = _kaynak_imza()     # SURECIN yukledigi surumun imzasi
+
+
+def _bayat_mi() -> bool:
+    """Sunucu sureci ESKI mi? panel.html her istekte DISKTEN okunur ama panel.py bir kez
+    yuklenir: dosya degistiyse arayuz YENI, sunucu ESKI olur ve arayuz olmayan bir ucu
+    cagirir -> 404 -> kullanici "dugmeye bastim, bir sey olmadi" der.
+
+    YASANDI (uc kez): son seferinde REDDET dugmesi plani cekemeyip "geri alinamaz -"
+    yazdi, sebep bos kaldi. Sessiz kalmak yerine paneli uyariyoruz."""
+    yeni = _kaynak_imza()
+    return bool(_BASLANGIC_IMZA and yeni and yeni != _BASLANGIC_IMZA)
+
+
 def _sayi(deger, varsayilan: int = 0) -> int:
     """Sorgu dizesinden guvenli tamsayi: cop deger panelde 500 dogurmasin."""
     try:
@@ -892,7 +915,8 @@ class Istek(BaseHTTPRequestHandler):
                 self._gonder(G.fark(DEPO.jobs_dir, q.get("is", ""), q.get("yol", ""),
                                     _sayi(q.get("a")), _sayi(q.get("b"))))
             elif yol.path == "/api/hazir":
-                self._gonder({"hazir": True})       # baslatici bunu yoklar (anlik)
+                # bayat: sunucu sureci diskteki panel.py'den ESKI (arayuz taze okunur)
+                self._gonder({"hazir": True, "bayat": _bayat_mi()})
             elif yol.path == "/api/isler":
                 self._gonder({"isler": _is_listesi(), "sistem": _sistem()})
             elif yol.path == "/api/olaylar":

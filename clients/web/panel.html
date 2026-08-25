@@ -317,6 +317,7 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
 .kapsamIpucu{font-size:.92em;margin-top:3px;line-height:1.4}
 .kapsamIpucu.dar{color:var(--yesil)}
 .kapsamIpucu.genis{color:var(--sari)}
+#bayatSerit{background:rgba(233,184,92,.15);border-bottom:1px solid var(--sari);color:var(--sari);padding:7px 14px;font:12px var(--mono);text-align:center}
 #dalDurum{margin-left:6px;font-size:.92em}
 #dalDurum.temiz{color:var(--yesil)} #dalDurum.kirli{color:var(--sari)}
 /* KARAR: uc dugmeden yalniz REDDET dosyaya dokunur - o yuzden kirmizi ve onayli */
@@ -356,6 +357,10 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
 </style>
 </head>
 <body>
+<div id="bayatSerit" style="display:none">
+  ⚠ <b>Sunucu eski sürümde çalışıyor.</b> Arayüz güncellendi ama panel süreci güncellenmedi —
+  bazı düğmeler sessizce çalışmayabilir. <b>Paneli kapatıp yeniden aç.</b>
+</div>
 <div id="ust">
   <div id="logo">APPRENTICE</div>
   <div class="pill" id="modelKapsul"><span class="nokta" id="modelNokta"></span>
@@ -1895,6 +1900,17 @@ $("#akis").addEventListener("wheel",()=>{const a=$("#akis");
   dibeKilit=a.scrollTop+a.clientHeight>=a.scrollHeight-60;});
 
 boruCiz(); duzenle(); filtreSec("tumu");
+/* BAYAT SUNUCU UYARISI: panel.html diskten TAZE okunur ama panel.py surece BIR KEZ
+   yuklenir. Depo guncellenip panel yeniden baslatilmazsa arayuz yeni, sunucu eski olur;
+   yeni dugme olmayan bir ucu cagirir ve SESSIZCE bir sey olmaz (yasandi: REDDET). */
+async function bayatYokla(){
+  try{
+    const r=await(await fetch("/api/hazir")).json();
+    const s=$("#bayatSerit");
+    if(s) s.style.display = r && r.bayat ? "" : "none";
+  }catch(e){}
+}
+bayatYokla(); setInterval(bayatYokla, 20000);
 isleriCek(); olaylariCek(); daktiloAdim(); ustaChatCek(); modelleriYukle(); kokGoster();
 kapsamIpucu();
 </script>
