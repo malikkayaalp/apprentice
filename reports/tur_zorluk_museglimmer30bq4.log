@@ -1,0 +1,29 @@
+
+== rle (1-kolay)
+    tur 1: derlendi          435 s | prompt   4170 | uretim  3990 | gizli 9/9  dosya ['rle.py']
+
+== heap (2-orta)
+    tur 1: derlendi          142 s | prompt   4309 | uretim  1022 | gizli 9/9  dosya ['minheap.py']
+
+== dijkstra (3-orta-zor)
+    tur 1: derlendi          166 s | prompt   4352 | uretim  1194 | gizli 9/9  dosya ['yol.py']
+
+== ifade (4-zor)
+    tur 1: derlendi          220 s | prompt   4960 | uretim  2064 | gizli 12/12  dosya ['hesap.py']
+
+== dama (5-oyun mantigi)
+    tur 1: derlendi          702 s | prompt  17577 | uretim  7248 | gizli 4/12  dosya ['dama.py']
+        HATA | 12 beyaz tas | ifade: sum(1 for r in _yeni().tahta for c in r if c in ('b','B')) == 12 | beklenen: True | gelen: AttributeError: 'Dama' object 
+        HATA | 12 siyah tas | ifade: sum(1 for r in _yeni().tahta for c in r if c in ('s','S')) == 12 | beklenen: True | gelen: AttributeError: 'Dama' object 
+        HATA | orta iki sira bos | ifade: all(_yeni().tahta[i][j] is None for i in (3,4) for j in range(8)) | beklenen: True | gelen: AttributeError: 'Dama' o
+    tur 2: derlendi          304 s | prompt  25881 | uretim  1978 | gizli 12/12
+-> arsiv: C:\Users\malik.kayaalp\Desktop\Apprentice\reports\olcum\zorluk_kampanya-20260825-144351.json
+
+gorev      zorluk         tur1     son      tur    sure
+rle        1-kolay        9/9      9/9      1      435 s
+heap       2-orta         9/9      9/9      1      142 s
+dijkstra   3-orta-zor     9/9      9/9      1      166 s
+ifade      4-zor          12/12    12/12    1      220 s
+dama       5-oyun mantigi 4/12     12/12    2      1006 s
+-> C:\Users\malik.kayaalp\Desktop\Apprentice\tests\zorluk_kampanya.son.json
+TOPLAM gizli 51/51 -> cikis 0 (hepsi gecti)

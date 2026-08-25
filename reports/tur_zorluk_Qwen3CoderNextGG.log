@@ -1,0 +1,26 @@
+
+== rle (1-kolay)
+    tur 1: derlendi           65 s | prompt   4181 | uretim   654 | gizli 9/9  dosya ['rle.py']
+
+== heap (2-orta)
+    tur 1: derlendi           78 s | prompt   4491 | uretim   968 | gizli 9/9  dosya ['minheap.py']
+
+== dijkstra (3-orta-zor)
+    tur 1: derlendi           85 s | prompt   4649 | uretim  1163 | gizli 9/9  dosya ['yol.py']
+
+== ifade (4-zor)
+    tur 1: derlendi          103 s | prompt   5170 | uretim  1642 | gizli 12/12  dosya ['hesap.py']
+
+== dama (5-oyun mantigi)
+    tur 1: derlendi          134 s | prompt   6898 | uretim  2600 | gizli 11/12  dosya ['dama.py']
+        HATA | kazanan bos tahtada | ifade: _kazanan() | beklenen: True | gelen: False
+    tur 2: derlendi          295 s | prompt  11523 | uretim  6050 | gizli 11/12
+        HATA | kazanan bos tahtada | ifade: _kazanan() | beklenen: True | gelen: False
+Traceback (most recent call last):
+  File "C:\Users\malik.kayaalp\Desktop\Apprentice\tests\zorluk_kampanya.py", line 383, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "C:\Users\malik.kayaalp\Desktop\Apprentice\tests\zorluk_kampanya.py", line 366, in main
+    from core.olcum_arsiv import kaydet
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ImportError: cannot import name 'kaydet' from 'core.olcum' (C:\Users\malik.kayaalp\Desktop\Apprentice\core\olcum.py)

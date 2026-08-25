@@ -1,0 +1,393 @@
+{
+ "baslangic": "2026-08-25 13:24:55",
+ "gorevler": {
+  "parantez": {
+   "turlar": [
+    {
+     "tur": 1,
+     "derleme_durumu": "derlendi",
+     "onarim": 1,
+     "sure": 104.2,
+     "araclar": [
+      "list_files **/*",
+      "write_file C:\\Users\\malik.kayaalp\\Desktop\\Apprentice\\.apprentice_test_home\\kampanya\\parantez\\parantez.py",
+      "write_file C:\\Users\\malik.kayaalp\\Desktop\\Apprentice\\.apprentice_test_home\\kampanya\\parantez\\test_parantez.py",
+      "run_tests "
+     ],
+     "hatalar": [],
+     "gizli_gecen": 6,
+     "gizli_toplam": 6,
+     "gizli": [
+      {
+       "ad": "bos metin True",
+       "gecti": true,
+       "detay": ""
+      },
+      {
+       "ad": "yalniz kapanis False",
+       "gecti": true,
+       "detay": ""
+      },
+      {
+       "ad": "carpraz kapanis False",
+       "gecti": true,
+       "detay": ""
+      },
+      {
+       "ad": "uzun dengeli",
+       "gecti": true,
+       "detay": ""
+      },
+      {
+       "ad": "fazla kapanis False",
+       "gecti": true,
+       "detay": ""
+      },
+      {
+       "ad": "bool donus tipi",
+       "gecti": true,
+       "detay": ""
+      }
+     ],
+     "fazla_dosya": [],
+     "is_id": "20260825-132455-91df0a"
+    }
+   ],
+   "oturum": "20260825-132455-91df0a"
+  },
+  "lru": {
+   "turlar": [
+    {
+     "tur": 1,
+     "derleme_durumu": "derlendi",
+     "onarim": 1,
+     "sure": 250.0,
+     "araclar": [
+      "list_files **/*",
+      "write_file lru.py",
+      "write_file test_lru.py",
+      "run_tests ",
+      "run_shell python -c \"from lru import LRU; c = LRU(2); c.put(1,1); c.put(2,2); print('After puts:', list(c.cache.items())); c.get(1); print('After get(",
+      "read_file test_lru.py",
+      "write_file test_lru.py",
+      "run_tests ",
+      "run_shell python -c \"from lru import LRU; c=LRU(2); c.put(1,1); c.put(2,2); print('c.get(1)==1:', c.get(1)==1); c.put(3,3); print('c.get(2) is None:',"
+     ],
+     "hatalar": [],
+     "gizli_gecen": 6,
+     "gizli_toplam": 6,
+     "gizli": [
+      {
+       "ad": "get yenilemesi",
+       "gecti": true,
+       "detay": ""
+      },
+      {
+       "ad": "put guncelleme yeniler",
+       "gecti": true,
+       "detay": ""
+      },
+      {
+       "ad": "kapasite 1",
+       "gecti": true,
+       "detay": ""
+      },
+      {
+       "ad": "len",
+       "gecti": true,
+       "detay": ""
+      },
+      {
+       "ad": "None deger saklanabilir mi / yok olan None",
+       "gecti": true,
+       "detay": ""
+      },
+      {
+       "ad": "kapasite asiminda en eski gider",
+       "gecti": true,
+       "detay": ""
+      }
+     ],
+     "fazla_dosya": [],
+     "is_id": "20260825-132639-715c72"
+    }
+   ],
+   "oturum": "20260825-132639-715c72"
+  },
+  "roma": {
+   "turlar": [
+    {
+     "tur": 1,
+     "derleme_durumu": "derlendi",
+     "onarim": 1,
+     "sure": 152.3,
+     "araclar": [
+      "list_files **/*",
+      "write_file C:\\Users\\malik.kayaalp\\Desktop\\Apprentice\\.apprentice_test_home\\kampanya\\roma\\roma.py",
+      "write_file C:\\Users\\malik.kayaalp\\Desktop\\Apprentice\\.apprentice_test_home\\kampanya\\roma\\test_roma.py",
+      "run_tests ",
+      "run_shell python -c \"from roma import romaya, romadan; print('romaya(1994):', romaya(1994)); print('romaya(4):', romaya(4)); print('romaya(3999):', ro"
+     ],
+     "hatalar": [],
+     "gizli_gecen": 5,
+     "gizli_toplam": 6,
+     "gizli": [
+      {
+       "ad": "gidis-donus 1..3999",
+       "gecti": false,
+       "detay": "ValueError: Gecersiz tekrar: X en fazla 3 kez ardarda gelebilir"
+      },
+      {
+       "ad": "kucuk harf ValueError",
+       "gecti": true,
+       "detay": ""
+      },
+      {
+       "ad": "VX gecersiz",
+       "gecti": true,
+       "detay": ""
+      },
+      {
+       "ad": "IM gecersiz",
+       "gecti": true,
+       "detay": ""
+      },
+      {
+       "ad": "negatif ValueError",
+       "gecti": true,
+       "detay": ""
+      },
+      {
+       "ad": "3888 en uzun",
+       "gecti": true,
+       "detay": ""
+      }
+     ],
+     "fazla_dosya": [],
+     "is_id": "20260825-133049-1739fb"
+    },
+    {
+     "tur": 2,
+     "derleme_durumu": "derlendi",
+     "onarim": 1,
+     "sure": 192.4,
+     "araclar": [
+      "read_file C:\\Users\\malik.kayaalp\\Desktop\\Apprentice\\.apprentice_test_home\\kampanya\\roma\\roma.py",
+      "write_file C:\\Users\\malik.kayaalp\\Desktop\\Apprentice\\.apprentice_test_home\\kampanya\\roma\\roma.py",
+      "read_file C:\\Users\\malik.kayaalp\\Desktop\\Apprentice\\.apprentice_test_home\\kampanya\\roma\\test_roma.py",
+      "write_file C:\\Users\\malik.kayaalp\\Desktop\\Apprentice\\.apprentice_test_home\\kampanya\\roma\\test_roma.py",
+      "run_tests ",
+      "run_shell python -c \"from roma import romaya, romadan; print('romaya(1994):', romaya(1994)); print('romaya(4):', romaya(4)); print('romaya(3999):', ro"
+     ],
+     "hatalar": [],
+     "gizli_gecen": 6,
+     "gizli_toplam": 6,
+     "gizli": [
+      {
+       "ad": "gidis-donus 1..3999",
+       "gecti": true,
+       "detay": ""
+      },
+      {
+       "ad": "kucuk harf ValueError",
+       "gecti": true,
+       "detay": ""
+      },
+      {
+       "ad": "VX gecersiz",
+       "gecti": true,
+       "detay": ""
+      },
+      {
+       "ad": "IM gecersiz",
+       "gecti": true,
+       "detay": ""
+      },
+      {
+       "ad": "negatif ValueError",
+       "gecti": true,
+       "detay": ""
+      },
+      {
+       "ad": "3888 en uzun",
+       "gecti": true,
+       "detay": ""
+      }
+     ],
+     "fazla_dosya": [],
+     "is_id": "20260825-133322-3417ec"
+    }
+   ],
+   "oturum": "20260825-133049-1739fb"
+  },
+  "satis": {
+   "turlar": [
+    {
+     "tur": 1,
+     "derleme_durumu": "derlendi",
+     "onarim": 1,
+     "sure": 98.7,
+     "araclar": [
+      "list_files **/*.py",
+      "write_file C:\\Users\\malik.kayaalp\\Desktop\\Apprentice\\.apprentice_test_home\\kampanya\\satis\\satis.py",
+      "write_file C:\\Users\\malik.kayaalp\\Desktop\\Apprentice\\.apprentice_test_home\\kampanya\\satis\\test_satis.py",
+      "run_tests "
+     ],
+     "hatalar": [],
+     "gizli_gecen": 6,
+     "gizli_toplam": 6,
+     "gizli": [
+      {
+       "ad": "bos liste",
+       "gecti": true,
+       "detay": ""
+      },
+      {
+       "ad": "kirpma+kucuk harf birlestirme",
+       "gecti": true,
+       "detay": ""
+      },
+      {
+       "ad": "adet 0 anahtar",
+       "gecti": true,
+       "detay": ""
+      },
+      {
+       "ad": "iki kategori",
+       "gecti": true,
+       "detay": ""
+      },
+      {
+       "ad": "girdi listesi degismez",
+       "gecti": true,
+       "detay": ""
+      },
+      {
+       "ad": "float toplam",
+       "gecti": true,
+       "detay": ""
+      }
+     ],
+     "fazla_dosya": [],
+     "is_id": "20260825-133634-809f82"
+    }
+   ],
+   "oturum": "20260825-133634-809f82"
+  },
+  "fib_onar": {
+   "turlar": [
+    {
+     "tur": 1,
+     "derleme_durumu": "derlendi",
+     "onarim": 1,
+     "sure": 72.1,
+     "araclar": [
+      "read_file fib.py",
+      "read_file test_fib.py",
+      "write_file fib.py",
+      "write_file test_fib.py",
+      "run_tests "
+     ],
+     "hatalar": [],
+     "gizli_gecen": 6,
+     "gizli_toplam": 6,
+     "gizli": [
+      {
+       "ad": "fib(0)",
+       "gecti": true,
+       "detay": ""
+      },
+      {
+       "ad": "fib(1)",
+       "gecti": true,
+       "detay": ""
+      },
+      {
+       "ad": "fib(2)",
+       "gecti": true,
+       "detay": ""
+      },
+      {
+       "ad": "fib(30)",
+       "gecti": true,
+       "detay": ""
+      },
+      {
+       "ad": "negatif",
+       "gecti": true,
+       "detay": ""
+      },
+      {
+       "ad": "docstring korunmus",
+       "gecti": true,
+       "detay": ""
+      }
+     ],
+     "fazla_dosya": [],
+     "is_id": "20260825-133813-cf85f9"
+    }
+   ],
+   "oturum": "20260825-133813-cf85f9"
+  },
+  "kelime": {
+   "turlar": [
+    {
+     "tur": 1,
+     "derleme_durumu": "derlendi",
+     "onarim": 1,
+     "sure": 107.2,
+     "araclar": [
+      "list_files **/*",
+      "write_file C:\\Users\\malik.kayaalp\\Desktop\\Apprentice\\.apprentice_test_home\\kampanya\\kelime\\kelime.py",
+      "write_file C:\\Users\\malik.kayaalp\\Desktop\\Apprentice\\.apprentice_test_home\\kampanya\\kelime\\test_kelime.py",
+      "run_tests "
+     ],
+     "hatalar": [],
+     "gizli_gecen": 6,
+     "gizli_toplam": 6,
+     "gizli": [
+      {
+       "ad": "bos",
+       "gecti": true,
+       "detay": ""
+      },
+      {
+       "ad": "n buyuk",
+       "gecti": true,
+       "detay": ""
+      },
+      {
+       "ad": "n=0",
+       "gecti": true,
+       "detay": ""
+      },
+      {
+       "ad": "esitlik alfabetik",
+       "gecti": true,
+       "detay": ""
+      },
+      {
+       "ad": "rakamlar ayirici mi? (harf disi)",
+       "gecti": true,
+       "detay": ""
+      },
+      {
+       "ad": "alt cizgi ayirici",
+       "gecti": true,
+       "detay": ""
+      }
+     ],
+     "fazla_dosya": [],
+     "is_id": "20260825-133925-e6f119"
+    }
+   ],
+   "oturum": "20260825-133925-e6f119"
+  }
+ },
+ "ozet": {
+  "tur1": 35,
+  "son": 36,
+  "toplam": 36
+ },
+ "bitis": "2026-08-25 13:41:12"
+}

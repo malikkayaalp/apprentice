@@ -326,14 +326,21 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
 .imlec{display:inline-block;width:8px;height:1em;background:var(--vurgu);
   vertical-align:text-bottom;animation:nefes .9s infinite;margin-left:1px;border-radius:1px}
 
-.metrikler{display:grid;grid-template-columns:repeat(auto-fit,minmax(86px,1fr));gap:7px;
-  padding:9px;overflow-y:auto}
-.metrik{padding:8px 5px;border-radius:10px;background:rgba(0,0,0,.25);text-align:center;
-  border:1px solid var(--cizgi2)}
-.metrik b{display:block;font:700 1.25em var(--mono);
+/* METRIKLER: SEKIZI DE HER ZAMAN YAN YANA. Eskiden auto-fit/minmax(86px) vardi ve panel
+   86x8 px'ten dar kalinca sonuncu kutu ("CAGRI") tek basina alt satira dusuyordu - hem
+   cirkin hem de metrik satirinin yuksekligini iki katina cikariyordu.
+   Sabit 8 sutun + yazi PANEL genisligine gore olcekleniyor. Ekrana (vw) degil PANELE (cqi)
+   gore: bu panel surukleniyor ve boyutlandiriliyor, ekran genisligi onun genisligi degil. */
+.metrikler{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:4px;
+  padding:8px;align-content:start;container-type:inline-size}
+.metrik{padding:clamp(3px,1.1cqi,9px) 2px;border-radius:10px;background:rgba(0,0,0,.25);
+  text-align:center;border:1px solid var(--cizgi2);min-width:0;overflow:hidden}
+.metrik b{display:block;font-family:var(--mono);font-weight:700;
+  font-size:clamp(.72em,2.6cqi,1.25em);line-height:1.25;white-space:nowrap;
   background:linear-gradient(180deg,var(--metin),var(--vurgu2));
   -webkit-background-clip:text;background-clip:text;color:transparent}
-.metrik span{font-size:.62em;color:var(--soluk);letter-spacing:.5px}
+.metrik span{display:block;font-size:clamp(.52em,1.2cqi,.62em);color:var(--soluk);
+  letter-spacing:.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #ozetKutu{flex:1;min-height:0;padding:9px 12px;font:.85em var(--mono);color:var(--soluk);
   line-height:1.7;overflow-y:auto;overflow-wrap:anywhere}
 #ozetKutu b{color:var(--metin)}
@@ -540,14 +547,14 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
 
   <div class="kart" data-p="metrik"><div class="kbaslik">METRİKLER</div>
     <div class="kgovde"><div class="metrikler">
-      <div class="metrik"><b id="mIlk">—</b><span>İLK BAĞLAM</span></div>
-      <div class="metrik"><b id="mPrompt">0</b><span>PROMPT TOK</span></div>
-      <div class="metrik"><b id="mUretim">0</b><span>ÜRETİM TOK</span></div>
-      <div class="metrik"><b id="mSure">0s</b><span>SÜRE</span></div>
-      <div class="metrik"><b id="mArac">0</b><span>ARAÇ</span></div>
-      <div class="metrik"><b id="mYazim">0</b><span>YAZIM</span></div>
-      <div class="metrik"><b id="mOnarim">0</b><span>ONARIM</span></div>
-      <div class="metrik"><b id="mCagri">0</b><span>ÇAĞRI</span></div>
+      <div class="metrik" title="İlk bağlam: işin başındaki istem büyüklüğü"><b id="mIlk">—</b><span>BAĞLAM</span></div>
+      <div class="metrik" title="Toplam istem (prompt) tokeni"><b id="mPrompt">0</b><span>İSTEM</span></div>
+      <div class="metrik" title="Modelin ürettiği token"><b id="mUretim">0</b><span>ÜRETİM</span></div>
+      <div class="metrik" title="İşin toplam süresi"><b id="mSure">0s</b><span>SÜRE</span></div>
+      <div class="metrik" title="Çağrılan araç sayısı"><b id="mArac">0</b><span>ARAÇ</span></div>
+      <div class="metrik" title="Yazılan dosya sayısı"><b id="mYazim">0</b><span>YAZIM</span></div>
+      <div class="metrik" title="Onarım turu sayısı"><b id="mOnarim">0</b><span>ONARIM</span></div>
+      <div class="metrik" title="Modele yapılan istek sayısı"><b id="mCagri">0</b><span>ÇAĞRI</span></div>
     </div>
     <!-- OLCUM GECMISI (yol haritasi 14): arsivdeki kampanya kosulari. Veri katmani zaten
          vardi ama yalnizca terminalden okunabiliyordu - "bu degisiklik olcumu iyilestirdi

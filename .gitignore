@@ -1,6 +1,5 @@
 __pycache__/
 *.pyc
-reports/
 *.meta
 Library/
 .vs/
@@ -31,4 +30,14 @@ Test_Kurulum/
 # Hypothesis ornek veritabani (gelistirme)
 .hypothesis/
 # olcum arsivi: kosu ciktilari (birikir, depoya girmez)
-reports/
+
+# reports/: calisma ciktilari yok sayilir AMA OLCUM KANITI DEPODA DURUR.
+# Sebep: kampanya arsivleri, ham kosu gunlukleri ve telemetri raporu bu projenin
+# "olculdu" iddialarinin TEK dayanagi. Makine degisirse ya da ev temizlenirse
+# yeniden turetilemezler (yeniden turetmek saatlerce GPU demek).
+reports/*
+!reports/olcum/
+reports/olcum/*
+!reports/olcum/*.json
+!reports/tur_*.log
+!reports/telemetri-*.txt

@@ -1,0 +1,17 @@
+SON 44 IS
+  ilk tur (dogrulayici) 100.0%   <- yalniz derleme/ruff/test
+  onarim sonrasi        100.0%
+  GERCEK basari         81.6%   <- kabul kriteri de tuttu (38 iste bilinir)
+  duraganlik            0.0%
+  usta onerisi          0.0%
+  kapsam ihlali       0 is
+  kabul kriteri       31 gecti · 7 kaldi · 6 DENETLENMEDI · 0 kritersiz
+  ortalama            11880 istem tok · 2096 uretim · 132.2 sn
+  hata siniflari:     (hic hata kaydi yok)
+  DURAGANLIK (denemeler arasi): 2 olay
+      2 deneme, AYNI kontrol dustu: HATA | kazanan bos tahtada | ifade: _kazanan() | beklenen: True | 
+      2 deneme, AYNI kontrol dustu: HATA | kazanan bos tahtada | ifade: _kazanan() | beklenen: True | 
+  modele gore:
+      hf.co/unsloth/Qwen3-Coder-Next-GGU n=32  basari %100.0 ilk tur %100.0  100 sn
+      muse-glimmer:30b-q4_K_M-dflash     n=12  basari %100.0 ilk tur %100.0  219 sn
+  ! 6 iste kabul kriteri verilmis ama DENETLENMEMIS - basari yuzdeleri yalniz DOGRULAYICIYI (derleme/ruff/test) olcer, kriterin tutup tutmadigini DEGIL

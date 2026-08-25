@@ -1,0 +1,29 @@
+
+== parantez
+   tur 1: derlendi, isci 143s, onarim 1, gizli 6/6
+
+== lru
+   tur 1: derlendi, isci 153s, onarim 1, gizli 6/6
+
+== roma
+   tur 1: derlendi, isci 234s, onarim 1, gizli 6/6
+
+== satis
+   tur 1: derlendi, isci 142s, onarim 1, gizli 6/6
+
+== fib_onar
+   tur 1: derlendi, isci 174s, onarim 1, gizli 6/6
+
+== kelime
+   tur 1: derlendi, isci 177s, onarim 1, gizli 6/6
+
+gorev      tur1     son      tur      sure
+parantez   6/6      6/6      1        143s
+lru        6/6      6/6      1        153s
+roma       6/6      6/6      1        234s
+satis      6/6      6/6      1        142s
+fib_onar   6/6      6/6      1        174s
+kelime     6/6      6/6      1        177s
+TOPLAM tur1 36/36, son 36/36
+-> C:\Users\malik.kayaalp\Desktop\Apprentice\tests\code_kampanya.son.json
+-> arsiv: C:\Users\malik.kayaalp\Desktop\Apprentice\reports\olcum\code_kampanya-20260825-141102.json

@@ -1567,12 +1567,42 @@ def basit_uzman_kipi() -> bool:
     return True
 
 
+def metrik_tek_satir() -> bool:
+    """METRIKLER sekizi de HER ZAMAN yan yana (kullanici geri bildirimi).
+
+    Eskiden `auto-fit,minmax(86px,1fr)` vardi: panel 8x86 px'ten dar kalinca sonuncu kutu
+    ("CAGRI") tek basina alt satira dusuyordu - hem cirkin hem de metrik satirinin
+    yuksekligini iki katina cikariyordu.
+
+    Cakilan sozlesme:
+      1. Sutun sayisi SABIT 8 - sarma yok.
+      2. Yazi PANEL genisligine gore olceklenir (cqi), EKRANA gore degil (vw): bu panel
+         suruklenip boyutlandirilabiliyor, ekran genisligi onun genisligi degil.
+      3. Etiketler KISA - "URETIM TOK" 8 kutuya bolunmus dar bir panelde ancak 5 px'te
+         sigardi, yani okunmazdi. Tam anlam `title` ipucunda durur."""
+    with open(os.path.join(ROOT, "clients", "web", "panel.html"), encoding="utf-8") as f:
+        h = f.read()
+    assert "grid-template-columns:repeat(8,minmax(0,1fr))" in h, "metrik sutunlari sabit 8 degil"
+    assert "auto-fit,minmax(86px" not in h, "eski sarmali yerlesim duruyor"
+    assert "container-type:inline-size" in h, "panel genisligine gore olcekleme yok"
+    assert "cqi" in h and "vw)" not in h.split(".metrikler{")[1][:400],         "olcekleme ekrana (vw) gore yapilmis - panel suruklenebilir, dogrusu cqi"
+    # etiketler kisa olmali (8 kutuya sigacak) ve anlami ipucunda dursun
+    for uzun in ("<span>İLK BAĞLAM</span>", "<span>PROMPT TOK</span>", "<span>ÜRETİM TOK</span>"):
+        assert uzun not in h, "uzun etiket duruyor: %s" % uzun
+    for kisa in ("<span>BAĞLAM</span>", "<span>İSTEM</span>", "<span>ÜRETİM</span>",
+                 "<span>ÇAĞRI</span>"):
+        assert kisa in h, "kisa etiket yok: %s" % kisa
+    assert h.count('class="metrik" title=') == 8, "her metrik kutusunda anlam ipucu olmali"
+    print("metrik tek satir: ok (8 sabit sutun, panele gore olcekleme, kisa etiket + ipucu)")
+    return True
+
+
 def main() -> int:
     ok = (js_sozdizimi() and metin_isleyicileri() and kaynak_denetimi() and id_butunlugu() and uc_sozlesmesi() and ust_bar_gorunur() and yerlesim_butun() and dizilimler_butun()
           and yerlesim_motoru() and sunucu_uclari() and calisma_dizini_kurallari() and sohbet_uclari()
           and goruntuleyici_sayfasi() and fark_gorunumu()
           and animasyon_tanimlari() and model_kapsulu()
-          and vurgulayici_sozlesmesi() and sahiplik_kurali() and karar_uclari() and bayat_surec_uyarisi() and karar_rozeti() and tekrar_dene_basarili() and inceleme_ekrani() and ollama_adresi() and kuyruk_uclari() and canli_akis() and basit_uzman_kipi())
+          and vurgulayici_sozlesmesi() and sahiplik_kurali() and karar_uclari() and bayat_surec_uyarisi() and karar_rozeti() and tekrar_dene_basarili() and inceleme_ekrani() and ollama_adresi() and kuyruk_uclari() and canli_akis() and basit_uzman_kipi() and metrik_tek_satir())
     print("SONUC:", "GECTI" if ok else "KALDI")
     return 0 if ok else 1
 
