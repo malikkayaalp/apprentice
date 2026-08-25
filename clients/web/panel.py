@@ -686,6 +686,25 @@ def _kuyruk_kur():
     return KUYRUK
 
 
+
+def _olcum_gecmisi() -> dict:
+    """Arsivdeki kampanya kosulari (yol haritasi 14: benchmark UI).
+
+    Veri katmani zaten vardi (core/olcum_arsiv.kosular) ama YALNIZCA terminalden
+    okunabiliyordu; panelde "bu degisiklik olcumu iyilestirdi mi" sorusuna bakacak yer
+    yoktu. Burasi yalnizca OKUR - olcum baslatmaz. Olcum uzun surer ve GPU ister; onu
+    panelden tetiklemek, kullanicinin farkinda olmadan 20 dakikalik is baslatmasi demek."""
+    try:
+        from core.olcum_arsiv import kosular
+    except Exception as e:  # noqa: BLE001
+        return {"hata": str(e)[:150], "kampanyalar": {}}
+    out = {}
+    for ad in ("code_kampanya", "zorluk_kampanya"):
+        ks = kosular(ad)
+        if ks:
+            out[ad] = ks[-8:]          # son 8 kosu: kiyas icin yeter, tablo tasmasin
+    return {"kampanyalar": out}
+
 def _kuyruk_islem(yolu: str, veri: dict) -> dict:
     """Kuyruk uclarinin tek giris noktasi. Kuyruk yoksa ISTEK SESSIZCE DUSMEZ - hata doner."""
     k = KUYRUK or _kuyruk_kur()
@@ -1019,6 +1038,8 @@ class Istek(BaseHTTPRequestHandler):
                 import goruntuleyici as G
                 self._gonder(G.oku(DEPO.jobs_dir, q.get("is", ""), q.get("yol", ""),
                                    _sayi(q.get("surum"))))
+            elif yol.path == "/api/olcum":
+                self._gonder(_olcum_gecmisi())
             elif yol.path == "/api/kuyruk":
                 k = KUYRUK or _kuyruk_kur()
                 self._gonder(k.liste() if k else {"hata": "kuyruk yok", "ogeler": []})

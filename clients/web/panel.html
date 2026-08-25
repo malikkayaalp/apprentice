@@ -158,6 +158,23 @@ html.tekKip .tutamak{display:none}
 .kuyOge .kuyMini{visibility:hidden}
 .kuyOge:hover .kuyMini{visibility:visible}
 .kuyNot{font-size:.82em;color:var(--sari);padding:3px 4px;line-height:1.35}
+
+/* OLCUM GECMISI tablosu (yol haritasi 14) */
+#olcumBolum{border-top:1px solid var(--cizgi);margin-top:8px;padding-top:6px}
+.olcBas{font-size:.74em;letter-spacing:.09em;color:var(--soluk);padding:0 4px 4px;
+  display:flex;align-items:center;gap:6px}
+#olcYenile{cursor:pointer;margin-left:auto}
+#olcYenile:hover{color:var(--metin)}
+.olcAd{font-size:.76em;color:var(--vurgu2);padding:4px 4px 2px;letter-spacing:.05em}
+table.olc{width:100%;border-collapse:collapse;font-size:.8em}
+table.olc th{color:var(--soluk);font-weight:400;text-align:right;padding:1px 4px;
+  font-size:.92em;border-bottom:1px solid var(--cizgi2)}
+table.olc th:first-child{text-align:left}
+table.olc td{padding:2px 4px;text-align:right;white-space:nowrap}
+table.olc td:first-child{text-align:left;color:var(--soluk)}
+table.olc tr.son td{color:var(--metin)}
+.olcIyi{color:var(--yesil)}
+.olcKotu{color:var(--kirmizi)}
 .kgovde{flex:1;min-height:0;display:flex;flex-direction:column}
 .tutamak{position:absolute;right:2px;bottom:2px;width:16px;height:16px;cursor:nwse-resize;
   border-right:2px solid rgba(217,119,87,.5);border-bottom:2px solid rgba(217,119,87,.5);
@@ -509,7 +526,15 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
       <div class="metrik"><b id="mYazim">0</b><span>YAZIM</span></div>
       <div class="metrik"><b id="mOnarim">0</b><span>ONARIM</span></div>
       <div class="metrik"><b id="mCagri">0</b><span>ÇAĞRI</span></div>
-    </div></div><div class="tutamak"></div></div>
+    </div>
+    <!-- OLCUM GECMISI (yol haritasi 14): arsivdeki kampanya kosulari. Veri katmani zaten
+         vardi ama yalnizca terminalden okunabiliyordu - "bu degisiklik olcumu iyilestirdi
+         mi" sorusuna panelde bakacak yer yoktu. Yalnizca OKUR, olcum BASLATMAZ. -->
+    <div id="olcumBolum" style="display:none">
+      <div class="olcBas">ÖLÇÜM GEÇMİŞİ <span id="olcYenile" title="yenile">↻</span></div>
+      <div id="olcTablo"></div>
+    </div>
+    </div><div class="tutamak"></div></div>
 
   <div class="kart" data-p="ozet"><div class="kbaslik">İŞ ÖZETİ · SONUÇ</div>
     <div class="kgovde"><div id="ozetKutu">—</div><div id="uyarilar" style="padding:0 12px 10px"></div><div id="kararKutu"></div></div>
@@ -1349,6 +1374,41 @@ async function kuyrukCiz(){
   }catch(e){}
   setTimeout(kuyrukCiz,4000);
 }
+/* OLCUM GECMISI. YOKLAMA YOK: arsiv yalnizca kampanya kosunca degisir (saatte bir olur
+   olursa) - saniyede bir istek atmak anlamsiz. Acilista bir kez, sonra elle yenile. */
+const OLC_AD={code_kampanya:"CODE",zorluk_kampanya:"ZORLUK"};
+function _oran(g){const p=String(g||"").split("/");
+  return (p.length===2&&+p[1])?(+p[0]/+p[1]):null}
+async function olcumCiz(){
+  try{
+    const d=await(await fetch("/api/olcum")).json();
+    const kam=d.kampanyalar||{}, adlar=Object.keys(kam);
+    const bolum=$("#olcumBolum");
+    if(!adlar.length){bolum.style.display="none";return}
+    bolum.style.display="";
+    let h="";
+    adlar.forEach(ad=>{
+      const ks=kam[ad]||[]; if(!ks.length)return;
+      h+='<div class="olcAd">'+(OLC_AD[ad]||kacir(ad))+'</div>'+
+         '<table class="olc"><tr><th>koşu</th><th>ilk</th><th>son</th><th>süre</th><th>tur/sn</th></tr>';
+      ks.forEach((k,i)=>{
+        const sonKosu=i===ks.length-1;
+        // NIHAI sonuc renklenir: tam ise yesil, eksikse kirmizi. "ilk" bilerek RENKSIZ -
+        // ilk denemede eksik olmak basarisizlik degil, onarim dongusunun isi budur.
+        const o=_oran(k.gizli);
+        const sinif=o===null?"":(o>=1?"olcIyi":"olcKotu");
+        h+='<tr class="'+(sonKosu?"son":"")+'"><td title="'+kacir(k.dosya||"")+'">'+
+           kacir(String(k.baslangic||"?").slice(5,16))+'</td>'+
+           '<td>'+kacir(k.gizli_ilk||"-")+'</td>'+
+           '<td class="'+sinif+'">'+kacir(k.gizli||"-")+'</td>'+
+           '<td>'+Math.round((k.toplam_sn||0)/60)+' dk</td>'+
+           '<td>'+(k.tur_basi_sn||0)+'</td></tr>';
+      });
+      h+='</table>';
+    });
+    $("#olcTablo").innerHTML=h;
+  }catch(e){}
+}
 async function kuyrukIslem(yol,govde){
   try{
     await fetch(yol,{method:"POST",headers:{"Content-Type":"application/json"},
@@ -1931,6 +1991,7 @@ $("#kKuyruk").onclick=kuyrugaEkle;
 $("#kuyDuraklat").onclick=()=>kuyrukIslem("/api/kuyruk_duraklat",
   {duraklat:$("#kuyDurum").className!=="duraklatildi"});
 $("#kuyTemizle").onclick=()=>kuyrukIslem("/api/kuyruk_temizle",{});
+$("#olcYenile").onclick=olcumCiz;
 $("#kGorev").addEventListener("keydown",e=>{
   if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();cirakGonder();}});
 
@@ -2077,7 +2138,7 @@ if(_byb) _byb.onclick=async()=>{
   tost("sunucu ayağa kalkmadı — paneli kapatıp aç");
 };
 isleriCek(); olaylariCek(); daktiloAdim(); ustaChatCek(); modelleriYukle(); kokGoster();
-kuyrukCiz();
+kuyrukCiz(); olcumCiz();
 kapsamIpucu();
 </script>
 </body>

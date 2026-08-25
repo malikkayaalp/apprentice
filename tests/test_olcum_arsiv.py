@@ -81,10 +81,21 @@ def kiyas_dogru() -> bool:
         assert len(ks) == 2, ks
         assert ks[0]["baslangic"].startswith("2026-08-23"), "kosular ESKIDEN YENIYE siralanmali"
         assert ks[0]["tur"] == 2 and ks[0]["toplam_sn"] == 602, ks[0]
-        assert ks[0]["gizli"] == "11/12", ks[0]           # 5+6 / 6+6
+        assert ks[0]["gizli"] == "11/12", ks[0]           # tek turluk gorevler: 5+6 / 6+6
         assert ks[1]["tur"] == 2 and ks[1]["toplam_sn"] == 406, ks[1]
-        assert ks[1]["gizli"] == "22/24", ks[1]           # dizge bicim de okunuyor
+        # DENEME ile SONUC AYRI: dama iki tur kostu, ikisi de 11/12. Turlari TOPLAMAK
+        # (22/24) kampanyanin kendi raporuyla celisiyordu - ayni kosu icin iki farkli sayi.
+        assert ks[1]["gizli"] == "11/12", ks[1]           # SON tur (dizge bicim de okunuyor)
+        assert ks[1]["gizli_ilk"] == "11/12", ks[1]       # ILK deneme
         assert ks[1]["tur_basi_sn"] == 203.0, ks[1]
+        # zorluk kampanyasi "zaman" anahtari kullanir - "?" gorunmemeli
+        O.kaydet("z", {"zaman": "2026-08-25 14:11:02", "gorevler": {
+            "a": {"turlar": [{"tur": 1, "sure_s": 10.0, "gizli": "4/12"},
+                             {"tur": 2, "sure_s": 20.0, "gizli": "12/12"}]}}},
+                 time.mktime(time.strptime("2026-08-25 14:11:02", "%Y-%m-%d %H:%M:%S")))
+        z = O.kosular("z")[0]
+        assert z["baslangic"].startswith("2026-08-25"), "zaman anahtari okunmadi: %s" % z
+        assert z["gizli_ilk"] == "4/12" and z["gizli"] == "12/12", z
 
         # bos/bozuk arsiv dosyasi listeyi BOZMAZ
         with open(os.path.join(O.ARSIV, "k-bozuk.json"), "w", encoding="utf-8") as f:

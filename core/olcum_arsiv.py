@@ -47,24 +47,50 @@ def _ozet(veri: dict) -> dict:
     """Kampanya ciktisindan kiyaslanabilir sayilar. Sema kampanyadan kampanyaya biraz
     farkli (turlar 'sure' ya da 'sure_s'), ikisi de okunur."""
     g = veri.get("gorevler") or {}
-    sureler, turlar, gecen, toplam = [], 0, 0, 0
+    sureler, turlar = [], 0
+    ilk_g = ilk_t = son_g = son_t = 0
     for v in g.values():
-        for t in (v.get("turlar") or []):
+        tl = list(v.get("turlar") or [])
+        for t in tl:
             turlar += 1
             s = t.get("sure", t.get("sure_s"))
             if isinstance(s, (int, float)):
                 sureler.append(float(s))
-            if isinstance(t.get("gizli_gecen"), int):
-                gecen += t["gizli_gecen"]
-                toplam += t.get("gizli_toplam") or 0
-            elif isinstance(t.get("gizli"), str) and "/" in t["gizli"]:
-                a, b = t["gizli"].split("/", 1)
-                if a.strip().isdigit() and b.strip().isdigit():
-                    gecen += int(a)
-                    toplam += int(b)
-    return {"baslangic": veri.get("baslangic") or "?", "gorev": len(g), "tur": turlar,
-            "toplam_sn": round(sum(sureler)), "tur_basi_sn": round(sum(sureler) / turlar, 1)
-            if turlar else 0, "gizli": "%d/%d" % (gecen, toplam) if toplam else "-"}
+        # DENEME ile SONUC AYRI SAYILIR. Eskiden butun turlar toplaniyordu ve iki turda
+        # cozulen bir gorev "4/12 + 12/12 = 16/24" gorunuyordu - kampanyanin kendi
+        # raporu ise dogru bicimde "son 12/12" diyordu. Ayni kosu icin iki farkli sayi
+        # uretmek, olcum iddiasindaki bir projede kabul edilemez.
+        #   gizli_ilk = ILK denemede ne tutturdu (modelin tek atista gucu)
+        #   gizli_son = SON turda ne tutturdu (onarimla birlikte nihai sonuc)
+        for hedef, t in ((0, tl[0] if tl else None), (1, tl[-1] if tl else None)):
+            if not t:
+                continue
+            a, b = _gizli_coz(t)
+            if b is None:
+                continue
+            if hedef == 0:
+                ilk_g += a; ilk_t += b
+            else:
+                son_g += a; son_t += b
+    return {"baslangic": veri.get("baslangic") or veri.get("zaman") or "?",
+            "gorev": len(g), "tur": turlar,
+            "toplam_sn": round(sum(sureler)),
+            "tur_basi_sn": round(sum(sureler) / turlar, 1) if turlar else 0,
+            "gizli_ilk": "%d/%d" % (ilk_g, ilk_t) if ilk_t else "-",
+            # "gizli" = NIHAI sonuc. Kampanyalarin bastigi "son" sutunuyla ayni sey olmali.
+            "gizli": "%d/%d" % (son_g, son_t) if son_t else "-"}
+
+
+def _gizli_coz(t: dict):
+    """Bir turun gizli kontrol sayimi -> (gecen, toplam). Toplam yoksa (0, None)."""
+    if isinstance(t.get("gizli_gecen"), int):
+        return t["gizli_gecen"], (t.get("gizli_toplam") or 0) or None
+    s = t.get("gizli")
+    if isinstance(s, str) and "/" in s:
+        a, b = s.split("/", 1)
+        if a.strip().isdigit() and b.strip().isdigit():
+            return int(a), int(b)
+    return 0, None
 
 
 def kosular(ad: str = "") -> list:
