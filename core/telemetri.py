@@ -74,7 +74,9 @@ def _olaylar(jobs_dir: str, jid: str) -> list:
                   errors="replace") as f:
             for satir in f:
                 try:
-                    out.append(json.loads(satir))
+                    e = json.loads(satir)
+                    if isinstance(e, dict):   # 'null'/'42'/'[]' de gecerli
+                        out.append(e)          # JSON'dur - olay DEGILDIR
                 except Exception:
                     continue
     except OSError:
@@ -102,7 +104,9 @@ def is_telemetri(jobs_dir: str, jid: str) -> dict:
         elif t == "system" and e.get("subtype") == "init":
             kayit = e
     son_siniflar = siniflar(sonuc.get("errors") or [])
-    k = inc.get("kullanim") or {}
+    k = inc.get("kullanim")
+    if not isinstance(k, dict):      # bozuk kayitta dizge/liste olabilir
+        k = {}
     onarim = inc.get("onarim_turu") or 0
     return {
         "is_id": jid,

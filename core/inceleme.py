@@ -36,7 +36,9 @@ def _olaylar(jobs_dir: str, jid: str) -> list:
         with open(yol, encoding="utf-8", errors="replace") as f:
             for satir in f:
                 try:
-                    out.append(json.loads(satir))
+                    e = json.loads(satir)
+                    if isinstance(e, dict):   # 'null'/'42'/'[]' de gecerli
+                        out.append(e)          # JSON'dur - olay DEGILDIR
                 except Exception:
                     continue          # cop satir akisi bozmasin
     except OSError:
@@ -117,6 +119,11 @@ def _surec_canli(pid) -> bool | None:
             k32.CloseHandle(h)
     except Exception:  # noqa: BLE001
         return None                          # bilinmiyor - "olu" DEMEYIZ
+
+
+def _sozluk(x) -> dict:
+    """Sozluk bekledigimiz alan bozuk kayitta dizge/liste olabilir - bos sozluge cevir."""
+    return x if isinstance(x, dict) else {}
 
 
 def _sahiplik(is_kaydi: dict) -> dict:
@@ -323,7 +330,7 @@ def inceleme(jobs_dir: str, jid: str) -> dict:
         "duraganlik": duraganlik or {"var": False},
         "devir_onerisi": devir,
         "uyarilar": [str(u) for u in ruff[:8]],
-        "kullanim": sonuc.get("kullanim") or kayit.get("kullanim") or {},
+        "kullanim": _sozluk(sonuc.get("kullanim")) or _sozluk(kayit.get("kullanim")),
         "sure": sonuc.get("wall") or kayit.get("sure") or 0,
         "beyan": beyan[:600],            # modelin kendi ozeti - KANIT DEGIL, ayri alanda durur
         "geri_alinabilir": geri,
