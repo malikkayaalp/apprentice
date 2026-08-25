@@ -37,6 +37,25 @@ DEFAULT_MODEL = CFG.env_or(["APPRENTICE_MODEL", "UNITY_CODE_MODEL"], "ollama.mod
                            "hf.co/unsloth/Qwen3-Coder-Next-GGUF:UD-Q4_K_XL")
 NUM_CTX = CFG.env_or(["APPRENTICE_CTX", "UNITY_CODE_CTX"], "makine.num_ctx", 65536, int)
 NUM_BATCH = CFG.env_or(["APPRENTICE_BATCH", "UNITY_CODE_BATCH"], "makine.num_batch", 4096, int)
+def _ayarlari_coz():
+    try:
+        from core.ayarlar import etkin
+        return etkin(CFG)
+    except Exception:  # noqa: BLE001 - ayar katmani patlarsa GUVENLI varsayilan
+        return {"deger": {"temperature": 0.0, "think": False, "num_predict": 6000,
+                          "max_steps": 12, "retries": 2},
+                "kaynak": {}, "uyarilar": [], "hatalar": ["ayar cozulemedi"],
+                "olcum_profili": False}
+
+
+def _ek_talimat_coz() -> str:
+    try:
+        from core.ayarlar import ek_talimat
+        return ek_talimat(CFG)
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 MAX_READ = 60000
 MAX_OUT = 8000
 SHELL_TIMEOUT = 120
@@ -69,6 +88,14 @@ YAZILABILIR = [x.strip() for x in os.environ.get("APPRENTICE_YAZILABILIR", "").s
 # YAZILMIYOR (denetim bulgusu 1: ayni adli dosyayi sessizce eziyordu). Cirak buradan
 # YALNIZCA OKUR - yazma hapsi degismez.
 EK_DIZIN = os.environ.get("APPRENTICE_EK_DIZIN", "")
+
+# ORNEKLEME AYARLARI (denetim bulgusu 4). Bunlar eskiden KODA GOMULUYDU ve sablondaki
+# `sampling` bolumu hicbir yerde okunmuyordu - kullanici ayari degistiriyor, hicbir sey
+# olmuyordu. Artik tek yerden cozuluyor (core/ayarlar.py); guvenli varsayilanlar korunuyor
+# ama riskli deger UYARI uretiyor ve etkin degerler RAPORA giriyor.
+_AYAR = _ayarlari_coz()
+ORNEKLEME = _AYAR["deger"]
+EK_TALIMAT = _ek_talimat_coz()
 
 TEST_SATIRI_TAM = ("- Testleri run_tests ile kosarsin ({test}; test dosyalari test_*.py, "
                    "unittest.TestCase siniflari her iki kosucuda da calisir). Komutlari "
@@ -549,11 +576,25 @@ def canli_run(msgs: list, tools: list, dispatch, model: str, canli_yol: str,
     res = LoopResult(messages=msgs)
     bos_tur = 0            # ust uste bos cevap sayaci (native yoldaki EMPTY_NUDGE karsiligi)
     for _adim in range(max_steps):
-        turn = chat_stream(res.messages, tools=None, model=model, think=False,
-                           num_ctx=NUM_CTX, temperature=0.0, num_predict=6000,
+        turn = chat_stream(res.messages, tools=None, model=model,
+                           think=ORNEKLEME["think"], num_ctx=NUM_CTX,
+                           temperature=ORNEKLEME["temperature"],
+                           num_predict=ORNEKLEME["num_predict"],
                            extra_options={"num_batch": NUM_BATCH}, on_token=akit)
         res.turns.append(turn)
         res.metrics.merge(turn.metrics)
+        # BAGLAM KESILMESI canli yolda da olculur (denetim bulgusu 5). chat_stream bu alani
+        # doldurmuyordu: standart yol kesilmeyi yakalarken canli/XML yolu KOR kaliyordu -
+        # ayni is, hangi kipte kostuguna gore farkli guvence veriyordu.
+        try:
+            from core import tokens as _tok
+            tahmin = _tok.estimate(model, res.messages, None)
+            turn.truncated = _tok.detect_truncation(
+                turn.metrics.prompt_tokens, tahmin, NUM_CTX)
+            if turn.truncated:
+                res.truncated_steps += 1
+        except Exception:  # noqa: BLE001 - olcum yapilamazsa is DURMAZ, yalniz sessiz kalir
+            pass
         if turn.error:
             res.stopped, res.error = "error", turn.error
             break
@@ -623,14 +664,30 @@ def one_request(jail: Jail, dispatch, written: list, msgs: list, request: str,
     onceki_imzalar: frozenset | None = None
     duragan = False
     ilk_prompt = None            # ilk model cagrisinin GERCEK baglami (sistem+gorev, Ollama sayar)
+    kesilme = {"toplam": 0, "turlar": [], "en_buyuk_istem": 0}
     while True:
         if canli_yol and os.environ.get("APPRENTICE_CANLI") == "1":
             res = canli_run(msgs, tools, dispatch, model, canli_yol)
         else:
-            res = run_agent(msgs, tools, dispatch, max_steps=12, model=model, think=False,
-                            num_ctx=NUM_CTX, temperature=0.0, num_predict=6000, retries=2,
+            res = run_agent(msgs, tools, dispatch,
+                            max_steps=ORNEKLEME["max_steps"], model=model,
+                            think=ORNEKLEME["think"], num_ctx=NUM_CTX,
+                            temperature=ORNEKLEME["temperature"],
+                            num_predict=ORNEKLEME["num_predict"],
+                            retries=ORNEKLEME["retries"],
                             extra_options={"num_batch": NUM_BATCH})
         kullanim.merge(res.metrics); adim_sayisi += len(res.turns)
+        # KESILME BIRIKTIRILIR: hangi onarim turunda kac kez kesildi. Bu bilgi client.py'de
+        # zaten uretiliyordu (LoopResult.truncated_steps) ama BURADA HIC OKUNMUYORDU -
+        # yani hicbir rapora, hicbir panele ulasmiyordu (denetim bulgusu 5).
+        if getattr(res, "truncated_steps", 0):
+            kesilme["toplam"] += res.truncated_steps
+            kesilme["turlar"].append({"tur": rounds + 1, "kez": res.truncated_steps})
+        # TEK ISTEKTE gorulen EN BUYUK istem: "toplam istem tokeni" ile ayni sey DEGILDIR.
+        # Toplam butun turlarin toplamidir; baglama sigma sorusu TEK istekle ilgilidir.
+        for t in res.turns:
+            kesilme["en_buyuk_istem"] = max(kesilme["en_buyuk_istem"],
+                                            getattr(t.metrics, "prompt_tokens", 0) or 0)
         if ilk_prompt is None and res.turns:
             ilk_prompt = getattr(res.turns[0].metrics, "prompt_tokens", None)
         msgs[:] = res.messages
@@ -672,6 +729,7 @@ def one_request(jail: Jail, dispatch, written: list, msgs: list, request: str,
     butce = ("cagri basina ortalama prompt %d token (>17k) - baglam filtrelemesi zayifladi; "
              "yazilabilir/ara/harita ayarlarini gozden gecir" % ort) if ort > 17000 else ""
     return {"errors": errs, "rounds": rounds, "wall": time.time() - t0,
+            "kesilme": kesilme,
             "text": res.final_text or "", "stopped": res.stopped, "error": res.error,
             "kullanim": k, "duragan": duragan, "butce_uyarisi": butce}
 
@@ -783,6 +841,10 @@ def main() -> int:
         if not msgs:
             sistem = SYSTEM.format(dir=jail.root, test=TEST_ADI,
                 test_satiri=(TEST_SATIRI_TAM.format(test=TEST_ADI) if DOGRULAMA == "tam" else TEST_SATIRI_DERLEME))
+            if EK_TALIMAT:
+                # `prompt.ek_talimat` sablonda vardi ama HIC OKUNMUYORDU (denetim bulgusu 4).
+                # SONA eklenir: cekirdek kurallarin onune gecmesin.
+                sistem += "\n- KULLANICI EK TALIMATI: " + EK_TALIMAT
             if hafiza:
                 sistem += "\n\nPROJE HAFIZASI (bu projenin kurallari ve gecmis dersleri; UY):\n" + hafiza
             # GUNCEL DURUM (2026-08-24, OpenMemory STATE fikri): onceki islerden damitilmis devir.
@@ -834,7 +896,13 @@ def main() -> int:
                 wall=round(r["wall"], 1), written=list(dict.fromkeys(written)), play=None,
                 kullanim=r.get("kullanim"), ruff=ruff_rapor[:12] or None,
                 duragan=r.get("duragan", False), butce_uyarisi=r.get("butce_uyarisi") or None,
-                hafiza_uyarisi=hafiza_uyarisi or None, durum_uyarisi=durum_uyarisi or None)
+                hafiza_uyarisi=hafiza_uyarisi or None, durum_uyarisi=durum_uyarisi or None,
+                kesilme=(r.get("kesilme") if (r.get("kesilme") or {}).get("toplam") else None),
+                # ETKIN ayarlar rapora girer: "ayari degistirdim, uygulandi mi" sorusu
+                # tahminle degil KAYITLA cevaplansin (denetim bulgusu 4).
+                ayarlar={"deger": ORNEKLEME, "kaynak": _AYAR.get("kaynak") or {},
+                         "uyarilar": _AYAR.get("uyarilar") or [],
+                         "olcum_profili": _AYAR.get("olcum_profili", False)})
         code = 0 if not errs else 2
     except Exception as e:  # noqa: BLE001
         em.emit("error", message=("%s: %s" % (type(e).__name__, e))[:300])

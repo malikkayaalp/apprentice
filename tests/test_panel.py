@@ -1597,7 +1597,22 @@ def metrik_tek_satir() -> bool:
     return True
 
 
+# BURADA BIR TEST DENENDI VE KALDIRILDI (durustluk notu):
+# "ayni islevde tanimdan once kullanim" (TDZ) icin statik bir tarayici yazdim. YANLIS
+# ALARM verdi - JS blok kapsamini ve ic ice islevleri gormedigi icin parametreleri ve
+# ic kapsamdaki adlari ihlal sandi. Yanlis alarm veren test, testsizlikten KOTUDUR.
+#
+# ACIK KALAN RISK:  TDZ hatasini YAKALAMAZ (sozdizimi gecerlidir, hata
+# calisma aninda patlar). Bu oturumda gercek bir ornek yasandi: inceleme ekranindaki
+# kesilme uyarisinda  adi, ayni islevde DAHA ASAGIDA tanimli  ile
+# cakisti; sozdizimi testi YESIL kaldi, ekran ise kesilme yasayan her iste komple
+# cizilmezdi. Tarayicida gercek veriyle dogrulayarak yakalandi.
+# Dogru cozum DOM'lu bir cizim testidir (incelemeCiz'i ornek yuklerle kosturmak) -
+# ayri bir is olarak ele alinmali, buraya iliştirilmemeli.
+
+
 def main() -> int:
+
     ok = (js_sozdizimi() and metin_isleyicileri() and kaynak_denetimi() and id_butunlugu() and uc_sozlesmesi() and ust_bar_gorunur() and yerlesim_butun() and dizilimler_butun()
           and yerlesim_motoru() and sunucu_uclari() and calisma_dizini_kurallari() and sohbet_uclari()
           and goruntuleyici_sayfasi() and fark_gorunumu()

@@ -458,6 +458,11 @@ def inceleme(jobs_dir: str, jid: str) -> dict:
         "kullanim": _sozluk(sonuc.get("kullanim")) or _sozluk(kayit.get("kullanim")),
         "sure": sonuc.get("wall") or kayit.get("sure") or 0,
         "beyan": beyan[:600],            # modelin kendi ozeti - KANIT DEGIL, ayri alanda durur
+        # BAGLAM KESILMESI ve ETKIN AYARLAR (denetim bulgulari 5 ve 4). Ikisi de runtime'da
+        # URETILIYOR ama hicbir yere ULASMIYORDU. Panel olay semasini bilmedigi icin
+        # projeksiyona konuyor - arayuz yalnizca ciziyor.
+        "kesilme": _sozluk(sonuc.get("kesilme")) or None,
+        "ayarlar": _sozluk(sonuc.get("ayarlar")) or None,
         "zaman_cizgisi": _zaman_cizgisi(olaylar),
         "geri_alinabilir": geri,
         "karar": karar_oku(jobs_dir, jid),

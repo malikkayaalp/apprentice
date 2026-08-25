@@ -160,6 +160,10 @@ html.tekKip .tutamak{display:none}
 .kuyNot{font-size:.82em;color:var(--sari);padding:3px 4px;line-height:1.35}
 .kuyNot b{color:var(--kirmizi)}
 .kuyNotIs{color:var(--soluk);font-size:.95em;margin-top:2px}
+.incUyari{margin:4px 12px;padding:5px 9px;border-radius:8px;font-size:.85em;
+  background:rgba(224,179,69,.10);border:1px solid rgba(224,179,69,.35);color:var(--sari)}
+.incUyari b{color:var(--sari)}
+.incUyariAlt{color:var(--soluk);font-size:.92em;margin-top:2px}
 
 /* OLCUM GECMISI tablosu (yol haritasi 14) */
 #olcumBolum{border-top:1px solid var(--cizgi);margin-top:8px;padding-top:6px}
@@ -1418,7 +1422,11 @@ async function kuyrukCiz(){
     // "bitti" gorundugu icin kullanici sebebi HIC goremiyordu (denetim bulgusu 3).
     const sorunlu=ogeler.filter(o=>o.sebep&&(o.durum==="hata"||o.durum==="yarim"));
     let notu="";
-    if(d.durma_sebebi){
+    if(d.kalicilik_hatasi){
+      // KALICILIK HATASI SESSIZ KALMAZ: kuyruk bellekte degisiyor ama diske yazilmiyorsa
+      // panel kapaninca isler yok olur (denetim bulgusu 10).
+      notu='<b>⚠ Kuyruk diske yazılamıyor</b> — '+kacir(d.kalicilik_hatasi);
+    }else if(d.durma_sebebi){
       const ds=d.durma_sebebi;
       notu='<b>⏸ Kuyruk durduruldu</b> — '+kacir(ds.sebep||"")+
            (ds.baslik?'<div class="kuyNotIs">iş: '+kacir(ds.baslik)+'</div>':"");
@@ -1654,6 +1662,32 @@ function incelemeCiz(r){
   h+='<div class="incSat"><span class="incEt">çırak</span><b>'+(r.onarim_turu||0)+
      ' onarım turu</b>'+(r.sure?' · '+Math.round(r.sure)+' sn':'')+
      (k.prompt_tokens?' · '+(k.prompt_tokens).toLocaleString("tr")+' istem tok':'')+'</div>';
+
+  /* BAGLAM KESILMESI (denetim bulgusu 5): istem baglama sigmadiysa model YARIM bir metne
+     bakarak cevap uretmis olabilir. Bu, "basarili" gorunen bir isin sessiz yalanidir -
+     kullanici yalnizca token toplamini goruyordu, icerik kaybini goremiyordu. */
+  const kes=r.kesilme||{};
+  if(kes.toplam){
+    h+='<div class="incUyari">⚠ <b>BAĞLAM KESİLDİ</b> — '+kes.toplam+' istekte istem pencereye '+
+       'sığmadı; model eksik metinle cevap üretmiş olabilir.'+
+       (kes.turlar&&kes.turlar.length?'<div class="incUyariAlt">tur: '+
+         kes.turlar.map(t=>t.tur+" ("+t.kez+"×)").join(", ")+'</div>':"")+
+       (kes.en_buyuk_istem?'<div class="incUyariAlt">tek istekteki en büyük istem: '+
+         (kes.en_buyuk_istem).toLocaleString("tr")+' token</div>':"")+
+       '</div>';
+  }
+  /* ETKIN AYARLAR (denetim bulgusu 4): "ayari degistirdim, uygulandi mi" sorusu tahminle
+     degil KAYITLA cevaplanmali. Yalnizca varsayilandan SAPAN alanlar gosterilir. */
+  const ayr=r.ayarlar||{};
+  if(ayr.deger){
+    const sapan=Object.keys(ayr.deger).filter(k=>(ayr.kaynak||{})[k]==="yapilandirma");
+    const uyar=(ayr.uyarilar||[]);
+    if(ayr.olcum_profili) h+='<div class="incSat"><span class="incEt">ayarlar</span>'+
+      '<b>ölçüm profili</b> — yapılandırma yok sayıldı (tekrarlanabilirlik)</div>';
+    else if(sapan.length) h+='<div class="incSat"><span class="incEt">ayarlar</span>'+
+      kacir(sapan.map(k=>k+"="+ayr.deger[k]).join(" · "))+'</div>';
+    uyar.forEach(u=>{h+='<div class="incUyari">⚠ '+kacir(u.mesaj)+'</div>';});
+  }
 
   /* ZAMAN CIZGISI (yol haritasi 11): "sure nereye gitti". Uc tur dilim - model uretimi,
      arac kosumu, dogrulama. Hizlandirma calismasinin NEREYE bakmasi gerektigini soyler.

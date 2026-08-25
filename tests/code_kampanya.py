@@ -28,6 +28,10 @@ from test_server import Client  # noqa: E402
 from core.olcum_arsiv import kampanya_cikis, kaydet  # noqa: E402
 
 HOME = os.path.join(ROOT, ".apprentice_test_home")
+# OLCUM PROFILI: kampanya kullanicinin ornekleme ayarlarini YOK SAYAR (core/ayarlar.py).
+# Sebep: kiyas TEK DEGISKENLI olmali. Kullanici temperature'i 0.7 yaptiysa kampanya
+# sonuclari onceki kosularla karsilastirilamaz hale gelirdi ve bunu kimse fark etmezdi.
+os.environ.setdefault("APPRENTICE_OLCUM_PROFILI", "1")
 
 # Her gizli kontrol: (aciklama, python ifadesi -> True beklenir). Ifade calisma dizininde,
 # modul import edilmis halde degerlendirilir; istisna = basarisiz.
