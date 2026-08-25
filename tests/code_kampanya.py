@@ -22,6 +22,10 @@ try:      # pencereli exe/pythonw: sys.stdout None olabilir (kurulum oz-testi
 except Exception:
     pass
 from test_server import Client  # noqa: E402
+# BASTA ICE AKTARILIR (bilerek): eskiden bu iki ad kosunun SONUNDA ice aktariliyordu
+# ve modul adi degisince ImportError 12 dakikalik GPU isi BITTIKTEN SONRA patladi -
+# o kosunun arsivi hic yazilmadi. Kirilacaksa BASTA kirilsin, is yanmadan.
+from core.olcum_arsiv import kampanya_cikis, kaydet  # noqa: E402
 
 HOME = os.path.join(ROOT, ".apprentice_test_home")
 
@@ -251,8 +255,13 @@ def main() -> int:
     rapor["bitis"] = time.strftime("%Y-%m-%d %H:%M:%S")
     # ARSIVE de yaz: eskiden yalniz .son.json vardi ve her kosu oncekini EZIYORDU.
     # 2026-08-23 temel cizgisi (2416 sn) boyle kaybolmustu; git'ten kurtarildi.
-    from core.olcum_arsiv import kampanya_cikis, kaydet
-    yollar = kaydet("code_kampanya", rapor)
+    # Arsiv yazimi OZETI OLDURMEMELI: burasi patlarsa da kosunun sonucu ve cikis kodu
+    # uretilmeli - saatlerce suren olcum bir dosya yazma hatasi yuzunden kaybolmasin.
+    try:
+        yollar = kaydet("code_kampanya", rapor)
+    except Exception as e:  # noqa: BLE001
+        print("UYARI: arsive yazilamadi: %s" % str(e)[:150])
+        yollar = {}
     print("->", yollar.get("son", yol))
     if yollar.get("arsiv"):
         print("-> arsiv:", yollar["arsiv"])
