@@ -173,6 +173,14 @@ table.olc th:first-child{text-align:left}
 table.olc td{padding:2px 4px;text-align:right;white-space:nowrap}
 table.olc td:first-child{text-align:left;color:var(--soluk)}
 table.olc tr.son td{color:var(--metin)}
+/* GIZLILIK NOTU (denetim bulgusu 13): uzak usta = kod disari cikar. Uyari degil BILGI
+   rengi - kullaniciyi korkutmak degil, dogru bilgilendirmek istiyoruz. */
+.gizNot{font-size:.78em;color:var(--soluk);background:rgba(110,231,255,.06);
+  border:1px solid var(--cizgi2);border-radius:8px;padding:5px 9px;margin:0 10px 6px;
+  line-height:1.45}
+.gizNot b{color:var(--cyan)}
+.gizNot #gizAyrinti{display:block;opacity:.8}
+
 /* BASIT / UZMAN KIPI (yol haritasi 12). Panel gucludur ama ilk acilista yogundur:
    gorev kutusunun yaninda model, dogrulama, canli, harita, ayrinti... Basit kip bunlari
    GIZLER, silmez - degerleri yerinde kalir ve gonderilir. Yani kip GORUNURLUK meselesidir,
@@ -572,6 +580,13 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
   <div class="kart" data-p="usta"><div class="kbaslik" style="color:var(--cyan)">🧠 USTA · CLAUDE
       <span class="kek" id="ustaDurum"></span></div>
     <div class="kgovde">
+      <!-- GIZLILIK: uzak usta kullanildiginda DEGISEN KOD disari cikar. Kullanici bunu
+           belgede degil, kullandigi ANDA gormeli. Fark da kaynak koddur - "kod makineden
+           cikmaz" ifadesi yalnizca YEREL usta icin dogrudur. -->
+      <div class="gizNot" id="gizNot" title="Ayrıntı: apprentice.config.json → gizlilik">
+        🔒 Uzak usta: <b>değişen kod</b> (sınırlı fark) bu modele gönderilir.
+        <span id="gizAyrinti">tam dosya içeriği kapalı · bilinen sırlar maskeli</span>
+      </div>
       <div class="ayarlar">
         <select id="uCli" data-uzman><option value="claude">claude</option><option value="ozel">özel CLI</option></select>
         <select id="uModel" data-uzman>
@@ -1408,6 +1423,17 @@ async function kuyrukCiz(){
 const OLC_AD={code_kampanya:"CODE",zorluk_kampanya:"ZORLUK"};
 function _oran(g){const p=String(g||"").split("/");
   return (p.length===2&&+p[1])?(+p[0]/+p[1]):null}
+/* Gizlilik notu GERCEK ayardan yazilir - sabit metin yazip ayar degisince yalan soylemeyelim. */
+async function gizlilikCiz(){
+  try{
+    const d=await(await fetch("/api/gizlilik")).json();
+    const el=$("#gizAyrinti"); if(!el)return;
+    el.textContent=(d.tam_icerik?"TAM DOSYA İÇERİĞİ AÇIK":"tam dosya içeriği kapalı")+
+      " · fark sınırı "+(d.fark_siniri||0)+" karakter"+
+      (d.gizli_maskele?" · bilinen sırlar maskeli":" · MASKELEME KAPALI");
+    el.style.color=(d.tam_icerik||!d.gizli_maskele)?"var(--sari)":"";
+  }catch(e){}
+}
 async function olcumCiz(){
   try{
     const d=await(await fetch("/api/olcum")).json();
@@ -2235,7 +2261,7 @@ if(_byb) _byb.onclick=async()=>{
   tost("sunucu ayağa kalkmadı — paneli kapatıp aç");
 };
 isleriCek(); olaylariCek(); daktiloAdim(); ustaChatCek(); modelleriYukle(); kokGoster();
-kuyrukCiz(); olcumCiz();
+kuyrukCiz(); olcumCiz(); gizlilikCiz();
 kapsamIpucu();
 </script>
 </body>

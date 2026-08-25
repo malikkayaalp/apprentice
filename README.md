@@ -4,9 +4,20 @@
 
 A local coding model (Ollama, Qwen3-Coder-Next) does the work: it writes files, calls tools, runs
 tests and repairs its own errors. A frontier model — the one already in your IDE (Cursor, Claude
-Code, VS Code) — supervises: it writes the task and the **acceptance criteria**, reads the raw
-measurements that come back, and decides when the work is done. Your code never leaves the machine
-and the worker burns no API tokens; the supervisor only ever sees summaries and measurements.
+Code, VS Code) — supervises: it writes the task and the **acceptance criteria**, reads what came
+back, and decides when the work is done. The worker burns no API tokens: the whole
+write-verify-repair loop runs locally.
+
+**What leaves the machine — stated precisely.** The worker never sends anything anywhere. The
+*supervisor* is a different matter: if you supervise with a **remote** model (Claude, GPT, Gemini
+in your IDE), then the **changed code is sent to that model** — by default a size-limited **diff**
+of what the apprentice wrote, plus counts and verifier output. A diff is still source code, so we
+do not claim "your code never leaves the machine": that is only true when you supervise with a
+**local** model. Full file contents are **off by default** and only sent if you turn them on
+explicitly (`"gizlilik": {"tam_icerik": true}`). Known secret formats (API keys, tokens, private
+keys, password assignments, connection strings) are redacted before sending — pattern-based, so
+treat it as a safety net, not a guarantee. Every report states what was sent in its `gizlilik`
+field, so you never have to guess.
 
 *Apprentice* is **Çırak** in Turkish. The master watches, the apprentice works.
 
@@ -110,8 +121,19 @@ Unity support is a separate, optional repo: [apprentice-unity](https://github.co
 
 Yerel bir kodlama modeli (Ollama, Qwen3-Coder-Next) işi yapar: dosya yazar, araç çağırır,
 test koşar, hatayı düzeltir. Büyük bir model (IDE'nizdeki Claude/GPT/Gemini ya da Claude Code)
-denetler: görevi kabul kriterleriyle verir, dönen ölçümü yorumlar, ne zaman durulacağına karar
-verir. Kod dışarı çıkmaz, kota yoktur; denetçiye yalnızca özetler ve ölçümler gider.
+denetler: görevi kabul kriterleriyle verir, döneni yorumlar, ne zaman durulacağına karar verir.
+Çırak tarafında kota yoktur — yaz/doğrula/onar döngüsünün tamamı yerelde koşar.
+
+**Makineden ne çıkar — açıkça.** Çırak hiçbir şeyi hiçbir yere göndermez. **Denetçi** ayrı bir
+konudur: **uzak** bir modelle denetliyorsanız (IDE'nizdeki Claude/GPT/Gemini), **değişen kod o
+modele gider** — varsayılan olarak çırağın yazdığının boyutu sınırlanmış **farkı**, artı sayımlar
+ve doğrulayıcı çıktısı. **Fark da kaynak koddur**, bu yüzden "kod makineden çıkmaz" demiyoruz: bu
+ifade yalnızca **yerel** bir denetçi kullandığınızda doğrudur. Dosyaların tam içeriği
+**varsayılan olarak kapalıdır**, ancak açıkça açarsanız gider
+(`"gizlilik": {"tam_icerik": true}`). Bilinen sır biçimleri (API anahtarı, jeton, özel anahtar,
+parola ataması, bağlantı dizesi) gönderilmeden önce maskelenir — desen tabanlıdır, yani emniyet
+ağı sayın, garanti değil. Her rapor `gizlilik` alanında ne gönderdiğini yazar; tahmin etmeniz
+gerekmez.
 
 Türkçede *Çırak*. Usta bakar, çırak yapar.
 

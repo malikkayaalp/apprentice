@@ -22,6 +22,14 @@
     "_olcum_ctx": "65536 -> 131072 olculdu (2026-08-24, kisa yol: 50k/100k tok prompt + 30 tok uretim + parola geri cagirma): uretim 26.4 vs 26.6 tok/s (fark yok), prefill 599 vs 570 tok/s (-%5), VRAM 14.9 GB AYNI, 100k derinlikte parola hatirlandi. Yeni Ollama pencere asimini SESSIZCE KIRPMIYOR, 400 hatasi donduruyor - eski uyari bayatladi.",
     "_olcum_batch": "16.6k tokenlik promptla: 512=189 t/s, 1024=320, 2048=520, 4096=730 (+%285). VRAM harcar - kucuk kartta sigmayabilir, o yuzden ilk calistirmada olculur. DIKKAT: kisa promptla olcum yaniltir."
   },
+  "gizlilik": {
+    "_not": "UZAK usta modeli kullanildiginda DEGISEN KOD o modele gonderilir. Fark da kaynak koddur; 'kod makineden cikmaz' KOSULSUZ dogru DEGILDIR. Yerel usta kullaniliyorsa veri makineden cikmaz.",
+    "tam_icerik": false,
+    "_not_tam_icerik": "true yapmak dosyalarin TAM son icerigini ustaya gonderir. Varsayilan false: yalnizca sinirli fark gider.",
+    "fark_siniri": 4000,
+    "gizli_maskele": true,
+    "_not_maskele": "Bilinen anahtar bicimlerini (sk-, ghp_, AKIA, ozel anahtar, parola atamasi, baglanti dizesi) maskeler. GARANTI DEGIL - desen tabanlidir. Sirri olan dosyayi hic gondermemek her zaman daha guvenlidir."
+  },
   "sampling": {
     "temperature": 0.0,
     "think": false,

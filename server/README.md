@@ -32,7 +32,8 @@ Dönüş:
 
 ```json
 {
-  "yazilan_dosyalar": [{"yol": "app.py", "yeni": true, "eklendi": 41, "silindi": 0, "satir": 41, "icerik": "dosyanın son hali (12k karaktere kadar)"}],
+  "yazilan_dosyalar": [{"yol": "app.py", "yeni": true, "eklendi": 41, "silindi": 0, "satir": 41, "fark": "birleşik fark, sınırlı ve maskeli", "fark_kirpildi": false}],
+  "gizlilik": {"gonderilen": "yalniz_fark", "fark_siniri": 4000, "maskeleme": true, "not": "Fark da KAYNAK KODDUR…"},
   "derleme_durumu": "derlendi | derleme_hatasi | calistirilamadi | zaman_asimi",
   "hatalar": ["...doğrulayıcı / çalışma zamanı / altyapı..."],
   "tur_sayisi": 1,
@@ -68,7 +69,23 @@ Kurallar:
 
 Tur sürerken sunucu her olay için `notifications/progress` (istek `_meta.progressToken` taşıyorsa) ve
 `notifications/message` (log) gönderir: "arac: write_file app.py", "yazdi: app.py (88 satir)", "run_tests -> …", "isci ozeti: …". Cursor ve Claude Code bunları araç kutusunda gösterir; dönüşteki
-`yazilan_dosyalar[].icerik` ise yazılan dosyanın son halidir.
+`yazilan_dosyalar[].fark` ise dosyanın **ne değiştiğini** gösteren sınırlı birleşik farktır.
+
+### Gizlilik: rapora ne giriyor
+
+Bu rapor uzak bir denetçi modeline gidiyorsa **değişen kod o modele gönderilmiş olur**. Fark da
+kaynak koddur; "kod makineden çıkmaz" ifadesi yalnızca **yerel** denetçi için doğrudur.
+
+| alan | varsayılan | not |
+|---|---|---|
+| `fark` | **açık** | dosya başına `gizlilik.fark_siniri` karakter (varsayılan 4000) |
+| `icerik` (tam son hali) | **kapalı** | `"gizlilik": {"tam_icerik": true}` ile açıkça açılır |
+| `maskelenen` | — | maskelenen sır türleri; alan yoksa hiçbir şey yakalanmadı |
+| `gizlilik` | her raporda | ne gönderildiğini raporun kendisi söyler |
+
+Maskeleme desen tabanlıdır (`sk-`, `ghp_`, `AKIA`, özel anahtar blokları, parola atamaları,
+bağlantı dizeleri). Emniyet ağıdır, **garanti değildir** — sır barındıran bir dosyayı hiç
+göndermemek her zaman daha güvenlidir.
 
 ## Örnek çağrı
 

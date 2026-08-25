@@ -771,8 +771,12 @@ Dongu, olcumle secildi: cirak yazar -> usta CALISTIRARAK dogrular -> duzeltme bu
    - dogrulama="derleme": cirak yalnizca yazar, test/shell kapali (donus ~500 token, ~3x hizli).
      Dogrulama tek komutla BITMEYECEKSE (cok vaka/yineleme) "tam" kullan: cirak testi kendisi kosar.
    - Uzun is: bekle=false + worker_status(is_id).
-2) DOGRULA - donen 'ozet' beyandir, kanit degil. 'yazilan_dosyalar[].icerik'i oku ve EN AZ BIR
-   dogrulama komutunu KENDIN calistir (ornek girdilerle tek satirlik calistirma yeterli).
+2) DOGRULA - donen 'ozet' beyandir, kanit degil. 'yazilan_dosyalar[].fark'i oku (NE DEGISTI)
+   ve EN AZ BIR dogrulama komutunu KENDIN calistir (ornek girdilerle tek satirlik yeterli).
+   GIZLILIK: rapor varsayilan olarak dosyalarin TAM icerigini tasimaz, yalnizca sinirli ve
+   maskeli FARK tasir - 'gizlilik' alani ne gonderildigini soyler. Tam icerik gerekiyorsa
+   kullanici apprentice.config.json'da "gizlilik": {"tam_icerik": true} ile ACIKCA acar;
+   sen kendiliginden isteme. Fark yetmiyorsa dosyayi KENDI ortamindan oku.
    Olculdu: '1.00 kalem' hatasi okumayla degil calistirmayla yakalandi.
 3) DUZELT - hata varsa:
    - kucukse (<~20 satir, tek dosya): KENDIN duzelt; cirak turu bekleme, yanlis anlama riski alma.

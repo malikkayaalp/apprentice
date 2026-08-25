@@ -38,6 +38,18 @@ PYTHON = os.environ.get("APPRENTICE_PYTHON") or sys.executable
 DEFAULT_TIMEOUT_S = float(os.environ.get("APPRENTICE_TIMEOUT_S", "1800"))
 
 ICERIK_SINIRI = int(os.environ.get("APPRENTICE_ICERIK_SINIRI", "12000"))   # dosya icerigi/karakter
+
+# GIZLILIK AYARI bir kez okunur (bkz. core/gizlilik.py). Varsayilan: tam dosya icerigi
+# ustaya GITMEZ, yalnizca sinirli ve maskeli FARK gider.
+def _gizlilik_ayari():
+    try:
+        from core.gizlilik import ayar
+        return ayar(config)
+    except Exception:  # noqa: BLE001 - okunamazsa GUVENLI varsayilan
+        return {"tam_icerik": False, "fark_siniri": 4000, "gizli_maskele": True}
+
+
+_GIZLILIK = _gizlilik_ayari()
 # Olcum sayilan araclar: sonuclari ham olarak denetciye tasinir.
 MEASURE_TOOLS = {"play_observe", "read_console", "scene_objects", "inspect_object", "run_tests"}
 
@@ -295,7 +307,8 @@ class Job:
                "olcumler": [], "araclar": [], "play": None,
                "oturum": self.oturum, "is_id": self.id, "ortam": self.ortam,
                "kabul_kriterleri": self.kriterler, "is_klasoru": self.dir,
-               "durum": "bitti" if self.done else "calisiyor"}
+               "durum": "bitti" if self.done else "calisiyor",
+               "gizlilik": _gizlilik_notu()}
         got_result = False
         for e in ev:
             t = e.get("type")
@@ -305,14 +318,14 @@ class Job:
                 rep["olcumler"].append({"arac": e.get("name"), "sonuc": e.get("text", ""),
                                         "sure_s": e.get("sure")})
             elif t == "write":
-                ek, sil = _diff_stat(e.get("before"), e.get("after") or "")
-                icerik = e.get("after") or ""
-                rep["yazilan_dosyalar"].append({
-                    "yol": e.get("path"), "yeni": e.get("before") is None,
-                    "eklendi": ek, "silindi": sil,
-                    "satir": len(icerik.splitlines()),
-                    # Denetci (ve Cursor'daki insan) ne yazildigini arac sonucunda gorsun.
-                    "icerik": icerik if len(icerik) <= ICERIK_SINIRI else icerik[:ICERIK_SINIRI] + chr(10) + "… [kirpildi]"})
+                # GIZLILIK: eskiden dosyanin TAM son icerigi buraya konuyordu ve bu rapor
+                # IDE'deki UZAK modele gidiyordu; belge ise "denetciye yalnizca ozetler ve
+                # olcumler gider" diyordu - iddia yanlisti. Artik varsayilan yalnizca FARK.
+                # Fark da kaynak koddur; bu yuzden sinirli, maskeli ve BELGEDE acikca yazili.
+                from core.gizlilik import dosya_ozeti
+                rep["yazilan_dosyalar"].append(dosya_ozeti(
+                    e.get("path"), e.get("before"), e.get("after") or "",
+                    _GIZLILIK, ICERIK_SINIRI))
             elif t == "assistant":
                 rep["ozet"] = e.get("text", "")
             elif t == "result":
@@ -358,7 +371,10 @@ class Job:
                 m["eklendi"] += d["eklendi"]
                 m["silindi"] += d["silindi"]
                 m["satir"] = d["satir"]
-                m["icerik"] = d["icerik"]        # HATA idi: ilk surum donuyordu, denetci bayat
+                # SON yazimin farki/icerigi kalir (HATA idi: ilk surum donuyordu, denetci bayat)
+                for alan in ("fark", "fark_kirpildi", "icerik", "maskelenen"):
+                    if alan in d:
+                        m[alan] = d[alan]
                 m["yazma"] = m.get("yazma", 1) + 1   # kac kez yazildi (onarim isareti)
             else:
                 merged[d["yol"]] = dict(d)
@@ -505,7 +521,11 @@ def rapor_diskten(jid: str) -> dict | None:
                 if t == "tool":
                     rep["araclar"].append("%s %s" % (e.get("name"), e.get("detail") or ""))
                 elif t == "write":
-                    icerik[e.get("path")] = e.get("after") or ""
+                    p = e.get("path")
+                    if p not in icerik:                 # ILK yazimin oncesi = isin girdisi
+                        icerik[p] = [e.get("before"), e.get("after") or ""]
+                    else:
+                        icerik[p][1] = e.get("after") or ""
                 elif t == "assistant":
                     rep["ozet"] = e.get("text", "")
                 elif t == "result":
@@ -526,10 +546,21 @@ def rapor_diskten(jid: str) -> dict | None:
                     rep["durum"] = "bitti"
     except OSError:
         pass
-    rep["yazilan_dosyalar"] = [{"yol": y, "icerik": ic[:ICERIK_SINIRI],
-                                "satir": ic.count(chr(10)) + 1}
-                               for y, ic in icerik.items()]
+    # Ayni gizlilik kurali: disk raporu da tam icerik DEGIL, sinirli/maskeli fark tasir.
+    # Iki rapor yolunun ayni sonucu vermesi sart - yoksa "hangisine bakiyorum" sorusu dogar.
+    from core.gizlilik import dosya_ozeti
+    rep["yazilan_dosyalar"] = [dosya_ozeti(y, once, sonra, _GIZLILIK, ICERIK_SINIRI)
+                               for y, (once, sonra) in icerik.items()]
+    rep["gizlilik"] = _gizlilik_notu()
     return rep
+
+
+def _gizlilik_notu() -> dict:
+    try:
+        from core.gizlilik import rapor_notu
+        return rapor_notu(_GIZLILIK)
+    except Exception:  # noqa: BLE001
+        return {}
 
 
 def _kopru_url(ortam: str) -> str:

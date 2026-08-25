@@ -131,7 +131,16 @@ def main() -> int:
         with open(os.path.join(home, "jobs", rep["is_id"], "prompt.txt"), encoding="utf-8") as f:
             pt = f.read()
         assert "KABUL KRITERLERI" in pt and "- derlenir" in pt and "- Start'ta log" in pt
-        assert "icerik" in rep["yazilan_dosyalar"][0] and "FakeSmoke" in rep["yazilan_dosyalar"][0]["icerik"]
+        # GIZLILIK SOZLESMESI (denetim bulgusu 13). Bu satir eskiden TAM DOSYA ICERIGININ
+        # ustaya gitmesini DOGRU diye cakiyordu; belge ise "denetciye yalnizca ozetler ve
+        # olcumler gider" diyordu. Iddia yanlisti - test yanlisi sozlesme sanmisti.
+        # Yeni sozlesme: VARSAYILAN olarak tam icerik GITMEZ, sinirli/maskeli FARK gider.
+        d0 = rep["yazilan_dosyalar"][0]
+        assert "icerik" not in d0, "tam dosya icerigi varsayilan olarak ustaya GIDIYOR: %s" % list(d0)
+        assert "FakeSmoke" in d0.get("fark", ""), "fark degisikligi tasimiyor: %s" % d0
+        assert d0["fark"].startswith("---"), "birlesik fark bicimi degil: %s" % d0["fark"][:60]
+        # Rapor NE gonderdigini kendisi soylemeli - kullanici tahmin etmesin
+        assert rep.get("gizlilik", {}).get("gonderilen") == "yalniz_fark", rep.get("gizlilik")
         print("fake/basari: ok  (%s, %.1fs)" % (rep["derleme_durumu"], rep["sure"]))
 
         rep = c.tool("worker_run", {"gorev": "HATA_URET", "ortam": "fake", "kabul_kriterleri": ["x"]},

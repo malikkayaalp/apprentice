@@ -715,6 +715,11 @@ def _akis_imzasi() -> str:
     return "|".join(parcalar)
 
 
+def srv_config():
+    """Sunucu modulunun ayar nesnesi (gizlilik ucu icin)."""
+    return _srv().config
+
+
 def _olcum_gecmisi() -> dict:
     """Arsivdeki kampanya kosulari (yol haritasi 14: benchmark UI).
 
@@ -1068,6 +1073,12 @@ class Istek(BaseHTTPRequestHandler):
                                    _sayi(q.get("surum"))))
             elif yol.path == "/api/akis":
                 return self._olay_akisi()
+            elif yol.path == "/api/gizlilik":
+                try:
+                    from core.gizlilik import ayar
+                    self._gonder(ayar(srv_config()))
+                except Exception as e:  # noqa: BLE001
+                    self._gonder({"hata": str(e)[:120], "tam_icerik": False})
             elif yol.path == "/api/olcum":
                 self._gonder(_olcum_gecmisi())
             elif yol.path == "/api/kuyruk":
