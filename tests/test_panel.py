@@ -1194,12 +1194,172 @@ def karar_rozeti() -> bool:
     return True
 
 
+def tekrar_dene_basarili() -> bool:
+    """TEKRAR DENE'nin BASARILI yolu: yeni is acilir, KANIT goreve eklenir.
+
+    YASANDI (kapsam denetimi): bu ucun yalniz HATALI yolu test ediliyordu
+    (`{"is": "yok"}` -> hata). Yani kullaniciya calistigi HIC denenmemis bir dugme
+    verilmisti. Basarili yol Ollama istemesin diye `ortam="fake"` ile kosulur - duman
+    testi ortami model cagirmaz."""
+    ev = os.path.join(ROOT, ".apprentice_test_home", "tekrar_unit")
+    shutil.rmtree(ev, ignore_errors=True)
+    os.makedirs(os.path.join(ev, "jobs"), exist_ok=True)
+    kok = tempfile.mkdtemp()                 # calisma alani KOKU (panel ayari)
+    alt = os.path.join(kok, "proje")
+    os.makedirs(alt, exist_ok=True)
+    with open(os.path.join(alt, "a.py"), "w", encoding="utf-8") as f:
+        f.write("yeni\n")
+
+    jd = os.path.join(ev, "jobs", "eski_is")
+    os.makedirs(jd, exist_ok=True)
+    with open(os.path.join(jd, "job.json"), "w", encoding="utf-8") as f:
+        json.dump({"id": "eski_is", "durum": "bitti", "ortam": "fake",
+                   "gorev": "a.py dosyasindaki hatayi duzelt",
+                   "kabul_kriterleri": ["bolme sifira karsi korunsun"],
+                   "dogrulama": "derleme", "calisma_dizini": alt, "model": "m1",
+                   "yazilabilir": ["a.py"], "canli": False, "harita": False,
+                   "kaynak": "web-panel", "sahip": {"rol": "panel", "pid": os.getpid()}}, f)
+    with open(os.path.join(jd, "events.jsonl"), "w", encoding="utf-8") as f:
+        for e in ({"type": "write", "path": "a.py", "before": "eski\n", "after": "yeni\n"},
+                  {"type": "result", "ok": False, "rounds": 2,
+                   "errors": ["test_bolme: ZeroDivisionError: division by zero"],
+                   "ruff": ["a.py:3:1: F401 os imported but unused"]},
+                  {"type": "duraganlik", "imza_sayisi": 1, "tur": 2},
+                  {"type": "exit", "code": 1}):
+            f.write(json.dumps(e) + "\n")
+
+    port = 8894
+    p = subprocess.Popen([sys.executable, os.path.join(ROOT, "clients", "web", "panel.py"),
+                          "--port", str(port), "--home", ev],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, cwd=ROOT,
+                         creationflags=0x08000000 if os.name == "nt" else 0)
+
+    def istek(u, govde=None):
+        r = urllib.request.Request("http://127.0.0.1:%d%s" % (port, u),
+                                   data=json.dumps(govde).encode() if govde is not None else None,
+                                   headers={"X-Apprentice": "panel",
+                                            "Content-Type": "application/json"})
+        return json.load(urllib.request.urlopen(r, timeout=60))
+
+    try:
+        for _ in range(120):
+            time.sleep(0.1)
+            try:
+                istek("/api/hazir")
+                break
+            except Exception:
+                pass
+        istek("/api/kok", {"yol": kok})          # calisma alanini kur
+
+        r = istek("/api/tekrar", {"is": "eski_is"})
+        assert not r.get("hata"), "tekrar basarisiz: %s" % r
+        yeni_id = r.get("id") or r.get("is_id")
+        assert yeni_id and yeni_id != "eski_is", r
+        assert r.get("onceki_is") == "eski_is", "yeni is eskisine baglanmamis: %s" % r
+
+        # YENI is kaydi: gorev + KANIT icermeli
+        for _ in range(60):
+            time.sleep(0.1)
+            yol = os.path.join(ev, "jobs", yeni_id, "job.json")
+            if os.path.isfile(yol):
+                break
+        with open(os.path.join(ev, "jobs", yeni_id, "job.json"), encoding="utf-8") as f:
+            yeni = json.load(f)
+        g = yeni.get("gorev") or ""
+        assert "a.py dosyasindaki hatayi duzelt" in g, "asil gorev kaybolmus"
+        assert "ONCEKI DENEME BASARISIZ" in g, "kanit basligi yok"
+        assert "ZeroDivisionError" in g, "SON HATA goreve eklenmemis"
+        assert "read_file" in g, "okuma yonergesi yok"
+        # ayarlar TASINMALI - yoksa tekrar baska kosullarda kosar ve kiyas bozulur
+        assert yeni.get("ortam") == "fake" and yeni.get("dogrulama") == "derleme", yeni
+        assert yeni.get("yazilabilir") == ["a.py"], yeni
+        assert yeni.get("model") == "m1", yeni
+        assert os.path.realpath(yeni.get("calisma_dizini") or "") == os.path.realpath(alt), yeni
+        assert (yeni.get("baslik") or "").startswith("tekrar:"), yeni
+
+        # calisma dizini calisma alani DISINDA ise tekrar REDDEDILMELI (uydurma yapilmaz)
+        jd2 = os.path.join(ev, "jobs", "disarda")
+        os.makedirs(jd2, exist_ok=True)
+        with open(os.path.join(jd2, "job.json"), "w", encoding="utf-8") as f:
+            json.dump({"id": "disarda", "durum": "bitti", "ortam": "fake", "gorev": "x",
+                       "calisma_dizini": tempfile.mkdtemp()}, f)
+        with open(os.path.join(jd2, "events.jsonl"), "w", encoding="utf-8") as f:
+            f.write(json.dumps({"type": "result", "ok": False, "errors": ["x"], "rounds": 0}) + "\n")
+        d = istek("/api/tekrar", {"is": "disarda"})
+        assert d.get("hata"), "calisma alani disindaki is icin tekrar reddedilmedi: %s" % d
+        print("tekrar dene: ok (yeni is acildi, kanit eklendi, ayarlar tasindi, kacis reddedildi)")
+        return True
+    finally:
+        p.terminate()
+        shutil.rmtree(ev, ignore_errors=True)
+
+
+def inceleme_ekrani() -> bool:
+    """INCELEME EKRANI gercekten dogru seyi ciziyor mu? (Node'da kosturulur.)
+
+    YASANDI (kapsam denetimi): `incelemeCiz` kullanicinin isten sonra GORDUGU tek ekran
+    ama hicbir test onu CALISTIRMIYORDU - yalniz JS sozdizimi ve id butunlugu vardi.
+    Ikisi de "dogru seyi ciziyor mu" sorusunu cevaplamaz.
+
+    En kritik madde: dosya yollari MODELDEN gelir. Kacirilmazsa cirak, yazdigi dosyanin
+    ADIYLA panele etiket sokabilir."""
+    node = shutil.which("node")
+    if not node:
+        print("inceleme ekrani: node yok, atlandi")
+        return True
+    with open(SAYFA, encoding="utf-8") as f:
+        html = f.read()
+    js = "\n".join(re.findall(r"<script>(.*?)</script>", html, re.S))
+
+    def kes(bas, son):
+        i = js.index(bas)
+        return js[i:js.index(son, i)]
+
+    parcalar = [
+        kes("function kacir(", "function renklendir("),        # kacir + yardimcilari
+        kes("function ozniteligeKacir(", "/* KOD BLOGU"),
+        kes("const DOG_IM", "/* KARAR DUGMELERI"),             # incelemeCiz
+        kes("function kararRozetMetni(", "function kararCiz("),
+    ]
+    with open(os.path.join(ROOT, "tests", "js", "inceleme_ekrani.js"), encoding="utf-8") as f:
+        surus = f.read()
+
+    dom = """
+const _o = {};
+function _el(id){ if(!_o[id]) _o[id] = {id:id, innerHTML:"", textContent:"", value:"",
+  title:"", className:"", style:{}, dataset:{},
+  classList:{add(){},remove(){},toggle(){},contains(){return false}},
+  appendChild(){}, closest(){return null}}; return _o[id]; }
+function $(q){ return _el(String(q).replace("#","")); }
+function tost(){}
+function kararCiz(){}                       // ayri testi var
+let seciliIs = "is1", incelemeImza = "";
+function incelemeCek(){}
+const document = { addEventListener(){}, createElement(){ return {style:{}, classList:{add(){}},
+  appendChild(){}, set textContent(v){}, get textContent(){return ""} } } };
+"""
+    kod = dom + "\n" + "\n".join(parcalar) + "\n" + surus
+    with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as f:
+        f.write(kod)
+        yol = f.name
+    try:
+        r = subprocess.run([node, yol], capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=90,
+                           creationflags=0x08000000 if os.name == "nt" else 0)
+        assert "INCELEME-EKRANI-OK" in (r.stdout or ""), \
+            "INCELEME EKRANI SOZLESMESI KALDI:\n%s" % ((r.stderr or r.stdout or "")[:900])
+    finally:
+        os.unlink(yol)
+    print("inceleme ekrani: ok (9 sozlesme maddesi, kacis denetimi dahil)")
+    return True
+
+
 def main() -> int:
     ok = (js_sozdizimi() and metin_isleyicileri() and kaynak_denetimi() and id_butunlugu() and uc_sozlesmesi() and ust_bar_gorunur() and yerlesim_butun() and dizilimler_butun()
           and yerlesim_motoru() and sunucu_uclari() and calisma_dizini_kurallari() and sohbet_uclari()
           and goruntuleyici_sayfasi() and fark_gorunumu()
           and animasyon_tanimlari() and model_kapsulu()
-          and vurgulayici_sozlesmesi() and sahiplik_kurali() and karar_uclari() and bayat_surec_uyarisi() and karar_rozeti())
+          and vurgulayici_sozlesmesi() and sahiplik_kurali() and karar_uclari() and bayat_surec_uyarisi() and karar_rozeti() and tekrar_dene_basarili() and inceleme_ekrani())
     print("SONUC:", "GECTI" if ok else "KALDI")
     return 0 if ok else 1
 

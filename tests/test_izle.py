@@ -3,7 +3,7 @@
     python tests/test_izle.py
 """
 from __future__ import annotations
-import json, os, shutil, subprocess, sys, time
+import json, os, shutil, subprocess, sys, tempfile, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -105,7 +105,28 @@ def main() -> int:
     assert k and k["etiket"] == "hata" and "F821" in k["metin"], k
     k = izle.kanit_coz(json.dumps({"error": "yazma izni yok: b.py"}))
     assert k and k["sayac"] == "izin_red"
-    print("olay satirlari + kanit ayristirici: ok")
+    # RUFF ALANI LISTE'dir (code_runner: ruff_rapor[:12] or None). Eski/bozuk kayitta
+    # DIZGE gelebilir; ozet onu harf harf gezerse "ruff: t", "ruff: e"... diye cop
+    # satirlar dokulur (yasandi: IS OZETI panosunda gorundu). Koruma testsizdi.
+    # GERCEK YOLDAN sinanir: is klasoru kurulur, IsDeposu.tazele() cagrilir. Mantigi
+    # testte KOPYALAMAK hicbir sey olcmez - test kendi kendini dogrular.
+    for ham, beklenen in ((["a.py:1:1: F401 x"], ["ruff: a.py:1:1: F401 x"]),
+                          ("temiz", ["ruff: temiz"]),          # DIZGE: TEK satir olmali
+                          (None, []), ([], [])):
+        ev2 = tempfile.mkdtemp()
+        jid = "ruffis"
+        jd2 = os.path.join(ev2, "jobs", jid)
+        os.makedirs(jd2, exist_ok=True)
+        with open(os.path.join(jd2, "job.json"), "w", encoding="utf-8") as f:
+            json.dump({"id": jid, "ortam": "code"}, f)
+        with open(os.path.join(jd2, "events.jsonl"), "w", encoding="utf-8") as f:
+            f.write(json.dumps({"type": "result", "ok": True, "errors": [],
+                                "rounds": 0, "ruff": ham}) + "\n")
+        d2 = izle.IsDeposu(ev2)
+        d2.tazele(jid)
+        uy = (d2.durumlar.get(jid) or {}).get("uyarilar") or []
+        assert uy == beklenen, "ruff=%r -> %r (beklenen %r)" % (ham, uy, beklenen)
+    print("olay satirlari + kanit ayristirici + ruff tip korumasi: ok")
 
     # kod akisa girer: write olayi basli blok + kod satirlari uretir
     satirlar = izle.olay_satirlari({"type": "write", "path": "olcu.py",
