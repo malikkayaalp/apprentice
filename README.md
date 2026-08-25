@@ -56,8 +56,23 @@ write*, but **what did it change** between repair rounds:
 Add the supervisor rule to your project (`python kur.py --kural <project>`), then simply describe the
 task in your IDE chat. The frontier model writes concrete criteria, calls `worker_run`, the local
 model writes and tests the code, and the frontier model verifies the result against the raw
-measurements. You never type a path: the worker is confined to the workspace root your IDE reports
+measurements. You never type a path: file tools are confined to the workspace root your IDE reports
 over MCP `roots`.
+
+**Review, decide, undo.** Every job ends in a **ReviewSummary** — a stable projection the panel
+reads instead of the raw event schema: what changed, what the verifier actually said, which
+acceptance criteria were checked, and whether anything is still running. From there you
+**ACCEPT** or **REJECT**, or hit **UNDO**. Undo shows a *plan* before it touches anything and
+obeys three rules: files you had already modified before the job are never touched, files changed
+*after* the job ended are never touched (that's your work, not the apprentice's), and it restores
+file by file — never `git reset --hard`. If the workspace isn't a git repo *and* a shell command
+ran, undo refuses and says why rather than guessing.
+
+**Confinement, stated honestly.** `read_file`/`write_file` are jailed by path resolution.
+`run_shell` runs a real OS shell, so it is screened by a command guard (absolute paths, `..`,
+drive-relative, UNC and `~` are rejected) — a **guard, not a sandbox**: an interpreter that builds
+a path at runtime can still get around it. That is why shell tools are off by default, and why the
+git snapshot (not the event journal) is the primary undo path when they are on.
 
 Tools, return schema and rules: [server/README.md](server/README.md).
 Unity support is a separate, optional repo: [apprentice-unity](https://github.com/malikkayaalp/apprentice-unity).
@@ -123,6 +138,43 @@ USTA bölümü Claude Code CLI'yı kullanır. Kod blokları açılıp kapanır v
 kendi kopyala düğmesi vardır. İstersen sohbet bağlamını göreve taşıyabilirsin (varsayılan kapalı).
 
 Elle açmak: `python panel_ac.py` — ya da yalnız sunucu: `python clients/web/panel.py --port 8788`
+
+## İnceleme, karar ve geri alma
+
+Denetlemek "kodu okumak" değildir; **karar vermektir**. Panelin İNCELEME ekranı her işin sonunda
+tek bir özet gösterir: ne değişti, doğrulayıcı gerçekte ne dedi, hangi kabul kriteri **koşularak**
+denetlendi, iş hâlâ çalışıyor mu.
+
+**Sözleşme.** Ekran olay şemasını bilmez; arada `ReviewSummary` adlı sabit bir izdüşüm vardır
+(`core/inceleme.py`). Çalışma zamanı olay ekleyebilir, alan adı değiştirebilir — panel kırılmaz.
+Kararlar olay günlüğüne **yazılmaz**: tek-yazar kuralı gereği `events.jsonl`'a yalnızca işin
+sahibi ekler; kararlar `inceleme.json`'a, kabul denetimleri `kabul.json`'a gider.
+
+**Karar.** İki düğme: **KABUL** ve **REDDET**. Karar rozeti işin üstünde kalır; reddedilen iş
+**TEKRAR DENE** ile aynı görev ve kriterlerle yeniden kuyruğa girer.
+
+**Geri alma.** Önce **plan**, sonra uygulama — plan hiçbir şeyi değiştirmez, ne yapılacağını
+söyler. Üç kural bozulmaz:
+
+- İş **başlamadan** da değişik olan dosyaya dokunulmaz — o senin işin.
+- İş **bittikten sonra** değişen dosyaya dokunulmaz — onu sen düzenlemiş olabilirsin.
+  (Aynı kural iş sonrası oluşturduğun **yeni** dosyayı da korur; git'e `??` göründüğü için
+  silinebilirdi.) Yıkıcı adımın hemen öncesinde son bir kez bakılır: bayat plan uygulanmaz.
+- Dosya **tek tek** geri yazılır; `git reset --hard` / `git clean` kullanılmaz.
+
+Çalışma alanı git deposu değilse **ve** kabuk komutu koştuysa geri alma *reddeder* ve sebebini
+yazar — tahmin etmez.
+
+**Hapis, dürüst haliyle.** `read_file`/`write_file` yol çözümüyle hapistedir. `run_shell` gerçek
+bir işletim sistemi kabuğu çalıştırır; bu yüzden komut metni **korumadan** geçer (mutlak yol,
+`..`, sürücü-göreli, UNC ve `~` reddedilir). Bu bir **koruma, kum havuzu değil**: çalışma anında
+yol üreten bir yorumlayıcı aşabilir. Kabuk araçları bu nedenle varsayılan olarak kapalıdır ve
+açıkken birincil geri alma yolu olay günlüğü değil **git anlık görüntüsüdür**.
+
+**Telemetri.** Hatalar deterministik sınıflandırılır (regex, model değil; "bilinmeyen" meşru bir
+sınıftır) ve kabul kriterleri **koşularak** denetlenir. Bu ikincisi bir ölçüm yalanını düzeltti:
+doğrulayıcı %100 başarı raporlarken **gerçek** başarı %76,9 çıktı — kriterler taşınıyor ama hiç
+denetlenmiyordu.
 
 ## Yapı
 

@@ -486,12 +486,13 @@ def ide_ayarla(ad: str, yol: str, anahtar: str, kurulu_dir: str) -> bool:
         istenen = {"source": "custom",
                    "command": {"path": istenen["command"], "args": istenen["args"],
                                "env": istenen.get("env", {})}}
-    cfg = {}
+    cfg, yorumlu = {}, False
     if os.path.exists(yol):
         try:
             with open(yol, encoding="utf-8") as f:
                 cfg = json.load(f)
         except Exception as e:
+            yorumlu = True     # duz JSON degil: yorum/sondaki virgul var - geri yazarsak GIDER
             # Bu dosyalar JSONC olabilir (yorum satiri). Once yorumlari soyup dene; yine
             # olmazsa DOKUNMA ve kurulumu dusurme (eskiden tek yorum satiri tum kurulumu
             # "EKSIK" yapiyordu - ozet penceresi hic acilmiyordu).
@@ -510,6 +511,21 @@ def ide_ayarla(ad: str, yol: str, anahtar: str, kurulu_dir: str) -> bool:
         return False
     cfg.setdefault(anahtar, {})["apprentice"] = istenen
     os.makedirs(os.path.dirname(yol), exist_ok=True)
+    # YORUMLU DOSYA (JSONC): okuyabiliyoruz ama json.dump duz JSON yazar - kullanicinin
+    # yorumlari ve bicimi SESSIZCE silinir. Bu, AGENTS.md'yi ezmekle ayni sinif hata:
+    # kullanicinin dosyasi bize ait degil. Kurulumu islevsiz birakmamak icin yaziyoruz
+    # ama once YEDEK aliyoruz ve durumu ACIKCA soyluyoruz - sessiz kayip yok.
+    if yorumlu:
+        yedek = yol + ".apprentice-yedek"
+        try:
+            shutil.copyfile(yol, yedek)
+            log(UYARI + "%s: dosyada yorum var; yeniden yazinca yorumlar KORUNAMAZ. "
+                        "Yedek alindi: %s" % (ad, yedek))
+        except OSError as e:
+            log(UYARI + "%s: yorumlu dosyanin yedegi alinamadi (%s) - DOKUNULMADI"
+                % (ad, str(e)[:80]))
+            log(BILGI + "  elle ekle: %s -> \"%s\" altina apprentice girdisi" % (yol, anahtar))
+            return True
     with open(yol, "w", encoding="utf-8", newline="\n") as f:
         json.dump(cfg, f, ensure_ascii=False, indent=2)
     log(OK + "%s: yazildi -> %s  (IDE aciksa MCP listesini yenile)" % (ad, yol))
