@@ -173,6 +173,16 @@ table.olc th:first-child{text-align:left}
 table.olc td{padding:2px 4px;text-align:right;white-space:nowrap}
 table.olc td:first-child{text-align:left;color:var(--soluk)}
 table.olc tr.son td{color:var(--metin)}
+/* BASIT / UZMAN KIPI (yol haritasi 12). Panel gucludur ama ilk acilista yogundur:
+   gorev kutusunun yaninda model, dogrulama, canli, harita, ayrinti... Basit kip bunlari
+   GIZLER, silmez - degerleri yerinde kalir ve gonderilir. Yani kip GORUNURLUK meselesidir,
+   davranis meselesi DEGIL; basit kipte baslatilan is uzman kiptekiyle AYNI isi yapar. */
+body.kipBasit [data-uzman]{display:none !important}
+#kipDugme{padding:4px 10px;border-radius:8px;border:1px solid var(--cizgi2);
+  background:transparent;color:var(--soluk);cursor:pointer;font-size:11px}
+#kipDugme:hover{color:var(--metin);border-color:var(--cizgi)}
+body.kipBasit #kipDugme{color:var(--vurgu2);border-color:var(--cizgi)}
+
 /* ZAMAN CIZGISI (yol haritasi 11) */
 .zcSerit{display:flex;height:11px;border-radius:4px;overflow:hidden;margin:2px 12px 4px;
   background:var(--panel2)}
@@ -434,6 +444,7 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
   <div class="pill">GPU <b id="gpuT">—</b><div class="olcekbar"><i id="gpuBar"></i></div></div>
   <div class="bosluk"></div>
   <div id="fontKontrol">yazı <input type="range" id="fontOlcek" min="0.75" max="1.5" step="0.05" value="1"></div>
+  <button id="kipDugme" title="Basit: yalnız görev kutusu. Uzman: bütün denetimler.">🎚 uzman</button>
   <select id="dizilim" title="duruma göre hazır panel dizilimi"></select>
   <select id="panelEkle"><option value="">➕ panel ekle</option></select>
   <button id="yerlesimKaydet" title="şu anki düzeni kalıcı profilin yap" style="padding:4px 10px;
@@ -476,16 +487,16 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
         <select id="kMod" title="görev: iş koşturur (kriter+doğrulama) · sohbet: düz konuşma">
           <option value="gorev">⚙ görev</option>
           <option value="sohbet">💬 sohbet</option></select>
-        <select id="kModel" title="çırak modeli"><option value="">model: varsayılan</option></select>
-        <select id="kDog" title="doğrulama">
+        <select id="kModel" data-uzman title="çırak modeli"><option value="">model: varsayılan</option></select>
+        <select id="kDog" data-uzman title="doğrulama">
           <option value="derleme">derleme (hızlı)</option>
           <option value="tam">tam (testler)</option></select>
-        <label class="kutucuk"><input type="checkbox" id="kCanli" checked> canlı akış</label>
-        <label class="kutucuk"><input type="checkbox" id="kHarita"> harita</label>
+        <label class="kutucuk" data-uzman><input type="checkbox" id="kCanli" checked> canlı akış</label>
+        <label class="kutucuk" data-uzman><input type="checkbox" id="kHarita"> harita</label>
         <label class="kutucuk" id="kSohbetEtiket" style="display:none"
           title="Sohbet kipinde konustuklarinizin son 6 mesaji goreve BAGLAM olarak eklenir. Kapaliyken görev temiz oturumla başlar (ölçüldü: oturum sürekliliği +%59 token).">
           <input type="checkbox" id="kSohbetEkle"> 💬 sohbeti ekle</label>
-        <details id="kAyrinti"><summary>▸ ayrıntı — nerede çalışsın · neye yazabilsin · nasıl doğrulansın</summary>
+        <details id="kAyrinti" data-uzman><summary>▸ ayrıntı — nerede çalışsın · neye yazabilsin · nasıl doğrulansın</summary>
           <div class="icra" style="flex-direction:column;align-items:stretch;gap:8px">
             <div class="alanSatir">
               <label class="alanEt" title="Çırak hangi klasörde çalışsın? Boş bırakırsan çalışma alanının (📁) kökü — yani projenin kendisi; mevcut dosyaları okuyabilir. Bir ad yazarsan yalnız o alt klasöre hapsolur.">
@@ -555,18 +566,18 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
       <span class="kek" id="ustaDurum"></span></div>
     <div class="kgovde">
       <div class="ayarlar">
-        <select id="uCli"><option value="claude">claude</option><option value="ozel">özel CLI</option></select>
-        <select id="uModel">
+        <select id="uCli" data-uzman><option value="claude">claude</option><option value="ozel">özel CLI</option></select>
+        <select id="uModel" data-uzman>
           <option value="">model: varsayılan</option>
           <option value="claude-fable-5">Fable 5</option>
           <option value="claude-opus-5">Opus 5</option>
           <option value="claude-sonnet-5">Sonnet 5</option>
           <option value="claude-haiku-4-5">Haiku 4.5</option></select>
-        <select id="uEffort">
+        <select id="uEffort" data-uzman>
           <option value="">effort: varsayılan</option>
           <option value="low">low</option><option value="medium">medium</option>
           <option value="high">high</option></select>
-        <label class="kutucuk" title="Claude worker_run/worker_status kullanabilir — çırağı kendisi çalıştırır">
+        <label class="kutucuk" data-uzman title="Claude worker_run/worker_status kullanabilir — çırağı kendisi çalıştırır">
           <input type="checkbox" id="uAraclar"> araç izni</label>
         <input type="text" id="uSablon" placeholder='özel komut: gemini -p {prompt}'
           style="display:none;flex:1;min-width:180px">
@@ -1420,6 +1431,20 @@ async function olcumCiz(){
     $("#olcTablo").innerHTML=h;
   }catch(e){}
 }
+/* BASIT / UZMAN (yol haritasi 12). VARSAYILAN UZMAN: mevcut kullanicinin ekrani
+   degismesin - kip acikca secilir. Secim localStorage'da, makine basina. */
+function kipUygula(kip){
+  document.body.classList.toggle("kipBasit", kip==="basit");
+  const d=$("#kipDugme");
+  if(d){d.textContent = kip==="basit" ? "🎚 basit" : "🎚 uzman";
+        d.title = kip==="basit" ? "Basit kip: yalnız görev kutusu. Tıkla → uzman."
+                                : "Uzman kip: bütün denetimler. Tıkla → basit.";}
+  try{localStorage.setItem("apprentice_kip",kip)}catch(e){}
+}
+kipUygula((()=>{try{return localStorage.getItem("apprentice_kip")||"uzman"}catch(e){return "uzman"}})());
+{const _kd=$("#kipDugme");
+ if(_kd)_kd.onclick=()=>kipUygula(document.body.classList.contains("kipBasit")?"uzman":"basit");}
+
 /* CANLI AKIS (SSE, yol haritasi 15). Sunucu "bir sey degisti" der; veriyi yine mevcut
    cekme yollari getirir. Boylece olay akisindaki kazanilmis yaris duzeltmeleri (ucusta is
    degisirse cevabi at, imlec, dibe kilit) OLDUGU GIBI kalir - yalnizca 2 saniyelik yoklama

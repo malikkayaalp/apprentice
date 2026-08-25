@@ -1535,12 +1535,44 @@ def canli_akis() -> bool:
     return True
 
 
+def basit_uzman_kipi() -> bool:
+    """BASIT/UZMAN kipi (yol haritasi 12): GORUNURLUK meselesi, DAVRANIS degil.
+
+    Panel gucludur ama yogundur: gorev kutusunun yaninda model, dogrulama, canli, harita,
+    ayrinti... Basit kip bunlari GIZLER, SILMEZ. Cakilan sozlesme:
+      1. Gizlenen denetimlerin degerleri YERINDE kalir ve gorev govdesine girer - basit
+         kipte baslatilan is, uzman kiptekiyle AYNI isi yapar.
+      2. Gorev kutusu, gonder ve kuyruk dugmesi ASLA gizlenmez - basit kipin isi budur.
+      3. VARSAYILAN UZMAN: mevcut kullanicinin ekrani kendiliginden degismez."""
+    with open(os.path.join(ROOT, "clients", "web", "panel.html"), encoding="utf-8") as f:
+        h = f.read()
+    assert "body.kipBasit [data-uzman]{display:none" in h, "basit kip kurali yok"
+    assert h.count("data-uzman") >= 9, "uzman denetimleri isaretlenmemis: %d" % h.count("data-uzman")
+
+    # KIP DAVRANISI DEGISTIRMEMELI: gorev govdesi gizlenen alanlari YINE okur.
+    govde = h[h.index("function gorevGovdesi("):]
+    govde = govde[:govde.index("\n}")]
+    for alan in ("#kDog", "#kCanli", "#kHarita", "#kModel", "#kYaz", "#kDizin"):
+        assert alan in govde, "gorev govdesi %s alanini okumuyor - kip davranisi degistirir" % alan
+
+    # Gizlenmemesi gerekenler
+    for id_ in ('id="kGorev"', 'id="kGonder"', 'id="kKuyruk"'):
+        i = h.index(id_)
+        etiket = h[max(0, i - 200):i + 60]
+        assert "data-uzman" not in etiket.split(">")[-2] if ">" in etiket else True, id_
+
+    # Varsayilan UZMAN olmali
+    assert 'localStorage.getItem("apprentice_kip")||"uzman"' in h, "varsayilan uzman degil"
+    print("basit/uzman kipi: ok (gorunurluk degisir, davranis degismez)")
+    return True
+
+
 def main() -> int:
     ok = (js_sozdizimi() and metin_isleyicileri() and kaynak_denetimi() and id_butunlugu() and uc_sozlesmesi() and ust_bar_gorunur() and yerlesim_butun() and dizilimler_butun()
           and yerlesim_motoru() and sunucu_uclari() and calisma_dizini_kurallari() and sohbet_uclari()
           and goruntuleyici_sayfasi() and fark_gorunumu()
           and animasyon_tanimlari() and model_kapsulu()
-          and vurgulayici_sozlesmesi() and sahiplik_kurali() and karar_uclari() and bayat_surec_uyarisi() and karar_rozeti() and tekrar_dene_basarili() and inceleme_ekrani() and ollama_adresi() and kuyruk_uclari() and canli_akis())
+          and vurgulayici_sozlesmesi() and sahiplik_kurali() and karar_uclari() and bayat_surec_uyarisi() and karar_rozeti() and tekrar_dene_basarili() and inceleme_ekrani() and ollama_adresi() and kuyruk_uclari() and canli_akis() and basit_uzman_kipi())
     print("SONUC:", "GECTI" if ok else "KALDI")
     return 0 if ok else 1
 
