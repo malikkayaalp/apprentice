@@ -220,6 +220,11 @@ def inceleme(jobs_dir: str, jid: str) -> dict:
         "model": kayit.get("model") or "",
         "calisma_dizini": kayit.get("calisma_dizini") or "",
         "yazma_kapsami": kapsam,
+        # ZEMIN: is HANGI git zeminine yazildi. Anlik goruntuden gelir (is baslarken
+        # cekilmisti), "su an hangi daldayiz"dan degerli - dal sonradan degismis olabilir.
+        "zemin": {"git": (kayit.get("anlik") or {}).get("yontem") == "git",
+                  "dal": (kayit.get("anlik") or {}).get("dal") or "",
+                  "basta_kirli": len((kayit.get("anlik") or {}).get("kirli") or [])},
         "sahiplik": sahiplik,
         "degisen_dosyalar": degisen,
         "dogrulama": dogrulama,

@@ -67,9 +67,26 @@ def anlik(workdir: str) -> dict:
     if not git_deposu_mu(workdir):
         return {"yontem": "yok", "sebep": "calisma alani git deposu degil"}
     r = _git(workdir, "rev-parse", "HEAD")
+    dl = _git(workdir, "rev-parse", "--abbrev-ref", "HEAD")
     return {"yontem": "git",
             "head": (r.stdout or "").strip() if r and r.returncode == 0 else "",
+            # DAL da kaydedilir: isin hangi ZEMINE yazildigini soyler. "Su an hangi
+            # daldayiz"dan degerlidir - kod o dala yazilmistir, sonra dal degisebilir.
+            "dal": (dl.stdout or "").strip() if dl and dl.returncode == 0 else "",
             "kirli": sorted(_kirli(workdir))}     # BASLARKEN zaten kirli olanlar: dokunulmaz
+
+
+def zemin(workdir: str) -> dict:
+    """Calisma alaninin SU ANKI git zemini: hangi dal, worktree temiz mi.
+    Ise baslamadan once gorunur olmali - cirak bu zemine yazacak."""
+    if not workdir or not os.path.isdir(workdir) or not git_deposu_mu(workdir):
+        return {"git": False}
+    dl = _git(workdir, "rev-parse", "--abbrev-ref", "HEAD")
+    kirli = _kirli(workdir)
+    return {"git": True,
+            "dal": (dl.stdout or "").strip() if dl and dl.returncode == 0 else "",
+            "kirli_sayisi": len(kirli),
+            "temiz": not kirli}
 
 
 def _guvenli(workdir: str, yol: str) -> str | None:

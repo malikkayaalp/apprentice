@@ -790,7 +790,15 @@ class Istek(BaseHTTPRequestHandler):
             elif yol.path == "/api/usta_cevap":
                 self._gonder(_usta_cevap(q.get("id", "")))
             elif yol.path == "/api/kok":
-                self._gonder({"kok": AYAR.get("kok", HOME)})
+                # ZEMIN de doner: cirak hangi dala yazacak, worktree temiz mi.
+                # Ise BASLAMADAN once gorunmeli (guvenlik yuzeyi, konfor degil).
+                kok = AYAR.get("kok", HOME)
+                try:
+                    from core.geri_al import zemin
+                    z = zemin(kok)
+                except Exception:  # noqa: BLE001
+                    z = {"git": False}
+                self._gonder({"kok": kok, "zemin": z})
             elif yol.path == "/api/tani":
                 # ortam tanisi: kullanici panelden de "neden calismiyor" cevabini gorsun
                 try:

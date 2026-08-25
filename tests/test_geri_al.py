@@ -19,7 +19,7 @@ try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except Exception:
     pass
-from core.geri_al import anlik, plan, uygula  # noqa: E402
+from core.geri_al import anlik, plan, uygula, zemin  # noqa: E402
 
 PZ = 0x08000000 if os.name == "nt" else 0
 
@@ -153,8 +153,32 @@ def guvenlik() -> bool:
     return True
 
 
+def zemin_bilgisi() -> bool:
+    """Cirak HANGI ZEMINE yazacak: dal + worktree temiz mi. Git deposu degilse
+    {"git": False} doner - bos/uydurma bilgi gosterilmez."""
+    if not shutil.which("git"):
+        print("zemin: git yok, atlandi")
+        return True
+    wd = tempfile.mkdtemp()
+    assert zemin(wd) == {"git": False}, "git olmayan klasore dal uyduruldu"
+    _git(wd, "init", "-q"); _git(wd, "config", "user.email", "t@t")
+    _git(wd, "config", "user.name", "t"); _git(wd, "checkout", "-q", "-b", "ozellik/giris")
+    _yaz(wd, "a.py", "x\n"); _git(wd, "add", "-A"); _git(wd, "commit", "-qm", "ilk")
+    z = zemin(wd)
+    assert z["git"] is True and z["dal"] == "ozellik/giris", z
+    assert z["temiz"] is True and z["kirli_sayisi"] == 0, z
+    _yaz(wd, "a.py", "degisti\n")
+    z2 = zemin(wd)
+    assert z2["temiz"] is False and z2["kirli_sayisi"] == 1, z2
+    # anlik goruntu de dali kaydeder (is HANGI zemine yazildi)
+    assert anlik(wd)["dal"] == "ozellik/giris"
+    assert zemin(os.path.join(wd, "olmayan")) == {"git": False}
+    print("zemin bilgisi: ok (dal + worktree durumu, git yoksa uydurmuyor)")
+    return True
+
+
 def main() -> int:
-    ok = git_yolu() and gunluk_yolu() and guvenlik()
+    ok = git_yolu() and gunluk_yolu() and guvenlik() and zemin_bilgisi()
     print("SONUC:", "GECTI" if ok else "KALDI")
     return 0 if ok else 1
 

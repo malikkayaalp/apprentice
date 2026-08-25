@@ -317,6 +317,8 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
 .kapsamIpucu{font-size:.92em;margin-top:3px;line-height:1.4}
 .kapsamIpucu.dar{color:var(--yesil)}
 .kapsamIpucu.genis{color:var(--sari)}
+#dalDurum{margin-left:6px;font-size:.92em}
+#dalDurum.temiz{color:var(--yesil)} #dalDurum.kirli{color:var(--sari)}
 .uyari{padding:6px 10px;margin-top:6px;border-radius:8px;font:.82em var(--mono);
   background:rgba(224,179,69,.08);border:1px solid rgba(224,179,69,.3);color:var(--sari);
   overflow-wrap:anywhere}
@@ -346,6 +348,7 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
     title="Ollama'nın kaydında olmayan ama RAM tutan artık süreçler — tıkla, temizle">⚠ <b id="oksuzMetin"></b></div>
   <div class="pill" id="kokPill" title="çırağın çalışma alanı — tıkla, klasör seç"
     style="cursor:pointer">📁 <b id="kokAd">—</b></div>
+  <div class="pill" id="dalPill" style="display:none">⑂ <b id="dalAd">—</b><span id="dalDurum"></span></div>
   <div class="pill">VRAM <b id="vramT">—</b><div class="olcekbar"><i id="vramBar"></i></div></div>
   <div class="pill">GPU <b id="gpuT">—</b><div class="olcekbar"><i id="gpuBar"></i></div></div>
   <div class="bosluk"></div>
@@ -1350,6 +1353,14 @@ function incelemeCiz(r){
   h+='<div class="incBaslik">kapsam</div>';
   h+='<div class="incSat"><span class="incEt">çalışma alanı</span><b>'+
      kacir(r.calisma_dizini||"—")+'</b></div>';
+  // ZEMIN: is HANGI dala yazildi (is baslarken cekilmisti; dal sonradan degismis olabilir)
+  const zm=r.zemin||{};
+  if(zm.git){
+    h+='<div class="incSat"><span class="incEt">dal</span><b>'+kacir(zm.dal||"?")+'</b>'+
+       (zm.basta_kirli?'<span class="incKanit">iş başlarken '+zm.basta_kirli+
+                       ' dosya zaten değişikti</span>'
+                     :'<span class="incKanit">iş başlarken worktree temizdi</span>')+'</div>';
+  }
   h+='<div class="incSat"><span class="incEt">yazma kapsamı</span>'+
      (ks.sinirli?'<b>'+kacir((ks.liste||[]).join(" · "))+'</b>'
                :'<b class="incSari">tüm çalışma alanı — sınır yok</b>')+'</div>';
@@ -1662,8 +1673,26 @@ function tost(m){const t=$("#tost");t.textContent=m;t.style.display="block";
 async function kokGoster(){
   try{const r=await(await fetch("/api/kok")).json();
     const k=r.kok||""; $("#kokAd").textContent=k.length>34?"…"+k.slice(-32):k;
-    $("#kokPill").title="çırağın çalışma alanı: "+k+" — tıkla, klasör seç";}catch(e){}
+    $("#kokPill").title="çırağın çalışma alanı: "+k+" — tıkla, klasör seç";
+    /* ZEMIN: cirak hangi dala yazacak, worktree temiz mi. Ise BASLAMADAN gorunmeli.
+       Git deposu degilse kapsul HIC cikmaz - bos bilgi gostermeyiz. Kirli worktree
+       SARI: yanlis degil ama bilinmesi gereken bir sey (geri alma o dosyalara
+       dokunmayacak, senin isin sayilacaklar). */
+    const z=r.zemin||{}, dp=$("#dalPill");
+    if(dp&&z.git){
+      dp.style.display="";
+      $("#dalAd").textContent=(z.dal||"?").slice(0,28);
+      const ds=$("#dalDurum");
+      ds.className=z.temiz?"temiz":"kirli";
+      ds.textContent=z.temiz?"· temiz":("· "+z.kirli_sayisi+" değişiklik");
+      dp.title="çırak bu dala yazacak: "+(z.dal||"?")+
+        (z.temiz?" — worktree temiz"
+               :" — worktree'de senin "+z.kirli_sayisi+" değişikliğin var; geri alma "+
+                "bunlara DOKUNMAZ, senin işin sayılır");
+    }else if(dp){ dp.style.display="none"; }
+  }catch(e){}
 }
+setInterval(kokGoster, 15000);   // dal degisebilir (checkout) - 15 sn'de bir tazele
 const _op=$("#oksuzPill");
 if(_op)_op.onclick=async()=>{
   const r=await(await fetch("/api/oksuz_temizle",{method:"POST",
