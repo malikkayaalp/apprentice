@@ -492,7 +492,14 @@ def _gorev_baslat(veri: dict) -> dict:
     def _bekci():
         try:
             if not job.done:
-                job.kill()
+                # Sonucu OKU ve KAYDET: "durdurmayi denedik" ile "durdu" ayri seylerdir
+                # (denetim bulgusu 7). Durmadiysa bunu bilmemiz gerekir - o isci hala
+                # calisma dizinine yaziyor olabilir.
+                sonuc = job.kill()
+                job.durdurma = dict(sonuc, istendi=time.time(), kim="panel-zaman-asimi")
+                if sonuc.get("durum") == "DURMADI":
+                    print("UYARI: zaman asimi bekcisi isi durduramadi: %s pid=%s (%s)"
+                          % (job.id, sonuc.get("pid"), sonuc.get("sebep")))
         except Exception:
             pass
     threading.Timer(sinir, _bekci).start()
@@ -660,6 +667,29 @@ def _kuyruk_bitti_mi(jid: str) -> bool:
         return False       # erken ilerleyip ikinci isi ayni anda baslatmaktansa bekleriz
 
 
+def _isci_canli_mi(jid: str) -> bool:
+    """Bu isin ISCI SURECI hala calisiyor mu? (denetim bulgusu 6)
+
+    Panel yeniden baslatilinca isci ALT SURECI olmemis olabilir - Windows'ta ebeveynin
+    olmesi cocugu oldurmez. Bunu bilmeden isi "yarim" sayip sıradakini baslatmak, AYNI
+    projeye yazan IKINCI bir isci yaratir.
+
+    Iki isaret: (1) is kaydinin sahibi surec hala yasiyor mu, (2) olay gunlugu SON
+    ANLARDA yazildi mi. Ikincisi daha guclu: sahip olse bile torun surecler yazmaya
+    devam ediyor olabilir."""
+    try:
+        jd = os.path.join(HOME, "jobs", jid)
+        with open(os.path.join(jd, "job.json"), encoding="utf-8") as f:
+            kayit = json.load(f)
+        from core.inceleme import _surec_canli
+        if _surec_canli((kayit.get("sahip") or {}).get("pid")):
+            return True
+        # Olay gunlugu son 30 sn icinde buyuduyse bir sey hala yaziyor demektir.
+        return (time.time() - os.path.getmtime(os.path.join(jd, "events.jsonl"))) < 30
+    except Exception:  # noqa: BLE001 - bilinmiyorsa "canli DEGIL" demeyiz; temkinli davraniriz
+        return False
+
+
 def _kuyruk_kur():
     """Kuyrugu ve politikasini kur. Panel acilirken bir kez cagrilir."""
     global KUYRUK
@@ -669,7 +699,8 @@ def _kuyruk_kur():
         from core.kuyruk import Kuyruk
         from core.politika import Politika, ayar_yukle
         pol = Politika(os.path.join(HOME, "jobs"), ayar_yukle(_srv().config))
-        KUYRUK = Kuyruk(HOME, _gorev_baslat, _kuyruk_bitti_mi, politika=pol)
+        KUYRUK = Kuyruk(HOME, _gorev_baslat, _kuyruk_bitti_mi, politika=pol,
+                        hala_calisiyor=_isci_canli_mi)
         KUYRUK.basla()
     except Exception as e:  # noqa: BLE001 - kuyruk kurulamazsa panel yine calisir
         print("kuyruk kurulamadi: %s" % str(e)[:150])
@@ -1011,6 +1042,30 @@ def _yeniden_baslat() -> dict:
     Neden gerekli: panel PENCERESINI kapatip acmak sunucuyu durdurmaz - kabuk zaten
     calisan sunucuyu yeniden kullanir (hizli acilis icin). Kod guncellenince kullanicinin
     surec oldurmeyi bilmesi gerekiyordu; artik dugme var."""
+    # ONCE CALISAN ISLERI DURDUR (denetim bulgusu 6). Eski surum dogrudan yeni surec acip
+    # os._exit(0) cagiriyordu: isci alt surecleri OLMUYORDU. Yeni panel kuyrugu, eski isi
+    # "yarim" sayip SIRADAKI isi baslatiyor - bu sirada ESKI isci hala AYNI projeye yaziyor.
+    # Iki yazan, tek proje: bozulma kacinilmaz. Once durdururuz, DURDUGUNU DOGRULARIZ.
+    durdurulan, sorunlu = [], []
+    try:
+        for jid, job in list((_srv().JOBS or {}).items()):
+            if job.done:
+                continue
+            sonuc = job.kill()
+            job.durdurma = dict(sonuc, istendi=time.time(), kim="yeniden-baslatma")
+            (durdurulan if sonuc.get("durum") in ("durduruldu", "zaten_bitmis", "surec_yok")
+             else sorunlu).append({"is": jid, **sonuc})
+    except Exception as e:  # noqa: BLE001
+        return {"hata": "calisan isler durdurulamadi: %s" % str(e)[:160]}
+
+    # DURMAYAN VARSA YENIDEN BASLATMAYIZ. Kullaniciya "yeniden baslatildi" deyip arkada iki
+    # yazan birakmaktansa, DURMADI deyip karari ona birakmak dogrudur.
+    if sorunlu:
+        return {"hata": "yeniden baslatma IPTAL: %d is durdurulamadi - eski isci hala "
+                        "projeye yaziyor olabilir." % len(sorunlu),
+                "durdurulamayan": sorunlu,
+                "oneri": "Isi panelden durdurmayi tekrar dene ya da sureci Gorev Yoneticisi'nden "
+                         "kapat; sonra yeniden baslat."}
     try:
         kod = [sys.executable, os.path.abspath(__file__)] + sys.argv[1:]
         bayrak = (0x08000000 | 0x00000008) if os.name == "nt" else 0   # pencere yok + ayrik
@@ -1021,7 +1076,7 @@ def _yeniden_baslat() -> dict:
         return {"hata": "yeni surec baslatilamadi: %s" % str(e)[:160]}
     # yanit gitsin, sonra cik. Yeni surec portu bosalana kadar bekleyip baglanir.
     threading.Timer(0.4, lambda: os._exit(0)).start()
-    return {"durum": "yeniden baslatiliyor"}
+    return {"durum": "yeniden baslatiliyor", "durdurulan_is": len(durdurulan)}
 
 
 def _sayi(deger, varsayilan: int = 0) -> int:

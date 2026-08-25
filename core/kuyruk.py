@@ -34,10 +34,13 @@ def _simdi() -> float:
 
 class Kuyruk:
     def __init__(self, home: str, calistir, bitti_mi, politika=None,
-                 es_zamanli: int = 1, yoklama_s: float = 2.0):
+                 es_zamanli: int = 1, yoklama_s: float = 2.0, hala_calisiyor=None):
         self.yol = os.path.join(home, "kuyruk.json")
         self.calistir = calistir          # (istek) -> {"is_id": ...} | {"hata": ...}
         self.bitti_mi = bitti_mi          # (is_id) -> True/False/None
+        # (is_id) -> True: isin isci sureci HALA CANLI (panel yeniden baslatilmis olabilir).
+        # Verilmezse cokme kurtarma eski (temkinsiz) davranisa duser.
+        self.hala_calisiyor = hala_calisiyor
         self.politika = politika          # (oge, kuyruk) -> "devam" | "dur"
         self.es_zamanli = max(1, int(es_zamanli))
         self.yoklama_s = yoklama_s
@@ -59,12 +62,32 @@ class Kuyruk:
                              "sonraki_no": int(d.get("sonraki_no") or 1)}
         except Exception:      # noqa: BLE001 - bozuk/eksik dosya kuyrugu bosaltir, cokmez
             return
-        # COKME KURTARMA: yarida kalan is YENIDEN KOSTURULMAZ (dosya yazmis olabilir)
+        # COKME KURTARMA. Yarida kalan is YENIDEN KOSTURULMAZ (dosya yazmis olabilir) - ama
+        # once "gercekten yarida mi kaldi" diye BAKARIZ (denetim bulgusu 6).
+        #
+        # NEDEN: ilk surum "kosuyor" olan HER ogeyi kosulsuz "yarim" isaretliyordu. Panel
+        # yeniden baslatildiginda isci ALT SURECI olmemis olabilir (Windows'ta ebeveynin
+        # olmesi cocugu oldurmez). O zaman kuyruk isi yarim sanip SIRADAKINI baslatiyor ve
+        # ESKI isci hala AYNI projeye yaziyor: iki yazan, tek proje.
         for o in self.veri["ogeler"]:
-            if o.get("durum") == "kosuyor":
-                o["durum"] = "yarim"
-                o["sebep"] = "panel kapandi, is yarida kaldi - yeniden kosturulmadi"
+            if o.get("durum") != "kosuyor":
+                continue
+            jid = o.get("is_id") or ""
+            if jid and self.bitti_mi(jid):
+                o["durum"] = "bitti"          # biz yokken bitmis
                 o["bitti_t"] = _simdi()
+                continue
+            if jid and self.hala_calisiyor and self.hala_calisiyor(jid):
+                # SAHIPSIZ ama CANLI: durumu "kosuyor" BIRAKIRIZ. `_sirdaki()` kosan is
+                # varken yeni is baslatmaz - yani ikinci yazan olusmaz. Kullanici panelden
+                # gorur ve karar verir.
+                o["sahipsiz"] = True
+                o["sebep"] = ("panel yeniden baslatildi ama bu isin isci sureci HALA "
+                              "CALISIYOR - kuyruk yeni is baslatmiyor")
+                continue
+            o["durum"] = "yarim"
+            o["sebep"] = "panel kapandi, is yarida kaldi - yeniden kosturulmadi"
+            o["bitti_t"] = _simdi()
 
     def _yaz(self) -> None:
         """ATOMIK yaz: gecici dosya + replace. Yarim JSON birakmak kuyrugu bastan siler."""

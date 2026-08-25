@@ -139,6 +139,10 @@ class Job:
         # SESSIZCE eziyordu; ustelik anlik goruntuden ONCE oldugu icin geri alma da
         # kurtaramiyordu. Bos = ek yok.
         self.ek_dizin = ""
+        # Durdurma ISTEGI ve SONUCU ayri tutulur: "istendi" bir niyet, "durum" bir OLCUM.
+        # Eskiden ikisi ayrilmiyordu ve kullaniciya surec gercekten kapanmadan
+        # "durduruldu" deniyordu (denetim bulgusu 7).
+        self.durdurma: dict = {}
 
     @property
     def events_path(self):
@@ -256,21 +260,63 @@ class Job:
             pass
         self.done = True
 
-    def kill(self):
-        """Isciyi VE torunlarini oldur. Windows'ta proc.kill() yalniz Python'u oldurur;
-        run_shell/run_tests (pytest, 120 s'ye kadar) ve ruff torunlari yasamaya devam edip
-        calisma dizinine yazmayi surdurur - is 'bitti' gorunurken. taskkill /T agaci keser."""
-        if not (self.proc and self.proc.poll() is None):
-            return
+    def kill(self, bekle: float = 5.0) -> dict:
+        """Isciyi VE torunlarini oldur, sonra GERCEKTEN oldugunu DOGRULA.
+
+        Doner: {"durum", "yontem", "sebep", "pid", "sure"}
+          durum: "surec_yok" | "zaten_bitmis" | "durduruldu" | "DURMADI"
+
+        Windows'ta proc.kill() yalniz Python'u oldurur; run_shell/run_tests (pytest, 120 s'ye
+        kadar) ve ruff torunlari yasamaya devam edip calisma dizinine yazmayi surdurur -
+        is "bitti" gorunurken. taskkill /T agaci keser.
+
+        NEDEN DONUS DEGERI VAR (denetim bulgusu 7): eski surum taskkill'in DONUS KODUNU
+        okumadan kosulsuz `return` ediyordu. Komut basarisiz olsa bile (erisim reddedildi,
+        taskkill yok, PID bulunamadi) cagiran taraf "olduruldu" saniyor, gunluge de oyle
+        yaziliyordu. Ustelik surecin gercekten oldugu HIC dogrulanmiyordu. Artik:
+          1. taskkill'in cikis kodu okunur; basarisizsa proc.kill()'e DUSULUR,
+          2. sinirli bir bekleme ile olum DOGRULANIR,
+          3. olmediyse "DURMADI" doner - cagiran taraf yalan soylemez."""
+        t0 = time.time()
+        if not self.proc:
+            return {"durum": "surec_yok", "yontem": "-", "sebep": "surec hic baslatilmadi",
+                    "pid": None, "sure": 0.0}
+        pid = self.proc.pid
+        if self.proc.poll() is not None:
+            return {"durum": "zaten_bitmis", "yontem": "-", "sebep": "", "pid": pid,
+                    "sure": 0.0, "cikis": self.proc.returncode}
+
+        yontem, sebep = "", ""
         if os.name == "nt":
             try:
-                subprocess.run(["taskkill", "/PID", str(self.proc.pid), "/T", "/F"],
-                               capture_output=True, timeout=20,
-                               creationflags=0x08000000)
-                return
-            except Exception:
-                pass                          # taskkill yoksa/basarisizsa duz kill'e dus
-        self.proc.kill()
+                r = subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
+                                   capture_output=True, timeout=20,
+                                   creationflags=0x08000000)
+                if r.returncode == 0:
+                    yontem = "taskkill /T"
+                else:
+                    # 128 = "surec bulunamadi" (bu arada olmus olabilir) - digerleri gercek hata
+                    sebep = ((r.stderr or b"").decode("utf-8", "replace").strip()
+                             or "taskkill cikis %d" % r.returncode)[:160]
+            except Exception as e:  # noqa: BLE001 - taskkill yok / zaman asimi
+                sebep = "taskkill calismadi: %s" % str(e)[:120]
+        if not yontem:
+            try:
+                self.proc.kill()
+                yontem = "proc.kill()" + (" (taskkill sonrasi)" if sebep else "")
+            except Exception as e:  # noqa: BLE001
+                sebep = (sebep + " | " if sebep else "") + "proc.kill(): %s" % str(e)[:100]
+
+        # OLUMU DOGRULA: sinirli bekleme. Soylemeden once BAKARIZ.
+        son = time.time() + max(0.0, bekle)
+        while time.time() < son:
+            if self.proc.poll() is not None:
+                return {"durum": "durduruldu", "yontem": yontem, "sebep": sebep, "pid": pid,
+                        "sure": round(time.time() - t0, 2), "cikis": self.proc.returncode}
+            time.sleep(0.05)
+        return {"durum": "DURMADI", "yontem": yontem, "pid": pid,
+                "sure": round(time.time() - t0, 2),
+                "sebep": (sebep or "surec %.1f sn icinde kapanmadi" % bekle)}
 
     def events(self) -> list:
         out = []
@@ -395,6 +441,27 @@ JOBS: dict[str, Job] = {}
 # istemcinin arac zaman asimi (~2.5 dk) turdan kisa; iptal dinlenmeyince isci ZOMBI
 # olarak devam etti ve ikinci cagriyla ayni dosyaya paralel yazdi.
 REQ_JOBS: dict = {}
+# JOBS sinirsiz buyuyordu (denetim bulgusu 7): sunucu gunlerce ayakta kalabilir ve BITMIS
+# her isin Job nesnesi (olay yolu, surec kaydi, rapor onbellegi) bellekte kaliyordu.
+# BITMEMIS is ASLA dusurulmez - onlar hala izlenmeli.
+JOBS_SINIR = int(os.environ.get("APPRENTICE_JOBS_SINIR", "200"))
+
+
+def _jobs_buda() -> int:
+    """Bitmis en eski isleri dusur; disk kaydi KALIR (rapor_diskten hala okur)."""
+    if len(JOBS) <= JOBS_SINIR:
+        return 0
+    bitmis = [(j.t0, i) for i, j in JOBS.items() if j.done]
+    bitmis.sort()
+    dusecek = min(len(bitmis), len(JOBS) - JOBS_SINIR)
+    for _, i in bitmis[:dusecek]:
+        j = JOBS.pop(i, None)
+        try:                       # surec kaydini da birak: dosya tanitici sizmasin
+            if j is not None and j.proc is not None and j.proc.poll() is not None:
+                j.proc = None
+        except Exception:  # noqa: BLE001
+            pass
+    return dusecek
 
 # Calisma koku (dagitilabilir tasarim: sabit yol YOK). Oncelik:
 #   1. MCP roots: istemci (Cursor, Claude Code, VS Code) acik workspace'ini roots/list ile
@@ -625,6 +692,7 @@ def tool_worker_run(a: dict) -> dict:
               a.get("yazilabilir") or [], bool(a.get("harita", False)),
               bool(a.get("canli", False)))
     JOBS[job.id] = job
+    _jobs_buda()
     rid = getattr(_CUR_REQ, "id", None)
     if rid is not None:
         REQ_JOBS[rid] = job
@@ -664,8 +732,12 @@ def tool_worker_run(a: dict) -> dict:
                               "Uzun turlar icin bekle=false + worker_status kullan.")
         return rep
     if not job.done:
-        job.kill()
-        msg = "zaman asimi (%.0f s): isci durduruldu; olaylar %s" % (limit, job.events_path)
+        sonuc = job.kill()
+        job.durdurma = dict(sonuc, istendi=time.time(), kim="zaman-asimi")
+        # "durduruldu" ANCAK gercekten durduysa denir (denetim bulgusu 7).
+        msg = ("zaman asimi (%.0f s): isci %s; olaylar %s"
+               % (limit, "durduruldu" if sonuc["durum"] in ("durduruldu", "zaten_bitmis")
+                  else "DURDURULAMADI (%s)" % sonuc.get("sebep", ""), job.events_path))
         rep["derleme_durumu"] = "zaman_asimi"
         rep["hatalar"].append(msg)
         # Olay dosyasini kapat ki izleyiciler (clients/web) isi sonsuza kadar "calisiyor" gormesin.
@@ -766,8 +838,15 @@ def tool_worker_status(a: dict) -> dict:
             return r
         return {"hata": "bilinmeyen is_id %r (bu surecte: %s)" % (jid, list(JOBS)[-5:])}
     if a.get("durdur"):
-        job.kill()
+        sonuc = job.kill()
+        job.durdurma = dict(sonuc, istendi=time.time(), kim="worker_status")
     rep = job.report()
+    if job.durdurma:
+        rep["durdurma"] = job.durdurma          # istek DE sonuc DA gorunur olsun
+        if job.durdurma.get("durum") == "DURMADI":
+            rep["hatalar"].append("DURDURMA BASARISIZ: %s (pid %s) - isci hala calisiyor "
+                                  "olabilir ve calisma dizinine yazmayi surdurebilir."
+                                  % (job.durdurma.get("sebep"), job.durdurma.get("pid")))
     job.usta_rapor_isaretle(rep)
     return rep
 
@@ -835,8 +914,17 @@ def handle(req: dict) -> dict | None:
                     f.write(json.dumps({"type": "error", "message": "istemci iptal etti"}) + "\n")
             except Exception:
                 pass
-            job.kill()
-            _log("iptal: is %s olduruldu (istek %s)" % (job.id, p.get("requestId")))
+            sonuc = job.kill()
+            job.durdurma = dict(sonuc, istendi=time.time(), kim="istemci-iptali")
+            try:      # SONUCU da gunluge yaz - "istendi" ile "oldu" ayri sey
+                with open(job.events_path, "a", encoding="utf-8") as f:
+                    f.write(json.dumps({"type": "durdurma", "t": time.time(), **sonuc},
+                                       ensure_ascii=False) + "\n")
+            except Exception:
+                pass
+            _log("iptal: is %s -> %s (%s; istek %s)"
+                 % (job.id, sonuc["durum"], sonuc.get("yontem") or sonuc.get("sebep", ""),
+                    p.get("requestId")))
         return None
     if m == "notifications/initialized":
         roots_iste()
