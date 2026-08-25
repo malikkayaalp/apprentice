@@ -251,7 +251,7 @@ def main() -> int:
     rapor["bitis"] = time.strftime("%Y-%m-%d %H:%M:%S")
     # ARSIVE de yaz: eskiden yalniz .son.json vardi ve her kosu oncekini EZIYORDU.
     # 2026-08-23 temel cizgisi (2416 sn) boyle kaybolmustu; git'ten kurtarildi.
-    from core.olcum import kaydet
+    from core.olcum_arsiv import kaydet
     yollar = kaydet("code_kampanya", rapor)
     print("->", yollar.get("son", yol))
     if yollar.get("arsiv"):

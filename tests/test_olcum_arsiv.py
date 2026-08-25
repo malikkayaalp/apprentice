@@ -1,4 +1,4 @@
-"""OLCUM ARSIVI testi (core/olcum.py).
+"""OLCUM ARSIVI testi (core/olcum_arsiv.py).
 
 YASANDI: kampanyalar sonucu `tests/<ad>.son.json`'a yaziyordu ve her kosu oncekini
 EZIYORDU. 2026-08-23 temel cizgisi (6 gorev, 8 tur, 2416 sn) 2026-08-25 kosusuyla
@@ -16,7 +16,7 @@ try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except Exception:
     pass
-import core.olcum as O  # noqa: E402
+import core.olcum_arsiv as O  # noqa: E402
 
 
 def _temiz_kok(ad: str) -> str:
@@ -102,7 +102,7 @@ def kampanyalar_arsivliyor() -> bool:
     for ad in ("code_kampanya", "zorluk_kampanya"):
         with open(os.path.join(ROOT, "tests", "%s.py" % ad), encoding="utf-8") as f:
             s = f.read()
-        assert "from core.olcum import kaydet" in s, "%s arsive yazmiyor" % ad
+        assert "from core.olcum_arsiv import kaydet" in s, "%s arsive yazmiyor" % ad
         assert 'kaydet("%s"' % ad in s, "%s yanlis adla arsivliyor" % ad
     print("kampanyalar arsivliyor: ok")
     return True

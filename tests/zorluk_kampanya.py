@@ -362,8 +362,8 @@ def main() -> int:
     finally:
         c.close()
 
-    # ARSIVE yaz: her kosu oncekini EZMESIN (bkz. core/olcum.py)
-    from core.olcum import kaydet
+    # ARSIVE yaz: her kosu oncekini EZMESIN (bkz. core/olcum_arsiv.py)
+    from core.olcum_arsiv import kaydet
     yollar = kaydet("zorluk_kampanya", rapor)
     if yollar.get("arsiv"):
         print("-> arsiv:", yollar["arsiv"])

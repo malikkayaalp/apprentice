@@ -109,6 +109,35 @@ ISTEM = ("Write a Python function `lru_cache_get(cache, key)` that implements an
          "lookup with move-to-front behaviour. Include a short docstring. Code only.")
 
 
+def _bellegi_bosalt(haric: str = "") -> list:
+    """Olcumden ONCE bellekteki OTEKI modelleri indir (keep_alive: 0).
+
+    Iki sebep: (1) kusatma bittiginde 56 GB'lik sampiyon 30 dk daha bellekte kalir;
+    yaninda 20 GB'lik yeni model yuklenirse bellek baskisi olusur, (2) baskisiz olculen
+    hiz ile baski altinda olculen hiz AYNI SEY DEGILDIR - kiyas bozulur."""
+    try:
+        d = json.load(urllib.request.urlopen(OLLAMA + "/api/ps", timeout=20))
+    except Exception:  # noqa: BLE001
+        return []
+    bosaltilan = []
+    for m in d.get("models", []):
+        ad = m.get("name", "")
+        if not ad or ad == haric:
+            continue
+        try:
+            istek = urllib.request.Request(
+                OLLAMA + "/api/generate",
+                json.dumps({"model": ad, "keep_alive": 0}).encode(),
+                {"Content-Type": "application/json"})
+            urllib.request.urlopen(istek, timeout=120).read()
+            bosaltilan.append(ad)
+        except Exception:  # noqa: BLE001
+            pass
+    if bosaltilan:
+        time.sleep(3)          # bellek gercekten birakilsin
+    return bosaltilan
+
+
 def hiz_olc(etiket: str, tekrar: int = 2) -> dict:
     """AYNI istem, sabit tohum, temperature 0: uretim hizi (tok/sn).
 
@@ -187,6 +216,9 @@ def main() -> int:
         if etiket not in varolan:
             _log("%s yok - hiz olcumu atlandi" % etiket)
             continue
+        bos = _bellegi_bosalt(haric=etiket)
+        if bos:
+            _log("olcum oncesi bellekten indirildi: %s" % ", ".join(x[:40] for x in bos))
         _log("hiz olcumu: %s" % etiket)
         h = hiz_olc(etiket)
         sonuc["hizlar"].append(h)
