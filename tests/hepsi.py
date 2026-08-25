@@ -18,7 +18,7 @@ except Exception:
 # odagi calmasinlar diye.
 TESTLER = [
     "test_server.py", "test_inceleme.py", "test_geri_al.py", "test_telemetri.py",
-    "test_olcum.py", "test_harita.py", "test_rag.py", "test_code_env.py", "test_tani.py",
+    "test_olcum.py", "test_orkestra.py", "test_harita.py", "test_rag.py", "test_code_env.py", "test_tani.py",
     "test_ozellik.py", "test_senaryo.py", "test_panel.py", "test_izle.py",
     "test_kurulum_gui.py",
 ]
