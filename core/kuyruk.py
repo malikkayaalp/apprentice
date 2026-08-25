@@ -1,0 +1,245 @@
+"""KUYRUK: isleri SIRAYLA kosturur, panelin basinda beklemek gerekmesin.
+
+NEDEN: bugun panel tek is aliyor ve o bitene kadar makine bosta bekliyor - kullanici
+disari cikinca 40 dakikalik GPU bosa gidiyor. Kuyruk, "sirala ve git" demeyi saglar.
+
+SERI, PARALEL DEGIL (olculmus karar): tek Ollama modeli, tek GPU. Ikinci isi ayni anda
+kosturmak bellek baskisi yaratir - num_batch olcumu VRAM'in sinir kaynak oldugunu gosterdi
+(4096 => +%285 prefill AMA VRAM harciyor, kucuk kartta sigmiyor). Iki is ayni anda model
+yuklerse ikisi de yavaslar; toplam is AZALIR. Bu yuzden es zamanlilik = 1.
+`es_zamanli` parametresi var ama varsayilani 1 ve degistirmeden ONCE olculmelidir.
+
+COKME GUVENLIGI: kuyruk diske yazilir. Panel kapanip acilirsa "kosuyor" durumundaki oge
+SESSIZCE YENIDEN KOSTURULMAZ - "yarim" isaretlenir. Sebep: o is calisma alanina dosya
+YAZMIS olabilir; yeniden kosturmak ayni dosyayi ikinci kez ezmek demektir. Karar
+kullanicinin: panelden yeniden sirala ya da at.
+
+TEK YAZAR KURALI KORUNUR: kuyruk kendi dosyasinda (`kuyruk.json`). Is kaydina
+(`events.jsonl`) YAZMAZ - oraya yalnizca isin sahibi yazar.
+
+BAGIMLILIK ENJEKSIYONU: `calistir` ve `bitti_mi` disaridan verilir. Boylece kuyruk mantigi
+panel/Ollama olmadan test edilebilir - is baslatmadan sira, duraklatma, cokme kurtarma ve
+politika kararlari sinanir.
+"""
+from __future__ import annotations
+import json, os, threading, time
+
+SEMA = 1
+DURUMLAR = ("bekliyor", "kosuyor", "bitti", "hata", "iptal", "yarim")
+
+
+def _simdi() -> float:
+    return time.time()
+
+
+class Kuyruk:
+    def __init__(self, home: str, calistir, bitti_mi, politika=None,
+                 es_zamanli: int = 1, yoklama_s: float = 2.0):
+        self.yol = os.path.join(home, "kuyruk.json")
+        self.calistir = calistir          # (istek) -> {"is_id": ...} | {"hata": ...}
+        self.bitti_mi = bitti_mi          # (is_id) -> True/False/None
+        self.politika = politika          # (oge, kuyruk) -> "devam" | "dur"
+        self.es_zamanli = max(1, int(es_zamanli))
+        self.yoklama_s = yoklama_s
+        self.kilit = threading.RLock()
+        self.durdur_bayragi = threading.Event()
+        self._is_parcacigi = None
+        self.veri = {"sema": SEMA, "duraklatildi": False, "ogeler": [], "sonraki_no": 1}
+        self._yukle()
+
+    # ------------------------------------------------------------------ kalicilik
+    def _yukle(self) -> None:
+        try:
+            with open(self.yol, encoding="utf-8") as f:
+                d = json.load(f)
+            if isinstance(d, dict) and isinstance(d.get("ogeler"), list):
+                self.veri = {"sema": SEMA,
+                             "duraklatildi": bool(d.get("duraklatildi")),
+                             "ogeler": [o for o in d["ogeler"] if isinstance(o, dict)],
+                             "sonraki_no": int(d.get("sonraki_no") or 1)}
+        except Exception:      # noqa: BLE001 - bozuk/eksik dosya kuyrugu bosaltir, cokmez
+            return
+        # COKME KURTARMA: yarida kalan is YENIDEN KOSTURULMAZ (dosya yazmis olabilir)
+        for o in self.veri["ogeler"]:
+            if o.get("durum") == "kosuyor":
+                o["durum"] = "yarim"
+                o["sebep"] = "panel kapandi, is yarida kaldi - yeniden kosturulmadi"
+                o["bitti_t"] = _simdi()
+
+    def _yaz(self) -> None:
+        """ATOMIK yaz: gecici dosya + replace. Yarim JSON birakmak kuyrugu bastan siler."""
+        gec = self.yol + ".gecici"
+        try:
+            os.makedirs(os.path.dirname(self.yol) or ".", exist_ok=True)
+            with open(gec, "w", encoding="utf-8", newline="\n") as f:
+                json.dump(self.veri, f, ensure_ascii=False, indent=1)
+            os.replace(gec, self.yol)
+        except OSError:
+            pass
+
+    # ------------------------------------------------------------------ islemler
+    def ekle(self, istek: dict, baslik: str = "") -> dict:
+        with self.kilit:
+            no = self.veri["sonraki_no"]
+            self.veri["sonraki_no"] = no + 1
+            oge = {"no": no, "durum": "bekliyor",
+                   "baslik": (baslik or " ".join(str(istek.get("gorev") or "").split()[:6])[:48]
+                              or "isim yok"),
+                   "istek": istek, "eklendi_t": _simdi(),
+                   "is_id": "", "basladi_t": 0, "bitti_t": 0, "sebep": ""}
+            self.veri["ogeler"].append(oge)
+            self._yaz()
+            return dict(oge)
+
+    def sil(self, no: int) -> dict:
+        """BEKLEYEN ogeyi kuyruktan cikar. KOSAN oge silinmez - once durdurulmali."""
+        with self.kilit:
+            for o in self.veri["ogeler"]:
+                if o.get("no") == no:
+                    if o.get("durum") == "kosuyor":
+                        return {"hata": "bu is KOSUYOR - kuyruktan silinemez"}
+                    o["durum"] = "iptal"
+                    o["bitti_t"] = _simdi()
+                    self._yaz()
+                    return {"ok": True, "no": no}
+        return {"hata": "oge bulunamadi: %s" % no}
+
+    def tasi(self, no: int, yon: int) -> dict:
+        """BEKLEYEN ogeyi sirada yukari/asagi tasi. Kosan/bitmis ogeler yerinde kalir."""
+        with self.kilit:
+            bekleyen = [i for i, o in enumerate(self.veri["ogeler"])
+                        if o.get("durum") == "bekliyor"]
+            yerler = {self.veri["ogeler"][i]["no"]: k for k, i in enumerate(bekleyen)}
+            if no not in yerler:
+                return {"hata": "yalnizca BEKLEYEN oge tasinabilir"}
+            k = yerler[no]
+            h = k + (1 if yon > 0 else -1)
+            if h < 0 or h >= len(bekleyen):
+                return {"ok": True, "no": no}         # ucta: sessizce yerinde kalir
+            i, j = bekleyen[k], bekleyen[h]
+            ogeler = self.veri["ogeler"]
+            ogeler[i], ogeler[j] = ogeler[j], ogeler[i]
+            self._yaz()
+            return {"ok": True, "no": no}
+
+    def duraklat(self, deger: bool = True) -> dict:
+        with self.kilit:
+            self.veri["duraklatildi"] = bool(deger)
+            self._yaz()
+            return {"ok": True, "duraklatildi": self.veri["duraklatildi"]}
+
+    def temizle(self) -> dict:
+        """Bitmis/iptal/hata/yarim ogeleri listeden dusur. Kosan ve bekleyen kalir."""
+        with self.kilit:
+            once = len(self.veri["ogeler"])
+            self.veri["ogeler"] = [o for o in self.veri["ogeler"]
+                                   if o.get("durum") in ("bekliyor", "kosuyor")]
+            self._yaz()
+            return {"ok": True, "silinen": once - len(self.veri["ogeler"])}
+
+    def liste(self) -> dict:
+        with self.kilit:
+            ogeler = [dict(o) for o in self.veri["ogeler"]]
+        sayim = {d: sum(1 for o in ogeler if o.get("durum") == d) for d in DURUMLAR}
+        return {"sema": SEMA, "duraklatildi": self.veri["duraklatildi"],
+                "ogeler": ogeler, "sayim": sayim,
+                "calisiyor": bool(self._is_parcacigi and self._is_parcacigi.is_alive())}
+
+    # ------------------------------------------------------------------ surucu
+    def _sirdaki(self) -> dict | None:
+        with self.kilit:
+            if self.veri["duraklatildi"]:
+                return None
+            if sum(1 for o in self.veri["ogeler"] if o.get("durum") == "kosuyor") >= self.es_zamanli:
+                return None
+            for o in self.veri["ogeler"]:
+                if o.get("durum") == "bekliyor":
+                    return o
+        return None
+
+    def adim(self) -> str:
+        """Kuyrugu BIR adim ilerlet. Doner: ne yapildi ('bosta'|'baslatildi'|'bitti'|...).
+
+        Test edilebilirlik icin ayri: dongu yerine tek adim cagirilarak sira, duraklatma,
+        politika ve hata yollari zamanlamaya bagli olmadan sinanir."""
+        # 1) kosanlar bitti mi?
+        with self.kilit:
+            kosanlar = [o for o in self.veri["ogeler"] if o.get("durum") == "kosuyor"]
+        for o in kosanlar:
+            bitti = self.bitti_mi(o.get("is_id") or "")
+            if bitti:
+                with self.kilit:
+                    o["durum"] = "bitti"
+                    o["bitti_t"] = _simdi()
+                    self._yaz()
+                self._politika_uygula(o)
+                return "bitti"
+        if kosanlar:
+            return "bekleniyor"
+        # 2) sirdakini baslat
+        oge = self._sirdaki()
+        if oge is None:
+            return "bosta"
+        with self.kilit:
+            oge["durum"] = "kosuyor"
+            oge["basladi_t"] = _simdi()
+            self._yaz()
+        try:
+            r = self.calistir(dict(oge["istek"])) or {}
+        except Exception as e:            # noqa: BLE001
+            r = {"hata": str(e)[:200]}
+        with self.kilit:
+            if r.get("hata") or not r.get("is_id"):
+                oge["durum"] = "hata"
+                oge["sebep"] = str(r.get("hata") or "is baslatilamadi")[:200]
+                oge["bitti_t"] = _simdi()
+                self._yaz()
+                bitti_oge = dict(oge)
+            else:
+                oge["is_id"] = r["is_id"]
+                oge["klasor"] = r.get("klasor", "")
+                self._yaz()
+                bitti_oge = None
+        if bitti_oge:
+            self._politika_uygula(bitti_oge)
+            return "hata"
+        return "baslatildi"
+
+    def _politika_uygula(self, oge: dict) -> None:
+        """Politika 'dur' derse kuyruk DURAKLATILIR - sessizce devam edilmez.
+
+        Gozetimsiz kosuda asil risk 'bir is kaldi' degil, 'bir is kaldi ve kuyruk ayni
+        hatayi 12 kez tekrarladi'dir. Politikanin gorevi bu zinciri kesmek."""
+        if not self.politika:
+            return
+        try:
+            karar = self.politika(dict(oge), self) or "devam"
+        except Exception:                 # noqa: BLE001 - politika patlarsa kuyruk durmaz
+            return
+        if karar == "dur":
+            with self.kilit:
+                self.veri["duraklatildi"] = True
+                oge_ref = next((o for o in self.veri["ogeler"]
+                                if o.get("no") == oge.get("no")), None)
+                if oge_ref is not None and not oge_ref.get("sebep"):
+                    oge_ref["sebep"] = "politika kuyrugu durdurdu"
+                self._yaz()
+
+    def _dongu(self) -> None:
+        while not self.durdur_bayragi.is_set():
+            try:
+                ne = self.adim()
+            except Exception:             # noqa: BLE001 - surucu ASLA olmemeli
+                ne = "bosta"
+            self.durdur_bayragi.wait(0.1 if ne == "baslatildi" else self.yoklama_s)
+
+    def basla(self) -> None:
+        if self._is_parcacigi and self._is_parcacigi.is_alive():
+            return
+        self.durdur_bayragi.clear()
+        self._is_parcacigi = threading.Thread(target=self._dongu, daemon=True,
+                                              name="apprentice-kuyruk")
+        self._is_parcacigi.start()
+
+    def dur(self) -> None:
+        self.durdur_bayragi.set()

@@ -634,6 +634,79 @@ def _model_bosalt(model: str = "") -> dict:
         return {"hata": str(e)[:200]}
 
 
+# ---------------------------------------------------------------- kuyruk (yol haritasi 10)
+KUYRUK = None          # core.kuyruk.Kuyruk - panel acilirken kurulur
+
+
+def _srv():
+    """Sunucu modulunu GUVENLI ice aktar: once APPRENTICE_HOME kur, sonra import et.
+
+    TUZAK (bu koda takildi): server/apprentice_server.py ev dizinini ICE AKTARMA ANINDA
+    modul duzeyinde okuyor. Ilk import KIM yaparsa ev dizinini O belirler. Paneldeki butun
+    cagri yerleri bu yuzden import'tan hemen once ortam degiskenini kuruyor; kuyruk kurucusu
+    bunu atlayinca isler YANLIS klasore yazildi ve tekrar-dene testi dustu.
+    Yeni kod bu yardimciyi kullanmali - ayni satiri dokuzuncu kez elle yazmasin."""
+    import importlib
+    os.environ["APPRENTICE_HOME"] = HOME       # --home her zaman kazanir
+    return importlib.import_module("server.apprentice_server")
+
+
+def _kuyruk_bitti_mi(jid: str) -> bool:
+    """Is bitti mi? Once SUREC (kesin bilgi), sonra inceleme ozeti (panel yeniden baslamis
+    olabilir - o zaman surec nesnesi yok ama disk kaydi duruyor)."""
+    if not jid:
+        return False
+    try:
+        job = (_srv().JOBS or {}).get(jid)
+        if job is not None:
+            return bool(job.done)
+    except Exception:      # noqa: BLE001
+        pass
+    try:
+        from core.inceleme import inceleme
+        return str(inceleme(os.path.join(HOME, "jobs"), jid).get("durum") or "") != "calisiyor"
+    except Exception:      # noqa: BLE001 - bilinmiyorsa BITMEDI say: kuyruk beklesin,
+        return False       # erken ilerleyip ikinci isi ayni anda baslatmaktansa bekleriz
+
+
+def _kuyruk_kur():
+    """Kuyrugu ve politikasini kur. Panel acilirken bir kez cagrilir."""
+    global KUYRUK
+    if KUYRUK is not None:
+        return KUYRUK
+    try:
+        from core.kuyruk import Kuyruk
+        from core.politika import Politika, ayar_yukle
+        pol = Politika(os.path.join(HOME, "jobs"), ayar_yukle(_srv().config))
+        KUYRUK = Kuyruk(HOME, _gorev_baslat, _kuyruk_bitti_mi, politika=pol)
+        KUYRUK.basla()
+    except Exception as e:  # noqa: BLE001 - kuyruk kurulamazsa panel yine calisir
+        print("kuyruk kurulamadi: %s" % str(e)[:150])
+        KUYRUK = None
+    return KUYRUK
+
+
+def _kuyruk_islem(yolu: str, veri: dict) -> dict:
+    """Kuyruk uclarinin tek giris noktasi. Kuyruk yoksa ISTEK SESSIZCE DUSMEZ - hata doner."""
+    k = KUYRUK or _kuyruk_kur()
+    if k is None:
+        return {"hata": "kuyruk kullanilamiyor (core/kuyruk.py yuklenemedi)"}
+    if yolu == "/api/kuyruk_ekle":
+        gorev = str(veri.get("gorev") or "").strip()
+        if not gorev:
+            return {"hata": "gorev bos"}
+        return k.ekle(veri, str(veri.get("baslik") or "").strip())
+    if yolu == "/api/kuyruk_sil":
+        return k.sil(int(veri.get("no") or 0))
+    if yolu == "/api/kuyruk_tasi":
+        return k.tasi(int(veri.get("no") or 0), int(veri.get("yon") or 0))
+    if yolu == "/api/kuyruk_duraklat":
+        return k.duraklat(bool(veri.get("duraklat", True)))
+    if yolu == "/api/kuyruk_temizle":
+        return k.temizle()
+    return {"hata": "bilinmeyen kuyruk islemi: %s" % yolu}
+
+
 SOHBET = {"mesajlar": []}          # cirakla serbest sohbet (gorev kalibi yok, hafizali)
 SOHBET_KILIT = threading.Lock()    # iki sekme/istek ayni gecmisi bozmasin (yaris: pop()
                                    # listenin SONUNU siliyordu - baskasinin cevabini)
@@ -946,6 +1019,9 @@ class Istek(BaseHTTPRequestHandler):
                 import goruntuleyici as G
                 self._gonder(G.oku(DEPO.jobs_dir, q.get("is", ""), q.get("yol", ""),
                                    _sayi(q.get("surum"))))
+            elif yol.path == "/api/kuyruk":
+                k = KUYRUK or _kuyruk_kur()
+                self._gonder(k.liste() if k else {"hata": "kuyruk yok", "ogeler": []})
             elif yol.path == "/api/geri_al":
                 # KURU CALISMA: ne yapilacagini soyler, HICBIR SEYI DEGISTIRMEZ.
                 # Arayuz once bunu gosterir, kullanici onaylayinca POST /api/karar gelir.
@@ -1121,6 +1197,8 @@ class Istek(BaseHTTPRequestHandler):
                 self._gonder(_karar_ver(veri))
             elif yolu == "/api/tekrar":
                 self._gonder(_tekrar_dene(veri))
+            elif yolu.startswith("/api/kuyruk_"):
+                self._gonder(_kuyruk_islem(yolu, veri))
             elif yolu == "/api/oksuz_temizle":
                 self._gonder(_oksuz_temizle())
             elif yolu == "/api/eject":
@@ -1165,6 +1243,7 @@ def main() -> int:
     HOME = os.path.expanduser(a.home)
     DEPO = IsDeposu(HOME)
     _ayar_yukle()
+    _kuyruk_kur()      # kuyruk suruculugu arka planda: sirali is, gozetimsiz kosu
     # Yeniden baslatmada eski surec portu birakana kadar birkac saniye gecebilir.
     srv = None
     for _ in range(40):

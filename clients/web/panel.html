@@ -133,6 +133,31 @@ html.tekKip .tutamak{display:none}
 .kbaslik::before{content:"";width:6px;height:6px;border-radius:2px;background:var(--vurgu);
   box-shadow:0 0 6px var(--vurgu);flex-shrink:0}
 .kbaslik .kek{margin-left:auto;color:var(--vurgu2);font-weight:400;letter-spacing:0}
+
+/* KUYRUK (yol haritasi 10): is listesinin USTUNDE dar bir serit. Gorsel olarak
+   listeden AYRI durmali - bekleyen is ile biten is karistirilmamali. */
+#kuyrukBolum{border-bottom:1px solid var(--cizgi);margin-bottom:6px;padding-bottom:6px}
+.kuyBas{display:flex;align-items:center;gap:4px;font-size:.78em;letter-spacing:.08em;
+  color:var(--soluk);padding:2px 4px 5px}
+#kuyDurum.duraklatildi{color:var(--sari)}
+#kuyDurum.kosuyor{color:var(--yesil)}
+.kuyMini{background:none;border:1px solid var(--cizgi2);color:var(--soluk);border-radius:5px;
+  cursor:pointer;font-size:.85em;line-height:1;padding:2px 5px}
+.kuyMini:hover{color:var(--metin);border-color:var(--cizgi)}
+.kuyOge{display:flex;align-items:center;gap:5px;padding:3px 4px;border-radius:5px;font-size:.9em}
+.kuyOge:hover{background:rgba(255,255,255,.04)}
+.kuyOge .no{color:var(--soluk);font-size:.85em;min-width:1.6em}
+.kuyOge .ad{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kuyOge .dur{font-size:.8em;padding:1px 5px;border-radius:4px;border:1px solid var(--cizgi2)}
+.kuyOge.bekliyor .dur{color:var(--soluk)}
+.kuyOge.kosuyor  .dur{color:var(--yesil);border-color:var(--yesil)}
+.kuyOge.bitti    .dur{color:var(--mavi)}
+.kuyOge.hata     .dur{color:var(--kirmizi);border-color:var(--kirmizi)}
+.kuyOge.yarim    .dur{color:var(--sari);border-color:var(--sari)}
+.kuyOge.iptal    {opacity:.5}
+.kuyOge .kuyMini{visibility:hidden}
+.kuyOge:hover .kuyMini{visibility:visible}
+.kuyNot{font-size:.82em;color:var(--sari);padding:3px 4px;line-height:1.35}
 .kgovde{flex:1;min-height:0;display:flex;flex-direction:column}
 .tutamak{position:absolute;right:2px;bottom:2px;width:16px;height:16px;cursor:nwse-resize;
   border-right:2px solid rgba(217,119,87,.5);border-bottom:2px solid rgba(217,119,87,.5);
@@ -390,8 +415,24 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
 </div>
 
 <div id="alan">
-  <div class="kart" data-p="isler"><div class="kbaslik">İŞLER</div>
-    <div class="kgovde"><div id="isListe"></div></div><div class="tutamak"></div></div>
+  <div class="kart" data-p="isler"><div class="kbaslik">İŞLER
+      <span class="kek" id="kuyrukRozet" title="kuyrukta bekleyen iş"></span></div>
+    <div class="kgovde">
+      <!-- KUYRUK: bekleyen isler LISTENIN USTUNDE. Ayri bir yuzen panel YAPILMADI -
+           dokuzuncu panel 24x24 izgarayi ve yedi dizilimi yeniden dengelemeyi gerektirirdi,
+           kullanicinin kayitli duzenini bozardi. Kuyruk zaten "gelecek isler", is listesi
+           "gecmis isler" - ayni sutunun iki ucu. -->
+      <div id="kuyrukBolum" style="display:none">
+        <div class="kuyBas">
+          <span id="kuyDurum">KUYRUK</span>
+          <span style="flex:1"></span>
+          <button class="kuyMini" id="kuyDuraklat" title="kuyruğu duraklat/sürdür">⏸</button>
+          <button class="kuyMini" id="kuyTemizle" title="biten/iptal işleri listeden düşür">🧹</button>
+        </div>
+        <div id="kuyListe"></div>
+        <div id="kuyNot" class="kuyNot"></div>
+      </div>
+      <div id="isListe"></div></div><div class="tutamak"></div></div>
 
   <div class="kart" data-p="boru"><div class="kbaslik">BORU HATTI <span class="kek" id="filtreEtiket"></span></div>
     <div class="kgovde"><div id="boruSvgKap"><svg viewBox="0 0 760 92" id="boruSvg"></svg></div></div>
@@ -452,6 +493,8 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
           style="background:var(--panel2);color:var(--soluk)">📎</button>
         <textarea id="kGorev" rows="2" placeholder="çırağa görev yaz… (Enter = gönder, Shift+Enter = yeni satır)"></textarea>
         <button id="kGonder">▶</button>
+        <button id="kKuyruk" title="hemen başlatma, KUYRUĞA ekle (sırayla koşar - başında beklemen gerekmez)"
+          style="background:var(--panel2);color:var(--soluk)">⧗</button>
       </div>
     </div>
     <div class="tutamak"></div></div>
@@ -1251,6 +1294,69 @@ async function isleriCek(){
   }catch(e){}
   setTimeout(isleriCek,2000);
 }
+
+/* KUYRUK (yol haritasi 10). Ayni yoklama ritmine binmez: kuyruk YAVAS degisir (is basina
+   dakikalar), is listesi hizli. Kendi araligi var - gereksiz istek atmayalim. */
+const KUY_DURUM={bekliyor:"bekliyor",kosuyor:"koşuyor",bitti:"bitti",hata:"hata",
+                 iptal:"iptal",yarim:"yarım"};
+async function kuyrukCiz(){
+  try{
+    const d=await(await fetch("/api/kuyruk")).json();
+    const ogeler=d.ogeler||[], s=d.sayim||{};
+    const bolum=$("#kuyrukBolum"), rozet=$("#kuyrukRozet");
+    // Kuyruk BOSSA bolum hic gorunmez: kullanmayan kullanicidan yer calmasin.
+    if(!ogeler.length){bolum.style.display="none";rozet.textContent="";return}
+    bolum.style.display="";
+    const bekleyen=s.bekliyor||0;
+    rozet.textContent=bekleyen?("⧗ "+bekleyen):"";
+    const durumEl=$("#kuyDurum");
+    durumEl.className=d.duraklatildi?"duraklatildi":((s.kosuyor||0)?"kosuyor":"");
+    durumEl.textContent=d.duraklatildi?"KUYRUK · DURAKLATILDI"
+      :((s.kosuyor||0)?"KUYRUK · KOŞUYOR":"KUYRUK");
+    $("#kuyDuraklat").textContent=d.duraklatildi?"▶":"⏸";
+    $("#kuyDuraklat").title=d.duraklatildi?"kuyruğu sürdür":"kuyruğu duraklat";
+
+    const kap=$("#kuyListe"); kap.innerHTML="";
+    ogeler.slice(0,12).forEach(o=>{
+      const e=document.createElement("div");
+      e.className="kuyOge "+(o.durum||"");
+      const bekl=o.durum==="bekliyor";
+      e.innerHTML='<span class="no">'+o.no+'</span>'+
+        '<span class="ad" title="'+kacir(o.baslik||"")+'">'+kacir(o.baslik||"—")+'</span>'+
+        (bekl?'<button class="kuyMini" data-yon="-1" title="yukarı">▲</button>'+
+              '<button class="kuyMini" data-yon="1" title="aşağı">▼</button>':"")+
+        '<span class="dur">'+(KUY_DURUM[o.durum]||o.durum||"")+'</span>'+
+        (bekl||o.durum==="yarim"?'<button class="kuyMini" data-sil="1" title="kuyruktan çıkar">✕</button>':"");
+      // Kosan ise tiklayinca o isin olay akisina git - kuyruktan izlemeye tek adim
+      if(o.is_id)e.onclick=ev=>{if(ev.target.tagName!=="BUTTON"){otoSec=false;isSec(o.is_id)}};
+      e.querySelectorAll("[data-yon]").forEach(b=>b.onclick=async ev=>{
+        ev.stopPropagation();
+        await fetch("/api/kuyruk_tasi",{method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({no:o.no,yon:+b.dataset.yon})});kuyrukCiz();});
+      const sb=e.querySelector("[data-sil]");
+      if(sb)sb.onclick=async ev=>{
+        ev.stopPropagation();
+        await fetch("/api/kuyruk_sil",{method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({no:o.no})});kuyrukCiz();};
+      kap.appendChild(e);
+    });
+    // SEBEP GORUNUR OLMALI: kuyruk kendiliginden durduysa kullanici NEDEN durdugunu
+    // bilmeden "panel bozuldu" der. Politika kararinin sebebi burada yazar.
+    const sorunlu=ogeler.filter(o=>o.sebep&&(o.durum==="hata"||o.durum==="yarim"));
+    $("#kuyNot").innerHTML=d.duraklatildi&&sorunlu.length
+      ? "⏸ "+kacir(sorunlu[sorunlu.length-1].sebep)
+      : (ogeler.length>12?"… ve "+(ogeler.length-12)+" iş daha":"");
+  }catch(e){}
+  setTimeout(kuyrukCiz,4000);
+}
+async function kuyrukIslem(yol,govde){
+  try{
+    await fetch(yol,{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(govde||{})});
+  }catch(e){}
+  kuyrukCiz();
+}
+
 async function olaylariCek(){
   if(seciliIs){
     try{
@@ -1769,6 +1875,34 @@ async function cirakSohbet(g){
   }catch(e){dus.textContent="HATA: "+e;}
   $("#cirakChat").scrollTop=$("#cirakChat").scrollHeight;
 }
+/* Gorev govdesi TEK yerde uretilir: "hemen calistir" ile "kuyruga ekle" AYNI alanlari
+   gondermeli. Iki ayri kopya olsaydi biri guncellenir digeri unutulurdu (yasandi: yazma
+   kapsami eklendiginde tekrar denemede tasinmiyordu). */
+function gorevGovdesi(g){
+  return {baslik:$("#kBaslik").value, gorev:g, model:$("#kModel").value,
+    kriterler:$("#kKriter").value.split(";").map(x=>x.trim()).filter(Boolean),
+    calisma_dizini:$("#kDizin").value.trim(), dogrulama:$("#kDog").value,
+    yazilabilir:$("#kYaz").value.split(",").map(x=>x.trim()).filter(Boolean),
+    canli:$("#kCanli").checked, harita:$("#kHarita").checked, ekler:kEkler,
+    sohbet_ekle:$("#kSohbetEkle").checked};
+}
+function gorevAlanlariniTemizle(){
+  $("#kGorev").value=""; $("#kBaslik").value=""; $("#kKriter").value="";
+  kEkler=[]; eklerCiz(kEkler,"#kEkler");
+}
+async function kuyrugaEkle(){
+  const g=$("#kGorev").value.trim(); if(!g)return;
+  if($("#kMod").value==="sohbet"){tost("kuyruk yalnız GÖREV kipinde çalışır");return}
+  const b=$("#kKuyruk"); if(b.disabled)return; b.disabled=true;
+  try{
+    const r=await(await fetch("/api/kuyruk_ekle",{method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(gorevGovdesi(g))})).json();
+    if(r.hata)tost("HATA: "+r.hata);
+    else{gorevAlanlariniTemizle();tost("⧗ kuyruğa eklendi (#"+r.no+") — "+(r.baslik||""));kuyrukCiz();}
+  }catch(e){tost("HATA: "+e);}
+  b.disabled=false;
+}
 async function cirakGonder(){
   const g=$("#kGorev").value.trim(); if(!g)return;
   const b=$("#kGonder");
@@ -1780,18 +1914,12 @@ async function cirakGonder(){
   }
   b.disabled=true;
   try{
-    const veri={baslik:$("#kBaslik").value, gorev:g, model:$("#kModel").value,
-      kriterler:$("#kKriter").value.split(";").map(x=>x.trim()).filter(Boolean),
-      calisma_dizini:$("#kDizin").value.trim(), dogrulama:$("#kDog").value,
-      yazilabilir:$("#kYaz").value.split(",").map(x=>x.trim()).filter(Boolean),
-      canli:$("#kCanli").checked, harita:$("#kHarita").checked, ekler:kEkler,
-      sohbet_ekle:$("#kSohbetEkle").checked};
+    const veri=gorevGovdesi(g);
     const r=await(await fetch("/api/gorev",{method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify(veri)})).json();
     if(r.hata){tost("HATA: "+r.hata);}
     else{
-      $("#kGorev").value=""; $("#kBaslik").value=""; $("#kKriter").value="";
-      kEkler=[]; eklerCiz(kEkler,"#kEkler");
+      gorevAlanlariniTemizle();
       tost("🔧 "+(r.baslik||r.is_id)+" başladı — 📁 "+(r.klasor||"")); otoSec=true; dibeKilit=true;
       if(r.ekler_red&&r.ekler_red.length)tost("⚠ eklenmedi: "+r.ekler_red.join(", "));
     }
@@ -1799,6 +1927,10 @@ async function cirakGonder(){
   b.disabled=false;
 }
 $("#kGonder").onclick=cirakGonder;
+$("#kKuyruk").onclick=kuyrugaEkle;
+$("#kuyDuraklat").onclick=()=>kuyrukIslem("/api/kuyruk_duraklat",
+  {duraklat:$("#kuyDurum").className!=="duraklatildi"});
+$("#kuyTemizle").onclick=()=>kuyrukIslem("/api/kuyruk_temizle",{});
 $("#kGorev").addEventListener("keydown",e=>{
   if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();cirakGonder();}});
 
@@ -1945,6 +2077,7 @@ if(_byb) _byb.onclick=async()=>{
   tost("sunucu ayağa kalkmadı — paneli kapatıp aç");
 };
 isleriCek(); olaylariCek(); daktiloAdim(); ustaChatCek(); modelleriYukle(); kokGoster();
+kuyrukCiz();
 kapsamIpucu();
 </script>
 </body>

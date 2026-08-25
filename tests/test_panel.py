@@ -1391,12 +1391,89 @@ def ollama_adresi() -> bool:
     return True
 
 
+def kuyruk_uclari() -> bool:
+    """KUYRUK uclari CANLI sunucuda calismali (yol haritasi 10).
+
+    Cekirdek mantik test_kuyruk.py'de sinaniyor; burada sinanan sey UCLARIN BAGLI oldugu:
+    ekleme, listeleme, sira degistirme, silme, duraklatma, temizleme ve KALICILIK. Kuyruk
+    DURAKLATILMIS baslatilir - test gercek model yuklemesin."""
+    ev = os.path.join(ROOT, ".apprentice_test_home", "kuyruk_uc")
+    os.makedirs(os.path.join(ev, "jobs"), exist_ok=True)
+    for f in ("kuyruk.json", "kuyruk.json.gecici"):
+        try:
+            os.remove(os.path.join(ev, f))
+        except OSError:
+            pass
+    port = 8897
+    p = subprocess.Popen([sys.executable, os.path.join(ROOT, "clients", "web", "panel.py"),
+                          "--port", str(port), "--home", ev],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, cwd=ROOT,
+                         creationflags=0x08000000 if os.name == "nt" else 0)
+
+    def cagir(yol, veri=None):
+        url = "http://127.0.0.1:%d%s" % (port, yol)
+        if veri is None:
+            r = urllib.request.urlopen(url, timeout=8)
+        else:
+            r = urllib.request.urlopen(urllib.request.Request(
+                url, json.dumps(veri).encode("utf-8"),
+                {"Content-Type": "application/json", "X-Apprentice": "panel"}), timeout=8)
+        return json.loads(r.read().decode("utf-8"))
+
+    try:
+        for _ in range(100):
+            time.sleep(0.1)
+            try:
+                urllib.request.urlopen("http://127.0.0.1:%d/api/hazir" % port, timeout=1).read()
+                break
+            except Exception:
+                continue
+        else:
+            print("kuyruk uclari: panel kalkmadi",
+                  (p.stderr.read() or b"").decode("utf-8", "replace")[:300])
+            return False
+
+        # ONCE DURAKLAT: gercek is baslamasin (model yuklenmesin)
+        assert cagir("/api/kuyruk_duraklat", {"duraklat": True}).get("duraklatildi") is True
+        a = cagir("/api/kuyruk_ekle", {"gorev": "kdv.py yaz", "ortam": "code", "baslik": "KDV"})
+        assert a.get("no") == 1 and a.get("durum") == "bekliyor" and a.get("baslik") == "KDV", a
+        b = cagir("/api/kuyruk_ekle", {"gorev": "sepet.py yaz", "ortam": "code"})
+        assert b.get("no") == 2 and b.get("baslik"), b       # baslik gorevden turetilir
+        assert cagir("/api/kuyruk_ekle", {"gorev": "  "}).get("hata"), "bos gorev kabul edildi"
+
+        d = cagir("/api/kuyruk")
+        assert len(d["ogeler"]) == 2 and d["duraklatildi"] and d["sayim"]["bekliyor"] == 2, d
+        # ISTEK KAYBOLMAMALI: kuyruk gorevin butun alanlarini tasir
+        assert d["ogeler"][0]["istek"]["ortam"] == "code", d["ogeler"][0]
+
+        assert cagir("/api/kuyruk_tasi", {"no": 2, "yon": -1}).get("ok")
+        assert [o["no"] for o in cagir("/api/kuyruk")["ogeler"]] == [2, 1], "sira degismedi"
+        assert cagir("/api/kuyruk_sil", {"no": 1}).get("ok")
+        assert cagir("/api/kuyruk_temizle", {}).get("silinen") == 1, "iptal edilen dusmedi"
+        son = cagir("/api/kuyruk")
+        assert [o["no"] for o in son["ogeler"]] == [2], son
+
+        # KALICILIK: diskte, atomik (gecici dosya birakilmamis)
+        kj = os.path.join(ev, "kuyruk.json")
+        assert os.path.isfile(kj) and not os.path.exists(kj + ".gecici"), "atomik yazim yok"
+        with open(kj, encoding="utf-8") as f:
+            assert json.load(f)["sema"] == 1
+    finally:
+        p.terminate()
+        try:
+            p.wait(timeout=5)
+        except Exception:
+            p.kill()
+    print("kuyruk uclari: ok (ekle/listele/tasi/sil/duraklat/temizle + kalicilik)")
+    return True
+
+
 def main() -> int:
     ok = (js_sozdizimi() and metin_isleyicileri() and kaynak_denetimi() and id_butunlugu() and uc_sozlesmesi() and ust_bar_gorunur() and yerlesim_butun() and dizilimler_butun()
           and yerlesim_motoru() and sunucu_uclari() and calisma_dizini_kurallari() and sohbet_uclari()
           and goruntuleyici_sayfasi() and fark_gorunumu()
           and animasyon_tanimlari() and model_kapsulu()
-          and vurgulayici_sozlesmesi() and sahiplik_kurali() and karar_uclari() and bayat_surec_uyarisi() and karar_rozeti() and tekrar_dene_basarili() and inceleme_ekrani() and ollama_adresi())
+          and vurgulayici_sozlesmesi() and sahiplik_kurali() and karar_uclari() and bayat_surec_uyarisi() and karar_rozeti() and tekrar_dene_basarili() and inceleme_ekrani() and ollama_adresi() and kuyruk_uclari())
     print("SONUC:", "GECTI" if ok else "KALDI")
     return 0 if ok else 1
 

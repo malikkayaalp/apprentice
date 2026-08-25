@@ -19,6 +19,104 @@
     }
    ],
    "oturum": "20260825-141102-c063be"
+  },
+  "heap": {
+   "zorluk": "2-orta",
+   "turlar": [
+    {
+     "tur": 1,
+     "sure_s": 142.3,
+     "derleme_durumu": "derlendi",
+     "prompt_tok": 4309,
+     "uretim_tok": 1022,
+     "arac": 2,
+     "gizli": "9/9",
+     "hatalar": [],
+     "dosya": [
+      "minheap.py"
+     ]
+    }
+   ],
+   "oturum": "20260825-141817-b2f17c"
+  },
+  "dijkstra": {
+   "zorluk": "3-orta-zor",
+   "turlar": [
+    {
+     "tur": 1,
+     "sure_s": 165.8,
+     "derleme_durumu": "derlendi",
+     "prompt_tok": 4352,
+     "uretim_tok": 1194,
+     "arac": 2,
+     "gizli": "9/9",
+     "hatalar": [],
+     "dosya": [
+      "yol.py"
+     ]
+    }
+   ],
+   "oturum": "20260825-142040-cbe91c"
+  },
+  "ifade": {
+   "zorluk": "4-zor",
+   "turlar": [
+    {
+     "tur": 1,
+     "sure_s": 220.0,
+     "derleme_durumu": "derlendi",
+     "prompt_tok": 4960,
+     "uretim_tok": 2064,
+     "arac": 2,
+     "gizli": "12/12",
+     "hatalar": [],
+     "dosya": [
+      "hesap.py"
+     ]
+    }
+   ],
+   "oturum": "20260825-142325-795c79"
+  },
+  "dama": {
+   "zorluk": "5-oyun mantigi",
+   "turlar": [
+    {
+     "tur": 1,
+     "sure_s": 701.6,
+     "derleme_durumu": "derlendi",
+     "prompt_tok": 17577,
+     "uretim_tok": 7248,
+     "arac": 4,
+     "gizli": "4/12",
+     "hatalar": [
+      "HATA | 12 beyaz tas | ifade: sum(1 for r in _yeni().tahta for c in r if c in ('b','B')) == 12 | beklenen: True | gelen: AttributeError: 'Dama' object has no attribute 'tahta'",
+      "HATA | 12 siyah tas | ifade: sum(1 for r in _yeni().tahta for c in r if c in ('s','S')) == 12 | beklenen: True | gelen: AttributeError: 'Dama' object has no attribute 'tahta'",
+      "HATA | orta iki sira bos | ifade: all(_yeni().tahta[i][j] is None for i in (3,4) for j in range(8)) | beklenen: True | gelen: AttributeError: 'Dama' object has no attribute 'tahta'",
+      "HATA | yalniz koyu karelerde | ifade: all(_yeni().tahta[i][j] is None for i in range(8) for j in range(8) if (i+j)%2==0) | beklenen: True | gelen: AttributeError: 'Dama' object has no attribute 'tahta'",
+      "HATA | yeme zorunlu | ifade: _yeme_zorunlu() | beklenen: True | gelen: AttributeError: 'Dama' object has no attribute 'tahta'",
+      "HATA | yeme tasi kaldirir | ifade: _yeme_kaldirir() | beklenen: True | gelen: AttributeError: 'Dama' object has no attribute 'tahta'",
+      "HATA | terfi olur | ifade: _terfi() | beklenen: True | gelen: AttributeError: 'Dama' object has no attribute 'tahta'",
+      "HATA | kazanan bos tahtada | ifade: _kazanan() | beklenen: True | gelen: AttributeError: 'Dama' object has no attribute 'tahta'"
+     ],
+     "dosya": [
+      "dama.py"
+     ]
+    },
+    {
+     "tur": 2,
+     "sure_s": 304.0,
+     "derleme_durumu": "derlendi",
+     "prompt_tok": 25881,
+     "uretim_tok": 1978,
+     "arac": 2,
+     "gizli": "12/12",
+     "hatalar": [],
+     "dosya": [
+      "dama.py"
+     ]
+    }
+   ],
+   "oturum": "20260825-142705-e96b43"
   }
  }
 }
