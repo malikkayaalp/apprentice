@@ -386,9 +386,61 @@ def kabul_denetimi() -> bool:
     return True
 
 
+def zaman_cizgisi() -> bool:
+    """SURE NEREYE GITTI (yol haritasi 11): olaylardan zaman dilimleri.
+
+    Cakilan sozlesme:
+      1. Uc tur dilim ayrilir: model uretimi / arac kosumu / dogrulama.
+      2. Dilimler TOPLAMI isin suresini asmaz - cakisan dilim uretmeyiz.
+      3. ESKI KAYITTA ZAMAN YOKSA UYDURULMAZ: var=False doner, panel bolumu cizmez.
+         Eksik olcumu tahminle doldurmak, olcumun kendisini bozar."""
+    d = tempfile.mkdtemp()
+    jd = os.path.join(d, "is1"); os.makedirs(jd)
+    with open(os.path.join(jd, "job.json"), "w", encoding="utf-8") as f:
+        json.dump({"id": "is1", "ortam": "code", "calisma_dizini": d}, f)
+    T = 1000.0
+    olaylar = [{"type": "system", "t": T},
+               {"type": "tool", "name": "read_file", "t": T + 12},
+               {"type": "tool_result", "name": "read_file", "t": T + 12.4},
+               {"type": "tool", "name": "write_file", "t": T + 40},
+               {"type": "tool_result", "name": "write_file", "t": T + 40.6},
+               {"type": "write", "path": "a.py", "before": "", "after": "x=1", "t": T + 40.6},
+               {"type": "result", "ok": True, "errors": [], "wall": 55, "t": T + 55}]
+
+    def yaz(ol):
+        with open(os.path.join(jd, "events.jsonl"), "w", encoding="utf-8") as f:
+            for e in ol:
+                f.write(json.dumps(e) + "\n")
+
+    yaz(olaylar)
+    z = inceleme(d, "is1")["zaman_cizgisi"]
+    assert z["var"] and z["toplam"] == 55.0, z
+    oz = z["ozet"]
+    assert oz["uretim"] == 39.6 and oz["dogrulama"] == 14.4, oz
+    assert abs(oz["arac"] - 1.0) < 0.01, oz
+    # dilimler cakismamali: toplamlari isin suresini ASMAZ
+    assert sum(x["sure"] for x in z["dilimler"]) <= z["toplam"] + 0.01, z["dilimler"]
+    tipler = [x["tip"] for x in z["dilimler"]]
+    assert tipler == ["uretim", "arac", "uretim", "arac", "dogrulama"], tipler
+    assert abs(z["uretim_orani"] - 0.72) < 0.01, z["uretim_orani"]
+
+    # YARIM KALAN ARAC (cokme/zaman asimi): kayip zaman yutulmaz, isaretlenir
+    yaz(olaylar[:4] + [{"type": "exit", "code": 1, "t": T + 60}])
+    z2 = inceleme(d, "is1")["zaman_cizgisi"]
+    assert any("yarim" in x["ad"] for x in z2["dilimler"]), z2["dilimler"]
+
+    # ESKI KAYIT: zaman damgasi yok -> UYDURMA YOK
+    yaz([{k: v for k, v in e.items() if k != "t"} for e in olaylar])
+    z3 = inceleme(d, "is1")["zaman_cizgisi"]
+    assert z3["var"] is False and "zaman damgasi yok" in z3["sebep"], z3
+    assert "dilimler" not in z3 or not z3.get("dilimler"), z3
+    print("zaman cizgisi: ok (uc tur dilim, cakisma yok, eski kayitta uydurma yok)")
+    return True
+
+
 def main() -> int:
     ok = (net_fark() and geri_alma_ispati() and devir_kanitla() and kapsam_ve_dogrulama()
-          and beyan_kanittan_ayri() and uc_baglandi() and karar_kaydi() and surec_canliligi() and kabul_denetimi())
+          and beyan_kanittan_ayri() and uc_baglandi() and karar_kaydi() and surec_canliligi() and kabul_denetimi() and zaman_cizgisi())
     print("SONUC:", "GECTI" if ok else "KALDI")
     return 0 if ok else 1
 

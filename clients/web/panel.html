@@ -173,6 +173,17 @@ table.olc th:first-child{text-align:left}
 table.olc td{padding:2px 4px;text-align:right;white-space:nowrap}
 table.olc td:first-child{text-align:left;color:var(--soluk)}
 table.olc tr.son td{color:var(--metin)}
+/* ZAMAN CIZGISI (yol haritasi 11) */
+.zcSerit{display:flex;height:11px;border-radius:4px;overflow:hidden;margin:2px 12px 4px;
+  background:var(--panel2)}
+.zcSerit span{display:block;height:100%}
+.zc-uretim{background:var(--yesil)}
+.zc-arac{background:var(--mavi)}
+.zc-dogrulama{background:var(--vurgu)}
+.zcAnahtar{display:flex;gap:10px;flex-wrap:wrap;padding:0 12px 6px;font-size:.78em;
+  color:var(--soluk)}
+.zcAnahtar i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px}
+
 .olcIyi{color:var(--yesil)}
 .olcKotu{color:var(--kirmizi)}
 .kgovde{flex:1;min-height:0;display:flex;flex-direction:column}
@@ -1540,6 +1551,28 @@ function incelemeCiz(r){
   h+='<div class="incSat"><span class="incEt">çırak</span><b>'+(r.onarim_turu||0)+
      ' onarım turu</b>'+(r.sure?' · '+Math.round(r.sure)+' sn':'')+
      (k.prompt_tokens?' · '+(k.prompt_tokens).toLocaleString("tr")+' istem tok':'')+'</div>';
+
+  /* ZAMAN CIZGISI (yol haritasi 11): "sure nereye gitti". Uc tur dilim - model uretimi,
+     arac kosumu, dogrulama. Hizlandirma calismasinin NEREYE bakmasi gerektigini soyler.
+     Eski kayitlarda zaman damgasi yok; o zaman bolum HIC cizilmez (tahmin uretmeyiz). */
+  const zc=r.zaman_cizgisi||{};
+  if(zc.var&&zc.toplam>0){
+    const oz=zc.ozet||{};
+    h+='<div class="incBaslik">süre dağılımı · '+Math.round(zc.toplam)+' sn</div>';
+    h+='<div class="zcSerit">';
+    (zc.dilimler||[]).forEach(d=>{
+      const yuzde=(d.sure/zc.toplam*100);
+      if(yuzde<0.4)return;                       // 0.4%'ten ince dilim cizilmez, gorunmez
+      h+='<span class="zc-'+d.tip+'" style="width:'+yuzde.toFixed(2)+'%" title="'+
+         ozniteligeKacir(d.ad+" — "+d.sure+" sn")+'"></span>';
+    });
+    h+='</div><div class="zcAnahtar">'+
+       '<span><i class="zc-uretim"></i>model '+Math.round(oz.uretim||0)+'sn'+
+       ' ('+Math.round((zc.uretim_orani||0)*100)+'%)</span>'+
+       '<span><i class="zc-arac"></i>araç '+Math.round(oz.arac||0)+'sn</span>'+
+       '<span><i class="zc-dogrulama"></i>doğrulama '+Math.round(oz.dogrulama||0)+'sn</span>'+
+       '</div>';
+  }
 
   /* CALISMA ALANI + YAZMA KAPSAMI: baglam bilgisi, bu yuzden alta alindi. Ihlal varsa
      zaten yukarida dosyanin yaninda "kapsam disi" rozeti ve dogrulama satiri cikiyor.

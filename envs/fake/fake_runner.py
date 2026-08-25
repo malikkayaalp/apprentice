@@ -33,7 +33,7 @@ def main() -> int:
     a = p.parse_args()
 
     def emit(kind, **kw):
-        rec = {"type": kind}
+        rec = {"type": kind, "t": round(time.time(), 3)}     # bkz. code_runner.Emitter.emit
         rec.update(kw)
         with open(a.jsonl, "a", encoding="utf-8") as f:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")

@@ -273,6 +273,60 @@ def karar_yaz(jobs_dir: str, jid: str, durum: str, ayrinti: dict | None = None) 
     return kayit
 
 
+def _zaman_cizgisi(olaylar: list) -> dict:
+    """Sure NEREYE gitti? Olaylardan zaman dilimleri uretir (yol haritasi 11).
+
+    NEDEN PROJEKSIYONDA: panel olay semasini BILMEZ. Zaman cizgisini panelde hesaplasaydik
+    'tool' ile 'tool_result' eslesmesini arayuze ogretmis olurduk - sema degisince panel
+    kirilirdi. Burada uretiliyor, panel yalnizca ciziyor.
+
+    UC TUR DILIM, ucu de gozlemlenen sey:
+      uretim    - model token uretiyordu (arac cagrilari ARASINDAKI bosluk)
+      arac      - bir arac kosuyordu (tool -> tool_result arasi)
+      dogrulama - son aractan sonuca kadar (derleme + test)
+    ESKI KAYITLARDA ZAMAN YOK: o zaman {"var": False} doner ve panel bolumu gostermez.
+    Uydurma yapmayiz - eksik olcumu tahminle doldurmak olcumu bozar."""
+    damgali = [e for e in olaylar if isinstance(e.get("t"), (int, float))]
+    if len(damgali) < 2:
+        return {"var": False, "sebep": "olaylarda zaman damgasi yok (eski kayit)"}
+    t0 = damgali[0]["t"]
+    dilimler, ozet = [], {"uretim": 0.0, "arac": 0.0, "dogrulama": 0.0}
+    acik = None          # bekleyen tool olayi
+    onceki_son = t0      # bir onceki dilimin bittigi an
+
+    def ekle(ad, tip, bas, bit):
+        sure = round(max(0.0, bit - bas), 2)
+        if sure < 0.05:                     # gorunmeyecek kadar kisa dilim gurultudur
+            return
+        dilimler.append({"ad": ad, "tip": tip, "bas": round(bas - t0, 2), "sure": sure})
+        ozet[tip] = round(ozet[tip] + sure, 2)
+
+    for e in damgali:
+        tip, t = e.get("type"), e["t"]
+        if tip == "tool":
+            ekle("model üretiyor", "uretim", onceki_son, t)
+            acik = (str(e.get("name") or "arac"), t)
+        elif tip == "tool_result":
+            if acik:
+                ekle(acik[0], "arac", acik[1], t)
+                acik = None
+            onceki_son = t
+        elif tip in ("result", "exit"):
+            if acik:                        # arac yarim kaldi (cokme/zaman asimi)
+                ekle(acik[0] + " (yarim)", "arac", acik[1], t)
+                acik = None
+            ekle("doğrulama", "dogrulama", onceki_son, t)
+            onceki_son = t
+        elif tip == "write":
+            onceki_son = max(onceki_son, t)
+    toplam = round(damgali[-1]["t"] - t0, 2)
+    return {"var": bool(dilimler), "toplam": toplam, "dilimler": dilimler[:40],
+            "ozet": ozet,
+            # ANLAMLI ORAN: zamanin ne kadari MODEL uretiminde gecti. Bu sayi hizlandirma
+            # calismasinin nereye bakmasi gerektigini soyler (model mi, arac mi, dogrulama mi).
+            "uretim_orani": round(ozet["uretim"] / toplam, 3) if toplam else 0}
+
+
 def inceleme(jobs_dir: str, jid: str) -> dict:
     """Bir isin INCELEME OZETI. Yalniz diskteki kayittan uretilir, model cagrilmaz."""
     olaylar = _olaylar(jobs_dir, jid)
@@ -404,6 +458,7 @@ def inceleme(jobs_dir: str, jid: str) -> dict:
         "kullanim": _sozluk(sonuc.get("kullanim")) or _sozluk(kayit.get("kullanim")),
         "sure": sonuc.get("wall") or kayit.get("sure") or 0,
         "beyan": beyan[:600],            # modelin kendi ozeti - KANIT DEGIL, ayri alanda durur
+        "zaman_cizgisi": _zaman_cizgisi(olaylar),
         "geri_alinabilir": geri,
         "karar": karar_oku(jobs_dir, jid),
         "kabul": kabul_oku(jobs_dir, jid),

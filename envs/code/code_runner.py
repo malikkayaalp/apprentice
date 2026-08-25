@@ -652,7 +652,11 @@ class Emitter:
             pass
 
     def emit(self, kind: str, **kw):
-        rec = {"type": kind}
+        # ZAMAN DAMGASI (yol haritasi 11 - timeline): olaylarda zaman YOKTU, yalnizca
+        # tool_result.sure ve result.wall vardi. "Sure nereye gitti" sorusu cevaplanamiyordu.
+        # Yeni alan, ESKI kayitlari bozmaz: okuyanlar yoksa zaman cizgisini gostermez.
+        # Yazan taraf tek (tek yazar kurali), o yuzden sira da guvenilir.
+        rec = {"type": kind, "t": round(time.time(), 3)}
         rec.update(kw)
         try:
             with open(self.path, "a", encoding="utf-8") as f:
