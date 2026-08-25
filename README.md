@@ -74,6 +74,33 @@ drive-relative, UNC and `~` are rejected) — a **guard, not a sandbox**: an int
 a path at runtime can still get around it. That is why shell tools are off by default, and why the
 git snapshot (not the event journal) is the primary undo path when they are on.
 
+**Queue and policy — walk away while it works.** Stack tasks with the ⧗ button instead of
+babysitting one at a time. The queue is **serial on purpose**: one local model, one GPU — two jobs
+loading a model at once makes both slower and gets *less* done. If the panel dies mid-job, that job
+is marked **interrupted, not re-run**: it may already have written files, and re-running would
+overwrite them a second time. A **policy** decides what happens after each job — deterministically,
+from the verifier's output, never from the model's own summary. It stops the queue on a failed
+check, an out-of-scope write, or **stagnation** (the same error signature repeating across
+attempts — measured: 2600 → 6050 tokens burned for an identical result). Auto-accept is **off by
+default**: accepting is the supervisor's job, and this whole architecture exists because the
+supervisor verifies *by running things*.
+
+**Where the time went.** Every job draws a bar splitting its duration into *model generating* /
+*tool running* / *verifying*, so speed work knows where to look. Older jobs recorded before
+timestamps existed simply don't draw the bar — no estimates are invented to fill the gap.
+
+**Measurement history in the panel.** Campaign runs are listed side by side — first-attempt score,
+final score, duration — so "did this change improve anything?" has an answer on screen instead of
+in a terminal. It only *reads*: measurement costs GPU-hours, so it is never triggered from a click.
+
+**Live, not polled.** The panel gets a push notification when something changes (0.4 s instead of
+up to 2 s). The stream carries *notification only* — the data still comes through the same,
+already-tested fetch paths. Polling isn't removed, just slowed down; if the stream drops, it speeds
+back up so the panel never dies quietly.
+
+**Simple / Expert.** One toggle hides the advanced controls. It changes *visibility only* — the
+hidden values are still sent, so a job started in Simple mode does exactly what it would in Expert.
+
 Tools, return schema and rules: [server/README.md](server/README.md).
 Unity support is a separate, optional repo: [apprentice-unity](https://github.com/malikkayaalp/apprentice-unity).
 
@@ -176,6 +203,43 @@ sınıftır) ve kabul kriterleri **koşularak** denetlenir. Bu ikincisi bir öl�
 doğrulayıcı %100 başarı raporlarken **gerçek** başarı %76,9 çıktı — kriterler taşınıyor ama hiç
 denetlenmiyordu.
 
+## Kuyruk ve politika — başında beklemek yok
+
+Görev kutusundaki **⧗** düğmesi işi hemen başlatmaz, **kuyruğa** ekler. Sırala ve git.
+
+Kuyruk **bilerek seri**: tek yerel model, tek GPU. İki iş aynı anda model yüklerse ikisi de
+yavaşlar ve toplam iş *azalır* (`num_batch` ölçümü VRAM'in sınır kaynak olduğunu gösterdi).
+Panel iş ortasında kapanırsa o iş **yarım işaretlenir, yeniden koşturulmaz** — çalışma alanına
+dosya yazmış olabilir ve tekrar koşturmak aynı dosyayı ikinci kez ezmek demektir. Kararı sen
+verirsin.
+
+**Politika** her işten sonra ne olacağına karar verir; kararı **model değil doğrulayıcının
+çıktısı** verir — modelin "her şey harika" özeti sonucu değiştirmez. Üç durumda kuyruğu durdurur:
+bir doğrulama kaldıysa, kapsam dışına dosya yazıldıysa, ya da **durağanlık** varsa (aynı hata
+imzası denemeler arasında tekrarlıyor — ölçüldü: 2600 → 6050 token yandı, sonuç aynı kaldı).
+Asıl risk "bir iş kaldı" değil, "bir iş kaldı ve kimse durmadı"dır.
+
+Otomatik kabul **varsayılan kapalı**: kabul etmek denetçinin işidir ve bu mimarinin tamamı
+"usta **koşturarak** doğrular" üzerine kurulu.
+
+## Süre nereye gitti · ölçüm geçmişi · canlı akış
+
+**Süre dağılımı.** Her iş, süresini *model üretiyor* / *araç koşuyor* / *doğrulama* diye üçe bölen
+bir şerit çizer. Hızlandırma çalışmasının nereye bakacağını bu söyler. Zaman damgası eklenmeden
+önce kaydedilmiş işlerde şerit **hiç çizilmez** — eksik ölçüm tahminle doldurulmaz.
+
+**Ölçüm geçmişi.** METRİKLER panelinde kampanya koşuları yan yana: ilk deneme puanı, nihai puan,
+süre. "Bu değişiklik ölçümü iyileştirdi mi?" sorusunun cevabı terminalde değil ekranda. Tablo
+yalnızca **okur**; ölçüm GPU-saati harcar, tek tıkla tetiklenmesi doğru olmaz.
+
+**Canlı akış.** Panel yoklamak yerine bildirim alır (2 saniyeye kadar gecikme yerine 0,4 saniye).
+Akış yalnızca "değişti" der; veriyi yine mevcut — sınanmış — çekme yolları getirir. Yoklama
+kaldırılmadı, seyreltildi: akış koparsa geri hızlanır, panel sessizce ölmez.
+
+**Basit / Uzman.** Üst bardaki düğme ileri düzey denetimleri gizler. Yalnızca **görünürlük**
+değişir: gizlenen değerler yine gönderilir, basit kipte başlatılan iş uzman kiptekiyle aynı işi
+yapar.
+
 ## Yapı
 
 ```
@@ -184,6 +248,12 @@ kur.py             kurulum motoru (Windows'ta Apprentice-Setup.exe olarak paketl
 kur_gui.py         kurulum penceresi (adım adım, Tanı düğmesi, çökme günlüğü)
 core/              Ollama istemcisi, şema koruması, ayar yükleyici, ilk-çalıştırma ölçümü
 core/tani.py       ortam tanısı: Ollama/port/model/disk/RAM/izin kontrolleri, öksüz süreç avı
+core/inceleme.py   ReviewSummary sözleşmesi: runtime → arayüz arasındaki kararlı izdüşüm
+core/geri_al.py    üç yöntemli geri alma (git → günlük → reddet); kullanıcının işine dokunmaz
+core/telemetri.py  deterministik hata sınıflandırma + kabul denetimi (regex, model değil)
+core/kuyruk.py     sıralı iş kuyruğu; eş zamanlılık 1, yarım kalan iş yeniden koşturulmaz
+core/politika.py   iş sonrası karar: doğrulama/kapsam/durağanlık → devam mı dur mu
+core/olcum_arsiv.py kampanya arşivi (asla ezilmez) + kampanya çıkış kodu sözleşmesi
 mcpbridge/         MCP taşıma (stdio + Streamable HTTP), bağımlılıksız; test için fake_server
 envs/code/         kod ortamı: dosya oku/yaz, shell, test; workspace'e hapis; compile()+unittest/pytest
 envs/fake/         duman testi ortamı (model gerektirmez)
@@ -254,16 +324,28 @@ alanlar ayrı depolardır ve `envs/<ad>` olarak klonlanır:
 ## Test
 
 ```bash
+python tests/hepsi.py              # TAM BATARYA: 17 dosya (kararsız testleri ayrı raporlar)
 python tests/test_server.py        # model gerekmez
-python tests/test_panel.py         # panel + görüntüleyici sözleşmeleri (20 kontrol)
-python tests/test_tani.py          # 11 arıza senaryosu, simüle
-python tests/test_code_env.py      # kod ortamı; --live ile gerçek görev
+python tests/test_panel.py         # panel + görüntüleyici sözleşmeleri (31 kontrol)
+python tests/test_inceleme.py      # ReviewSummary sözleşmesi + süre dağılımı
+python tests/test_geri_al.py       # geri alma: kullanıcının emeği korunuyor mu
+python tests/test_kuyruk.py        # kuyruk: sıra, duraklatma, çökme kurtarma, politika
+python tests/test_politika.py      # kararı doğrulayıcı verir, model değil
+python tests/test_ozellik.py       # Hypothesis özellik testleri (ilk koşuda yol kaçışı buldu)
+python tests/test_tani.py          # 12 arıza senaryosu, simüle
+python tests/test_code_env.py      # kod ortamı + kabuk hapsi; --live ile gerçek görev
 python tests/code_kampanya.py      # 6 görevlik ölçüm kampanyası (Ollama gerekir)
 ```
 
 Testler **sözleşme** testidir: uç ↔ arayüz bağları, id bütünlüğü, yerleşim motoru, ışık durum
 makinesi ve sözdizimi vurgulayıcısı gerçekten koşturularak denetlenir. Her yeni test, hatayı
-kasten geri koyarak **gerileme testinden** geçirilir — yakalamayan test yazılmaz.
+kasten geri koyarak **gerileme testinden** geçirilir — yakalamayan test yazılmaz. Örnek: geri
+almanın kullanıcı emeğini koruyan iki testi, düzeltme kapatılınca gerçekten düşüyor; "yazdım,
+geçti" değil "hatayı yakalıyor" seviyesi.
+
+Ölçüm kanıtı depoda durur: `reports/olcum/` kampanya arşivleri (asla ezilmez),
+`reports/tur_*.log` ham koşu günlükleri, `reports/telemetri-*.txt` telemetri raporu. Bunlar
+"ölçüldü" iddialarının dayanağıdır; yeniden türetmek saatlerce GPU demektir.
 
 ## Bir şey çalışmıyorsa: önce TANI
 
