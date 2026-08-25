@@ -1,5 +1,5 @@
 {
- "baslangic": "2026-08-25 13:24:55",
+ "baslangic": "2026-08-25 13:53:58",
  "gorevler": {
   "parantez": {
    "turlar": [
@@ -7,11 +7,11 @@
      "tur": 1,
      "derleme_durumu": "derlendi",
      "onarim": 1,
-     "sure": 104.2,
+     "sure": 142.8,
      "araclar": [
-      "list_files **/*",
-      "write_file C:\\Users\\malik.kayaalp\\Desktop\\Apprentice\\.apprentice_test_home\\kampanya\\parantez\\parantez.py",
-      "write_file C:\\Users\\malik.kayaalp\\Desktop\\Apprentice\\.apprentice_test_home\\kampanya\\parantez\\test_parantez.py",
+      "list_files *",
+      "write_file parantez.py",
+      "write_file test_parantez.py",
       "run_tests "
      ],
      "hatalar": [],
@@ -50,10 +50,10 @@
       }
      ],
      "fazla_dosya": [],
-     "is_id": "20260825-132455-91df0a"
+     "is_id": "20260825-135358-2fb417"
     }
    ],
-   "oturum": "20260825-132455-91df0a"
+   "oturum": "20260825-135358-2fb417"
   },
   "lru": {
    "turlar": [
@@ -61,17 +61,12 @@
      "tur": 1,
      "derleme_durumu": "derlendi",
      "onarim": 1,
-     "sure": 250.0,
+     "sure": 153.3,
      "araclar": [
-      "list_files **/*",
+      "list_files ",
       "write_file lru.py",
       "write_file test_lru.py",
-      "run_tests ",
-      "run_shell python -c \"from lru import LRU; c = LRU(2); c.put(1,1); c.put(2,2); print('After puts:', list(c.cache.items())); c.get(1); print('After get(",
-      "read_file test_lru.py",
-      "write_file test_lru.py",
-      "run_tests ",
-      "run_shell python -c \"from lru import LRU; c=LRU(2); c.put(1,1); c.put(2,2); print('c.get(1)==1:', c.get(1)==1); c.put(3,3); print('c.get(2) is None:',"
+      "run_tests "
      ],
      "hatalar": [],
      "gizli_gecen": 6,
@@ -109,10 +104,10 @@
       }
      ],
      "fazla_dosya": [],
-     "is_id": "20260825-132639-715c72"
+     "is_id": "20260825-135621-955779"
     }
    ],
-   "oturum": "20260825-132639-715c72"
+   "oturum": "20260825-135621-955779"
   },
   "roma": {
    "turlar": [
@@ -120,64 +115,12 @@
      "tur": 1,
      "derleme_durumu": "derlendi",
      "onarim": 1,
-     "sure": 152.3,
+     "sure": 234.5,
      "araclar": [
-      "list_files **/*",
-      "write_file C:\\Users\\malik.kayaalp\\Desktop\\Apprentice\\.apprentice_test_home\\kampanya\\roma\\roma.py",
-      "write_file C:\\Users\\malik.kayaalp\\Desktop\\Apprentice\\.apprentice_test_home\\kampanya\\roma\\test_roma.py",
-      "run_tests ",
-      "run_shell python -c \"from roma import romaya, romadan; print('romaya(1994):', romaya(1994)); print('romaya(4):', romaya(4)); print('romaya(3999):', ro"
-     ],
-     "hatalar": [],
-     "gizli_gecen": 5,
-     "gizli_toplam": 6,
-     "gizli": [
-      {
-       "ad": "gidis-donus 1..3999",
-       "gecti": false,
-       "detay": "ValueError: Gecersiz tekrar: X en fazla 3 kez ardarda gelebilir"
-      },
-      {
-       "ad": "kucuk harf ValueError",
-       "gecti": true,
-       "detay": ""
-      },
-      {
-       "ad": "VX gecersiz",
-       "gecti": true,
-       "detay": ""
-      },
-      {
-       "ad": "IM gecersiz",
-       "gecti": true,
-       "detay": ""
-      },
-      {
-       "ad": "negatif ValueError",
-       "gecti": true,
-       "detay": ""
-      },
-      {
-       "ad": "3888 en uzun",
-       "gecti": true,
-       "detay": ""
-      }
-     ],
-     "fazla_dosya": [],
-     "is_id": "20260825-133049-1739fb"
-    },
-    {
-     "tur": 2,
-     "derleme_durumu": "derlendi",
-     "onarim": 1,
-     "sure": 192.4,
-     "araclar": [
-      "read_file C:\\Users\\malik.kayaalp\\Desktop\\Apprentice\\.apprentice_test_home\\kampanya\\roma\\roma.py",
-      "write_file C:\\Users\\malik.kayaalp\\Desktop\\Apprentice\\.apprentice_test_home\\kampanya\\roma\\roma.py",
-      "read_file C:\\Users\\malik.kayaalp\\Desktop\\Apprentice\\.apprentice_test_home\\kampanya\\roma\\test_roma.py",
-      "write_file C:\\Users\\malik.kayaalp\\Desktop\\Apprentice\\.apprentice_test_home\\kampanya\\roma\\test_roma.py",
-      "run_tests ",
-      "run_shell python -c \"from roma import romaya, romadan; print('romaya(1994):', romaya(1994)); print('romaya(4):', romaya(4)); print('romaya(3999):', ro"
+      "list_files ",
+      "write_file roma.py",
+      "write_file test_roma.py",
+      "run_tests "
      ],
      "hatalar": [],
      "gizli_gecen": 6,
@@ -215,10 +158,10 @@
       }
      ],
      "fazla_dosya": [],
-     "is_id": "20260825-133322-3417ec"
+     "is_id": "20260825-135854-103b24"
     }
    ],
-   "oturum": "20260825-133049-1739fb"
+   "oturum": "20260825-135854-103b24"
   },
   "satis": {
    "turlar": [
@@ -226,11 +169,11 @@
      "tur": 1,
      "derleme_durumu": "derlendi",
      "onarim": 1,
-     "sure": 98.7,
+     "sure": 142.3,
      "araclar": [
-      "list_files **/*.py",
-      "write_file C:\\Users\\malik.kayaalp\\Desktop\\Apprentice\\.apprentice_test_home\\kampanya\\satis\\satis.py",
-      "write_file C:\\Users\\malik.kayaalp\\Desktop\\Apprentice\\.apprentice_test_home\\kampanya\\satis\\test_satis.py",
+      "list_files ",
+      "write_file satis.py",
+      "write_file test_satis.py",
       "run_tests "
      ],
      "hatalar": [],
@@ -269,10 +212,10 @@
       }
      ],
      "fazla_dosya": [],
-     "is_id": "20260825-133634-809f82"
+     "is_id": "20260825-140249-f2794b"
     }
    ],
-   "oturum": "20260825-133634-809f82"
+   "oturum": "20260825-140249-f2794b"
   },
   "fib_onar": {
    "turlar": [
@@ -280,10 +223,10 @@
      "tur": 1,
      "derleme_durumu": "derlendi",
      "onarim": 1,
-     "sure": 72.1,
+     "sure": 173.8,
      "araclar": [
+      "list_files *",
       "read_file fib.py",
-      "read_file test_fib.py",
       "write_file fib.py",
       "write_file test_fib.py",
       "run_tests "
@@ -324,10 +267,10 @@
       }
      ],
      "fazla_dosya": [],
-     "is_id": "20260825-133813-cf85f9"
+     "is_id": "20260825-140511-e574c1"
     }
    ],
-   "oturum": "20260825-133813-cf85f9"
+   "oturum": "20260825-140511-e574c1"
   },
   "kelime": {
    "turlar": [
@@ -335,11 +278,11 @@
      "tur": 1,
      "derleme_durumu": "derlendi",
      "onarim": 1,
-     "sure": 107.2,
+     "sure": 176.9,
      "araclar": [
-      "list_files **/*",
-      "write_file C:\\Users\\malik.kayaalp\\Desktop\\Apprentice\\.apprentice_test_home\\kampanya\\kelime\\kelime.py",
-      "write_file C:\\Users\\malik.kayaalp\\Desktop\\Apprentice\\.apprentice_test_home\\kampanya\\kelime\\test_kelime.py",
+      "list_files ",
+      "write_file kelime.py",
+      "write_file test_kelime.py",
       "run_tests "
      ],
      "hatalar": [],
@@ -378,16 +321,16 @@
       }
      ],
      "fazla_dosya": [],
-     "is_id": "20260825-133925-e6f119"
+     "is_id": "20260825-140805-a681ad"
     }
    ],
-   "oturum": "20260825-133925-e6f119"
+   "oturum": "20260825-140805-a681ad"
   }
  },
  "ozet": {
-  "tur1": 35,
+  "tur1": 36,
   "son": 36,
   "toplam": 36
  },
- "bitis": "2026-08-25 13:41:12"
+ "bitis": "2026-08-25 14:11:02"
 }

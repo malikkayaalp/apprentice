@@ -1354,12 +1354,49 @@ const document = { addEventListener(){}, createElement(){ return {style:{}, clas
     return True
 
 
+def ollama_adresi() -> bool:
+    """Panel Ollama adresini AYARDAN okumali, sabit tutmamali (denetim bulgusu #7).
+
+    core/client.py bunu bastan beri ayardan okuyordu ama panel ve izle.py adresi SABIT
+    tutuyordu. Ollama'yi baska portta/makinede kosturan kullanicida cirak calisiyor, panel
+    ise "model yuklu degil" diyordu: ayni ayarin iki farkli dogrusu vardi."""
+    import importlib
+    with open(os.path.join(ROOT, "clients", "web", "panel.py"), encoding="utf-8") as f:
+        kaynak = f.read()
+    with open(os.path.join(ROOT, "izle.py"), encoding="utf-8") as f:
+        izle_k = f.read()
+    # ollama_url()/fallback disinda SABIT adres kalmamali
+    for ad, k in (("panel.py", kaynak), ("izle.py", izle_k)):
+        for satir in k.splitlines():
+            if "localhost:11434" in satir and "env_or" not in satir and "OLLAMA_URL" not in satir:
+                assert satir.strip().startswith(("or ", "return ", "#")),                     "%s sabit Ollama adresi kullaniyor: %s" % (ad, satir.strip()[:90])
+
+    sys.path.insert(0, os.path.join(ROOT, "clients", "web"))
+    import panel as P
+    onceki = os.environ.get("OLLAMA_URL")
+    try:
+        os.environ["OLLAMA_URL"] = "http://192.168.1.50:9999/"
+        importlib.reload(P)
+        assert P.ollama_url() == "http://192.168.1.50:9999", P.ollama_url()   # sondaki / kirpilir
+        del os.environ["OLLAMA_URL"]
+        importlib.reload(P)
+        assert P.ollama_url().startswith("http"), P.ollama_url()
+    finally:
+        if onceki is None:
+            os.environ.pop("OLLAMA_URL", None)
+        else:
+            os.environ["OLLAMA_URL"] = onceki
+        importlib.reload(P)
+    print("ollama adresi: ok (ayardan/ortamdan, sabit degil)")
+    return True
+
+
 def main() -> int:
     ok = (js_sozdizimi() and metin_isleyicileri() and kaynak_denetimi() and id_butunlugu() and uc_sozlesmesi() and ust_bar_gorunur() and yerlesim_butun() and dizilimler_butun()
           and yerlesim_motoru() and sunucu_uclari() and calisma_dizini_kurallari() and sohbet_uclari()
           and goruntuleyici_sayfasi() and fark_gorunumu()
           and animasyon_tanimlari() and model_kapsulu()
-          and vurgulayici_sozlesmesi() and sahiplik_kurali() and karar_uclari() and bayat_surec_uyarisi() and karar_rozeti() and tekrar_dene_basarili() and inceleme_ekrani())
+          and vurgulayici_sozlesmesi() and sahiplik_kurali() and karar_uclari() and bayat_surec_uyarisi() and karar_rozeti() and tekrar_dene_basarili() and inceleme_ekrani() and ollama_adresi())
     print("SONUC:", "GECTI" if ok else "KALDI")
     return 0 if ok else 1
 

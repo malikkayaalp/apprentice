@@ -15,7 +15,12 @@ from __future__ import annotations
 import json, os, urllib.request
 from dataclasses import dataclass
 
-OLLAMA = "http://localhost:11434"
+try:      # adres ayardan; sabit adres baska portta kosan Ollama'yi gormuyordu
+    from core import config as _cfg
+    OLLAMA = (_cfg.env_or("OLLAMA_URL", "ollama.url", "http://localhost:11434")
+              or "http://localhost:11434").rstrip("/")
+except Exception:
+    OLLAMA = os.environ.get("OLLAMA_URL", "http://localhost:11434").rstrip("/")
 CACHE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                      "reports", "token_ratios.json")
 

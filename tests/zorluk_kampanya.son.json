@@ -76,6 +76,40 @@
     }
    ],
    "oturum": "20260825-134501-400ebb"
+  },
+  "dama": {
+   "zorluk": "5-oyun mantigi",
+   "turlar": [
+    {
+     "tur": 1,
+     "sure_s": 133.7,
+     "derleme_durumu": "derlendi",
+     "prompt_tok": 6898,
+     "uretim_tok": 2600,
+     "arac": 2,
+     "gizli": "11/12",
+     "hatalar": [
+      "HATA | kazanan bos tahtada | ifade: _kazanan() | beklenen: True | gelen: False"
+     ],
+     "dosya": [
+      "dama.py"
+     ]
+    },
+    {
+     "tur": 2,
+     "sure_s": 295.5,
+     "derleme_durumu": "derlendi",
+     "prompt_tok": 11523,
+     "uretim_tok": 6050,
+     "arac": 1,
+     "gizli": "11/12",
+     "hatalar": [
+      "HATA | kazanan bos tahtada | ifade: _kazanan() | beklenen: True | gelen: False"
+     ],
+     "dosya": []
+    }
+   ],
+   "oturum": "20260825-134644-6f12f6"
   }
  }
 }

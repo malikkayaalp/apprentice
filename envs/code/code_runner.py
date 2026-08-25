@@ -16,7 +16,7 @@ Olay semasi: butun ortam kosuculariyla ayni (system/tool/tool_result/write/
 assistant/result/exit). Sohbet baglami <session-dir>/<session>.json (schema 1).
 """
 from __future__ import annotations
-import argparse, glob, json, os, subprocess, sys, time
+import argparse, glob, json, os, re, subprocess, sys, time
 
 _BURASI = os.path.dirname(os.path.abspath(__file__))
 _KOK = os.path.dirname(os.path.dirname(_BURASI))
@@ -126,6 +126,72 @@ TOOLS = [
                      "Bos birakirsan tum testler kosar - kabul olcumu budur." % TEST_ADI}},
             "required": []}}},
 ]
+
+
+DISARI_DESENLERI = (
+    (re.compile(r"(?<![A-Za-z0-9])[A-Za-z]:[\\/]"), "mutlak yol (surucu)"),
+    (re.compile(r"(?<![A-Za-z0-9])[A-Za-z]:(?![\\/])"), "surucu-goreli yol (C:dosya)"),
+    (re.compile(r"\\\\[^\\\s]"), "ag yolu (UNC)"),
+    (re.compile(r"(^|[\s\"'=(,;|&])[\\/][^\s\"']"), "koke goreli yol (/... veya \\...)"),
+    (re.compile(r"(^|[\s\"'=(,;|&/\\])\.\.([\\/]|$)"), "ust dizine cikis (..)"),
+    (re.compile(r"(^|[\s\"'=(,;|&])~[\\/]"), "ev dizini (~)"),
+)
+
+
+AYIRAC = re.compile(r"(?:\|\||&&|[|;&])")
+
+
+def _programi_muaf_tut(metin: str, kok: str) -> str:
+    """Her komut parcasinin ILK belirteci (calistirilacak PROGRAM) mutlak yol olabilir.
+
+    NEDEN: harness'in kendisi `sys.executable` ile kosuyor - yorumlayicinin yolu her zaman
+    mutlaktir (C:\\...\\python.exe). Bunu reddetmek KORUMAYI DEGIL ARACI bozar; ilk surum
+    tam da bunu yapti ve kendi testimiz yakaladi.
+
+    SINIR DAR TUTULDU: yalniz ILK belirtec ve yalniz PROGRAM olarak. `python C:\\x\\gizli.py`
+    hala reddedilir, cunku oradaki mutlak yol ikinci belirtec - yani VERI, program degil.
+    Muaf tutulan belirtec taramadan cikarilir, digerleri oldugu gibi taranir."""
+    parcalar, cikti = AYIRAC.split(metin), []
+    for p in parcalar:
+        s = p.lstrip()
+        onek = p[:len(p) - len(s)]
+        if s.startswith('"'):
+            son = s.find('"', 1)
+            belirtec, kalan = (s[:son + 1], s[son + 1:]) if son > 0 else (s, "")
+        else:
+            i = s.find(" ")
+            belirtec, kalan = (s, "") if i < 0 else (s[:i], s[i:])
+        aday = os.path.normcase(os.path.abspath(belirtec.strip('"')))
+        izin = aday == os.path.normcase(os.path.abspath(sys.executable))
+        if not izin and kok and os.path.isabs(belirtec.strip('"')):
+            k = os.path.normcase(os.path.abspath(kok))
+            izin = aday == k or aday.startswith(k + os.sep)
+        cikti.append(onek + ("PROGRAM" if izin else belirtec) + kalan)
+    return "".join(x + y for x, y in zip(cikti, AYIRAC.findall(metin) + [""]))
+
+
+def kabuk_guvenli(cmd, kok: str = "") -> str:
+    """Komut calisma alani DISINA isaret ediyor mu? Doner: sebep ('' = temiz).
+
+    NEDEN GEREKLI: read_file/write_file `Jail.path()` ile hapiste ama `run_shell`
+    isletim sistemi kabugunu DOGRUDAN calistiriyordu. cwd'yi calisma alanina kurmak
+    yetmez - mutlak yol, `..`, surucu harfi ya da UNC ile disari cikilir. OLCULDU:
+    `type C:\\...\\GIZLI.txt` disaridaki dosyayi OKUDU, `echo > C:\\...\\yeni.txt`
+    disariya YAZDI. Belge "cirak calisma dizini disina cikamaz" diyordu; bu, kabuk
+    aciksa DOGRU DEGILDI.
+
+    DURUST SINIR: bu bir KORUMA, kum havuzu (sandbox) DEGIL. Komut metni denetlenir;
+    calisma aninda yol URETEN bir yorumlayici (python -c ile dizge birlestirme gibi)
+    bunu asabilir. Gercek hapis icin isletim sistemi seviyesinde kisitlama gerekir
+    (Job Object / kapsayici). Bu yuzden kabuk araclari VARSAYILAN OLARAK KAPALIDIR ve
+    acildiginda inceleme ekrani "hapis garantisi yok" diye uyarir."""
+    metin = cmd if isinstance(cmd, str) else " ".join(str(x) for x in (cmd or []))
+    metin = _programi_muaf_tut(metin, kok)
+    for desen, sebep in DISARI_DESENLERI:
+        m = desen.search(metin)
+        if m:
+            return "%s: %r" % (sebep, m.group(0).strip()[:40])
+    return ""
 
 
 class Jail:
@@ -257,6 +323,12 @@ def _run(jail: Jail, written: list, em, name: str, a: dict):
         vur = [y for y in yasak if y.lower() in cmd.lower()]
         if vur:
             return {"error": "komut reddedildi (%s): silme ve push bu ortamda yok" % ", ".join(vur)}
+        # HAPIS: komut calisma alani DISINA isaret ediyorsa kosmaz. Olculdu: cwd'yi
+        # calisma alanina kurmak yetmiyor, mutlak yol/UNC/`..` ile disari cikiliyordu.
+        disari = kabuk_guvenli(cmd, jail.root)
+        if disari:
+            return {"error": "komut reddedildi - calisma alani disina isaret ediyor (%s). "
+                             "Yollari calisma alanina GORELI ver." % disari}
         return shell(cmd, jail.root)
     if name == "run_tests":
         return shell(_test_cmd(str(a.get("args") or "")), jail.root)

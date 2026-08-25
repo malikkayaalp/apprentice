@@ -792,15 +792,48 @@ Dongu, olcumle secildi: cirak yazar -> usta CALISTIRARAK dogrular -> duzeltme bu
 """
 
 
+BASI = "<!-- APPRENTICE:BASLANGIC - bu blok `kur.py --kural` tarafindan yonetilir -->"
+SONU = "<!-- APPRENTICE:BITIS -->"
+
+
+def agents_birlestir(yol: str, govde: str) -> str:
+    """AGENTS.md'ye kuralimizi EKLE - dosyayi EZME. Doner: "yazildi"|"guncellendi"|"eklendi".
+
+    NEDEN: AGENTS.md bize ait DEGIL, ortak standart bir dosya (Codex/Copilot/Gemini okur) ve
+    kullanicinin kendi proje kurallarini tutar. Onceki surum `open(..., "w")` ile korlemesine
+    uzerine yaziyordu: bir projeye baglanmak, o projenin butun ajan kurallarini SESSIZCE
+    silmek anlamina geliyordu. `.cursor/rules/apprentice.mdc` bize ozel bir dosya oldugu icin
+    orada ezme dogru; burada DEGIL.
+
+    Kendi bolumumuzu isaretle sinirlariz ki tekrar kosuldugunda YIGILMASIN: isaret varsa
+    ARASI degistirilir, yoksa dosyanin SONUNA eklenir. Kullanicinin metnine dokunulmaz."""
+    blok = "%s\n# Apprentice denetci kurali\n\n%s%s\n" % (BASI, govde, SONU)
+    try:
+        with open(yol, encoding="utf-8") as f:
+            mevcut = f.read()
+    except OSError:
+        mevcut = None
+    if mevcut is None:
+        yeni, durum = blok, "yazildi"
+    elif BASI in mevcut and SONU in mevcut:
+        bas, kalan = mevcut.split(BASI, 1)
+        yeni, durum = bas + blok + kalan.split(SONU, 1)[1], "guncellendi"
+    else:
+        ayirac = "" if mevcut.endswith("\n\n") else ("\n" if mevcut.endswith("\n") else "\n\n")
+        yeni, durum = mevcut + ayirac + blok, "eklendi (mevcut icerik korundu)"
+    with open(yol, "w", encoding="utf-8", newline="\n") as f:
+        f.write(yeni)
+    return durum
+
+
 def kural_yaz(proje: str) -> bool:
     """Tek kaynak AGENTS.md (OpenMemory standardi - Codex/Copilot/Gemini dogrudan okur);
     Cursor icin .cursor/rules/apprentice.mdc ayni govdeyle (otomatik uygulanir), Copilot icin
     .github/ zaten varsa ona isaret eden kucuk bir yonlendirme yazilir."""
     govde = KURAL.split("---")[-1].strip() + "\n"
     p_agents = os.path.join(proje, "AGENTS.md")
-    with open(p_agents, "w", encoding="utf-8", newline="\n") as f:
-        f.write("# Apprentice denetci kurali\n\n" + govde)
-    log(OK + "AGENTS.md yazildi: %s  (tum ajanlarin ortak kural kaynagi)" % p_agents)
+    durum = agents_birlestir(p_agents, govde)
+    log(OK + "AGENTS.md %s: %s  (tum ajanlarin ortak kural kaynagi)" % (durum, p_agents))
     d = os.path.join(proje, ".cursor", "rules")
     os.makedirs(d, exist_ok=True)
     p = os.path.join(d, "apprentice.mdc")

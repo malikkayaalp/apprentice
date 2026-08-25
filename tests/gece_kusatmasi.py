@@ -103,6 +103,21 @@ def asamalar(butce_sn: float) -> list:
     ]
 
 
+def _durum(r: dict) -> str:
+    """Asama cikis kodunu OKUNUR hale getir (sozlesme: core/olcum_arsiv.py).
+
+    Onceden yalniz "cikis == 0 -> GECTI" vardi ve kampanyalar gizli kontroller kalsa bile
+    0 donuyordu: 11/12 kalan bir kosu gece raporunda GECTI yaziyordu. Gozetimsiz kosuda
+    raporun tek isi dogruyu soylemek - "olculdu ama eksik" ile "ariza" ayri gorunmeli."""
+    if r["cikis"] is None:
+        return "ATLANDI"
+    if r["cikis"] == 0:
+        return "GECTI"
+    if r["cikis"] == 2:
+        return "EKSIK (olcum gecerli, gizli kontroller kaldi)"
+    return "KALDI (%s)" % (r["hata"] or r["cikis"])
+
+
 def rapor_yaz(sonuclar: list, tel_once: dict, tel_sonra: dict, t0: float,
               atlanan: list) -> str:
     yol = os.path.join(CIKTI, "gece_raporu.md")
@@ -117,9 +132,7 @@ def rapor_yaz(sonuclar: list, tel_once: dict, tel_sonra: dict, t0: float,
     S.append("| asama | sonuc | sure |")
     S.append("|---|---|---|")
     for r in sonuclar:
-        durum = "GECTI" if r["cikis"] == 0 else ("ATLANDI" if r["cikis"] is None
-                                                 else "KALDI (%s)" % (r["hata"] or r["cikis"]))
-        S.append("| %s | %s | %.0f sn |" % (r["ad"], durum, r["sure"]))
+        S.append("| %s | %s | %.0f sn |" % (r["ad"], _durum(r), r["sure"]))
     for a in atlanan:
         S.append("| %s | ATLANDI - butce bitti | - |" % a)
     S.append("")
@@ -212,8 +225,7 @@ def main() -> int:
         _log("-> %s basliyor (sinir %d sn, kalan butce %d dk)" % (ad, sinir, kalan / 60))
         r = _kos(ad, kod, sinir, ek)
         sonuclar.append(r)
-        _log("<- %s: %s (%.0f sn)" %
-             (ad, "GECTI" if r["cikis"] == 0 else "KALDI/%s" % (r["hata"] or r["cikis"]), r["sure"]))
+        _log("<- %s: %s (%.0f sn)" % (ad, _durum(r), r["sure"]))
         t = _oksuz_temizle()
         if t.get("kapanan"):
             _log("   oksuz temizligi: %s surec, %.1f GB" % (t["kapanan"], t.get("gb", 0)))
@@ -222,8 +234,12 @@ def main() -> int:
     yol = rapor_yaz(sonuclar, tel_once, tel_sonra, t0, atlanan)
     _log("BITTI - %.0f dk. Rapor: %s" % ((time.time() - t0) / 60, yol))
     gecen = sum(1 for r in sonuclar if r["cikis"] == 0)
-    _log("asama: %d/%d gecti, %d atlandi" % (gecen, len(sonuclar), len(atlanan)))
-    return 0
+    eksik = sum(1 for r in sonuclar if r["cikis"] == 2)
+    ariza = sum(1 for r in sonuclar if r["cikis"] not in (0, 2, None))
+    _log("asama: %d/%d gecti, %d eksik (olculdu ama gorevler kalmis), %d ariza, %d atlandi"
+         % (gecen, len(sonuclar), eksik, ariza, len(atlanan)))
+    # Gece kosusunun cikisi da dogruyu soyler: ariza varsa 1, yalniz gorev eksigi varsa 2.
+    return 1 if ariza else (2 if eksik else 0)
 
 
 if __name__ == "__main__":

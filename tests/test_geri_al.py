@@ -11,7 +11,7 @@ Testler dort guvenlik kuralini cakar:
   4. Once PLAN, sonra uygulama: plan() hicbir seyi degistirmez.
 """
 from __future__ import annotations
-import json, os, shutil, subprocess, sys, tempfile
+import json, os, shutil, subprocess, sys, tempfile, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -66,13 +66,16 @@ def git_yolu() -> bool:
     ag = anlik(wd)
     assert ag["yontem"] == "git" and ag["kirli"] == ["kullanici.py"], ag
 
+    _yaz(wd, "a.py", "yeni a\n")                    # cirak yazdi (gunlukte var)
+    _yaz(wd, "kabuk_urunu.py", "kabuk yazdi\n")     # run_shell yazdi (GUNLUKTE YOK)
+    # SIRA URETIMDEKI GIBI: dosyalar once yazilir, olay gunlugu EN SON kapanir. Bitis ani
+    # events.jsonl mtime'indan okunuyor; fikstur ters sirayla kurulursa dosyalar "is
+    # bittikten sonra degismis" gorunur.
     ev = _is(tempfile.mkdtemp(), wd, [
         {"type": "write", "path": "a.py", "before": "eski a\n", "after": "yeni a\n"},
         {"type": "tool", "name": "run_shell", "detail": "python uret.py"},
         {"type": "result", "ok": True, "errors": [], "rounds": 0},
     ], ag)
-    _yaz(wd, "a.py", "yeni a\n")                    # cirak yazdi (gunlukte var)
-    _yaz(wd, "kabuk_urunu.py", "kabuk yazdi\n")     # run_shell yazdi (GUNLUKTE YOK)
 
     p = plan(ev, "is1")
     assert p["yontem"] == "git" and p["mumkun"], p
@@ -90,6 +93,90 @@ def git_yolu() -> bool:
     assert not os.path.exists(os.path.join(wd, "kabuk_urunu.py")), "kabuk urunu silinmedi"
     assert "KULLANICI DEGISIKLIGI" in _oku(wd, "kullanici.py"), "KULLANICININ EMEGI SILINDI"
     print("geri alma (git): ok (run_shell boslugu kapali, kullanicinin isi korundu)")
+    return True
+
+
+def kullanici_emegi_git() -> bool:
+    """GIT yolunda da: is bittikten SONRA degisen dosyaya DOKUNULMAZ (denetim bulgusu #2).
+
+    Git yolu "kim degistirdiginden bagimsiz" calisiyordu; bu, cirak bittikten SONRA
+    kullanicinin yaptigi duzenlemeyi de kapsiyordu. Somut zarar:
+      - cirak a.py yazar -> kullanici elle duzeltir -> GERI AL -> `git checkout` kullanicinin
+        emegini SESSIZCE siler.
+      - kullanici is bittikten sonra YENI dosya olusturur -> git'e '??' gorunur -> SILINIR.
+    Gunluk yolunda bu kural bastan beri vardi, git yolunda YOKTU. Bu test farki kilitler."""
+    if not shutil.which("git"):
+        print("kullanici emegi (git): git yok, atlandi")
+        return True
+    wd = tempfile.mkdtemp()
+    _git(wd, "init", "-q"); _git(wd, "config", "user.email", "t@t"); _git(wd, "config", "user.name", "t")
+    _yaz(wd, "cirak.py", "eski\n"); _yaz(wd, "ikinci.py", "eski2\n")
+    _git(wd, "add", "-A"); _git(wd, "commit", "-qm", "ilk")
+    ag = anlik(wd)
+
+    _yaz(wd, "cirak.py", "def f():\n    return 1\n")     # cirak iki dosyayi da yazdi
+    _yaz(wd, "ikinci.py", "x = 1\n")
+    ev = _is(tempfile.mkdtemp(), wd, [
+        {"type": "write", "path": "cirak.py", "before": "eski\n", "after": "def f():\n    return 1\n"},
+        {"type": "write", "path": "ikinci.py", "before": "eski2\n", "after": "x = 1\n"},
+        {"type": "result", "ok": True, "errors": [], "rounds": 0},
+    ], ag)
+
+    # --- IS BITTI. Simdi KULLANICI devrede ---
+    time.sleep(2.5)                       # mtime bitisten SONRA olsun (SLACK payi 2 sn)
+    _yaz(wd, "cirak.py", "def f():\n    return 42   # kullanici duzeltti\n")
+    _yaz(wd, "ELDE_YAZILAN.py", "# kullanicinin kendi yeni dosyasi\n")
+
+    p = plan(ev, "is1")
+    yollar = {e["yol"] for e in p["eylemler"]}
+    atl = {a["yol"]: a["sebep"] for a in p["atlanan"]}
+    assert p["yontem"] == "git", p
+    assert "cirak.py" not in yollar, "kullanicinin duzenledigi dosya geri alma planinda!"
+    assert "ELDE_YAZILAN.py" not in yollar, "kullanicinin YENI dosyasi SILINECEKTI!"
+    assert "cirak.py" in atl and "sonra" in atl["cirak.py"], atl
+    assert "ELDE_YAZILAN.py" in atl, atl
+    # dokunulmamis dosya HALA geri alinabilmeli - koruma isi tumden durdurmamali
+    assert "ikinci.py" in yollar, "dokunulmamis dosya da geri alinamadi: %s" % p
+
+    r = uygula(ev, "is1", p)
+    assert _oku(wd, "cirak.py") == "def f():\n    return 42   # kullanici duzeltti\n", \
+        "KULLANICININ EMEGI SILINDI"
+    assert os.path.exists(os.path.join(wd, "ELDE_YAZILAN.py")), "kullanicinin YENI dosyasi SILINDI"
+    assert _oku(wd, "ikinci.py") == "eski2\n", r     # dokunulmayan dosya gercekten geri alindi
+    print("kullanici emegi (git): ok (duzenlenen + yeni dosya atlandi, digeri geri alindi)")
+    return True
+
+
+def bayat_plan() -> bool:
+    """Plan gosterildikten SONRA dosya degisirse UYGULA yine de dokunmaz (yaris korumasi).
+
+    Panel plani gosterir, kullanici onay ekranindayken dosyayi duzenler, sonra GERI AL'a
+    basar. Yikici adimin hemen oncesinde yeniden bakilmazsa emek gider."""
+    if not shutil.which("git"):
+        print("bayat plan: git yok, atlandi")
+        return True
+    wd = tempfile.mkdtemp()
+    _git(wd, "init", "-q"); _git(wd, "config", "user.email", "t@t"); _git(wd, "config", "user.name", "t")
+    _yaz(wd, "yaris.py", "eski\n")
+    _git(wd, "add", "-A"); _git(wd, "commit", "-qm", "ilk")
+    ag = anlik(wd)
+    _yaz(wd, "yaris.py", "yeni = 1\n")
+    ev = _is(tempfile.mkdtemp(), wd, [
+        {"type": "write", "path": "yaris.py", "before": "eski\n", "after": "yeni = 1\n"},
+        {"type": "result", "ok": True, "errors": [], "rounds": 0},
+    ], ag)
+    p = plan(ev, "is1")
+    assert {e["yol"] for e in p["eylemler"]} == {"yaris.py"}, p     # plan cikarken temizdi
+
+    time.sleep(2.5)      # kullanici onay ekranindayken dosyayi duzenledi
+    _yaz(wd, "yaris.py", "yeni = 1\nkullanici = 'buraya dokunma'\n")
+
+    r = uygula(ev, "is1", p)      # BAYAT plan uygulaniyor
+    assert not r.get("yapildi"), "bayat plan korumasiz uygulandi -> %s" % r
+    assert any(a["yol"] == "yaris.py" for a in r.get("atlanan") or []), r
+    assert _oku(wd, "yaris.py") == "yeni = 1\nkullanici = 'buraya dokunma'\n", \
+        "plan-sonrasi duzenleme SILINDI"
+    print("bayat plan: ok (plan gosterildikten sonraki duzenleme korundu)")
     return True
 
 
@@ -178,7 +265,8 @@ def zemin_bilgisi() -> bool:
 
 
 def main() -> int:
-    ok = git_yolu() and gunluk_yolu() and guvenlik() and zemin_bilgisi()
+    ok = (git_yolu() and kullanici_emegi_git() and bayat_plan() and gunluk_yolu()
+          and guvenlik() and zemin_bilgisi())
     print("SONUC:", "GECTI" if ok else "KALDI")
     return 0 if ok else 1
 

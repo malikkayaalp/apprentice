@@ -274,9 +274,49 @@ def telemetri_pislikte() -> bool:
     return True
 
 
+def kullanicinin_agents_dosyasi():
+    """`kur.py --kural` KULLANICININ AGENTS.md'sini EZMEMELI (denetim bulgusu #4).
+
+    AGENTS.md bize ait degil: ortak standart dosya (Codex/Copilot/Gemini okur) ve kullanicinin
+    kendi proje kurallarini tutar. Onceki surum korlemesine uzerine yaziyordu - bir projeye
+    baglanmak, o projenin butun ajan kurallarini SESSIZCE silmek demekti."""
+    sys.path.insert(0, ROOT)
+    import kur
+
+    d = tempfile.mkdtemp()
+    yol = os.path.join(d, "AGENTS.md")
+    govde = "## Kural v1\n\nusta dogrular.\n"
+
+    assert kur.agents_birlestir(yol, govde) == "yazildi"
+    kur.agents_birlestir(yol, govde)                       # ikinci kosu YIGMAMALI
+    with open(yol, encoding="utf-8") as f:
+        assert f.read().count(kur.BASI) == 1, "blok yigildi"
+
+    kullanici = "# Benim kurallarim\n\n- main dala push yok\n- testler Turkce\n"
+    with open(yol, "w", encoding="utf-8") as f:
+        f.write(kullanici)
+    durum = kur.agents_birlestir(yol, govde)
+    with open(yol, encoding="utf-8") as f:
+        ic = f.read()
+    assert "eklendi" in durum, durum
+    assert kullanici.strip() in ic, "KULLANICININ KURALLARI SILINDI"
+    assert "usta dogrular." in ic, "bizim kural yazilmadi"
+
+    # govde degisince bizim blok guncellenir, kullanicinin metni YERINDE kalir
+    assert kur.agents_birlestir(yol, "## Kural v2\n\nusta KOSARAK dogrular.\n") == "guncellendi"
+    with open(yol, encoding="utf-8") as f:
+        ic2 = f.read()
+    assert kullanici.strip() in ic2, "guncellemede kullanicinin metni gitti"
+    assert "usta dogrular." not in ic2 and "usta KOSARAK dogrular." in ic2, ic2
+    assert ic2.count(kur.BASI) == 1, "guncellemede blok yigildi"
+    shutil.rmtree(d, ignore_errors=True)
+    print("kullanicinin AGENTS.md dosyasi: ok (ezilmiyor, yigilmiyor, guncelleniyor)")
+
+
 def main() -> int:
     denemeler = [bozuk_kayitlar, zor_dosya_adlari, buyuk_gunluk, geri_alma_zor_durumlar,
-                 geri_alma_engelleri, karar_dizileri, telemetri_pislikte]
+                 geri_alma_engelleri, karar_dizileri, telemetri_pislikte,
+                 kullanicinin_agents_dosyasi]
     kalan = 0
     for fn in denemeler:
         try:

@@ -251,12 +251,17 @@ def main() -> int:
     rapor["bitis"] = time.strftime("%Y-%m-%d %H:%M:%S")
     # ARSIVE de yaz: eskiden yalniz .son.json vardi ve her kosu oncekini EZIYORDU.
     # 2026-08-23 temel cizgisi (2416 sn) boyle kaybolmustu; git'ten kurtarildi.
-    from core.olcum_arsiv import kaydet
+    from core.olcum_arsiv import kampanya_cikis, kaydet
     yollar = kaydet("code_kampanya", rapor)
     print("->", yollar.get("son", yol))
     if yollar.get("arsiv"):
         print("-> arsiv:", yollar["arsiv"])
-    return 0
+    # CIKIS KODU sonucu YANSITIR (sozlesme: core/olcum_arsiv.py). Kosulsuz 0 donuluyordu;
+    # gizli kontroller kalsa bile gozetimsiz kosu "TAMAM" raporluyordu.
+    kod = kampanya_cikis(ts, n)
+    print("cikis %d (%s)" % (kod, "hepsi gecti" if kod == 0 else
+                             "gizli kontroller kaldi" if kod == 2 else "olculecek kontrol yok"))
+    return kod
 
 
 if __name__ == "__main__":

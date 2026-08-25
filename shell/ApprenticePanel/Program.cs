@@ -61,7 +61,7 @@ internal sealed class TekPencereBaslatici : Form
         Load += async (_, _) =>
         {
             var ana = new PanelForm(args) { Opacity = 0, ShowInTaskbar = false };
-            await ana.SadeceSunucu();                     // sunucu ayakta mi, degilse baslat
+            await ana.SadeceSunucu(args);                 // sunucu ayakta mi, degilse baslat (--kok/--port dahil)
             var ortam = await CoreWebView2Environment.CreateAsync(null, PanelForm.EvKlasoruDis());
             var alt = new AltPencere(string.Format("http://127.0.0.1:{0}/?tek={1}{2}",
                                                    ana.Port, panel, ustte ? "&ustte=1" : ""), ortam);
@@ -103,15 +103,25 @@ internal sealed class PanelForm : Form
     public int Port => _port;
     public static string EvKlasoruDis() => EvKlasoru();
 
-    /// <summary>Pencere acmadan: kurulumu bul, sunucu ayakta degilse baslat.</summary>
-    public async Task SadeceSunucu()
+    /// <summary>Pencere acmadan: kurulumu bul, sunucu ayakta degilse baslat.
+    /// ARGUMANLAR BURADA DA OKUNUR: onceden Array.Empty gecilirdi, yani "--tek" ile
+    /// acildiginda --kok ve --port SESSIZCE yok sayiliyordu. Sonuc: standart disi bir
+    /// kuruluma --kok verildiginde tek-pencere kipi "kurulum bulunamadi" diyordu; --port
+    /// verildiginde de cerceve, sunucunun gercekte kostugu porttan BASKA bir adrese
+    /// gidiyordu. Normal yol (BaslatAsync) ikisini de okuyordu - iki yol ayni davranmali.</summary>
+    public async Task SadeceSunucu(string[] args)
     {
-        _kok = KurulumBul(Array.Empty<string>());
+        args ??= Array.Empty<string>();
+        _kok = KurulumBul(args);
         if (_kok == "")
         {
-            Hata.Goster("kurulum bulunamadi", @"clients\web\panel.py bulunamadi", null);
+            Hata.Goster("kurulum bulunamadi", @"clients\web\panel.py bulunamadi",
+                        "Kurulum klasorunu acikca ver:\n" +
+                        @"Apprentice-WebPanel.exe --tek akis --kok ""C:\...\Apprentice""");
             return;
         }
+        for (var i = 0; i < args.Length - 1; i++)
+            if (args[i] == "--port" && int.TryParse(args[i + 1], out var p)) _port = p;
         if (await AyaktaMi(_port)) return;
         var deneme = _port;
         while (deneme < _port + 12 && PortDolu(deneme) && !await AyaktaMi(deneme)) deneme++;

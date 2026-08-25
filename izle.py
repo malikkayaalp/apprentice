@@ -182,6 +182,16 @@ class IsDeposu:
             s["sure"] = round(time.time() - s["baslangic"], 1)
 
 
+
+def _ayar_url() -> str:
+    """Ollama adresini ayardan oku (bkz. panel.ollama_url). Sabit adres, Ollama'yi baska
+    portta kosturan kullanicida paneli/izleyiciyi kor birakiyordu."""
+    try:
+        from core import config as _c
+        return _c.get("ollama.url") or "http://localhost:11434"
+    except Exception:
+        return "http://localhost:11434"
+
 def kanit_coz(metin: str) -> dict | None:
     """write_file cevabindaki kanit katmanini ayristirir (derleme/ruff/no-op/izin)."""
     try:
@@ -304,7 +314,8 @@ def sistem_satiri() -> str:
         # 'ollama ps' KOMUTU degil API: komut farkli sunucu ornegine baglanabiliyor
         # (olculdu: model API'de yukluyken CLI bos tablo gosterdi - cift serve mirasi).
         import urllib.request
-        with urllib.request.urlopen("http://localhost:11434/api/ps", timeout=4) as r:
+        _u = (os.environ.get("OLLAMA_URL") or _ayar_url()).rstrip("/")
+        with urllib.request.urlopen(_u + "/api/ps", timeout=4) as r:
             modeller = (json.load(r).get("models") or [])
         if modeller:
             m = modeller[0]

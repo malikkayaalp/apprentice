@@ -8,7 +8,7 @@ silinmisti. Olcum iddiasindaki bir projede kabul edilemez.
 Cakilan sozlesme: ARSIV ASLA EZILMEZ.
 """
 from __future__ import annotations
-import json, os, shutil, sys, time
+import json, os, re, shutil, sys, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -102,14 +102,51 @@ def kampanyalar_arsivliyor() -> bool:
     for ad in ("code_kampanya", "zorluk_kampanya"):
         with open(os.path.join(ROOT, "tests", "%s.py" % ad), encoding="utf-8") as f:
             s = f.read()
-        assert "from core.olcum_arsiv import kaydet" in s, "%s arsive yazmiyor" % ad
+        # ice aktarma satiri baska adlar da tasiyabilir (kampanya_cikis eklendi) - TAM
+        # SATIR aramak testi ice aktarma bicimine bagliyor, davranisa degil.
+        assert re.search(r"from core\.olcum_arsiv import .*\bkaydet\b", s), \
+            "%s arsive yazmiyor" % ad
         assert 'kaydet("%s"' % ad in s, "%s yanlis adla arsivliyor" % ad
+        # cikis kodu SONUCU yansitmali (bkz. cikis_kodu_sozlesmesi)
+        assert re.search(r"from core\.olcum_arsiv import .*\bkampanya_cikis\b", s) \
+            and "kampanya_cikis(" in s, "%s cikis kodunu kosulsuz donuyor" % ad
     print("kampanyalar arsivliyor: ok")
     return True
 
 
+def cikis_kodu_sozlesmesi() -> bool:
+    """Kampanya cikis kodu SONUCU yansitmali (denetim bulgusu #3).
+
+    Kampanyalar KOSULSUZ 0 donuyordu: gizli kontroller 11/12 kalsa bile gozetimsiz gece
+    raporu "GECTI" yaziyordu - basarisizlik BASARI gibi gorunuyordu. Uc degerli olmasi
+    sart: "model gorevi cozemedi" bir OLCUM SONUCU, "harness patladi" bir ARIZA."""
+    assert O.kampanya_cikis(12, 12) == O.CIKIS_TAMAM
+    assert O.kampanya_cikis(11, 12) == O.CIKIS_EKSIK, "eksik kosu basari sayildi"
+    assert O.kampanya_cikis(0, 12) == O.CIKIS_EKSIK
+    # olculecek kontrol YOKSA bu basari degil ARIZADIR - kampanya bir sey kosmamis demektir
+    assert O.kampanya_cikis(0, 0) == O.CIKIS_HATA, "bos kosu basari sayildi"
+    assert O.kampanya_cikis(0, -1) == O.CIKIS_HATA
+    # uc deger BIRBIRINDEN AYRI olmali (2'yi 1'e katlamak gece raporunu okunamaz yapar)
+    assert len({O.CIKIS_TAMAM, O.CIKIS_EKSIK, O.CIKIS_HATA}) == 3
+
+    # GERCEK kosu verisiyle: 2026-08-25 zorluk kampanyasi 50/51 kalmisti
+    yol = os.path.join(ROOT, "tests", "zorluk_kampanya.son.json")
+    if os.path.exists(yol):
+        with open(yol, encoding="utf-8") as f:
+            d = json.load(f)
+        g = t = 0
+        for k in (d.get("gorevler") or {}).values():
+            a, b = (str(k["turlar"][-1].get("gizli", "0/0")).split("/") + ["0"])[:2]
+            g += int(a or 0); t += int(b or 0)
+        if t:
+            assert O.kampanya_cikis(g, t) == (O.CIKIS_TAMAM if g >= t else O.CIKIS_EKSIK)
+    print("cikis kodu sozlesmesi: ok (tamam/eksik/ariza ayri)")
+    return True
+
+
 def main() -> int:
-    ok = arsiv_ezilmez() and kiyas_dogru() and kampanyalar_arsivliyor()
+    ok = (arsiv_ezilmez() and kiyas_dogru() and kampanyalar_arsivliyor()
+          and cikis_kodu_sozlesmesi())
     print("SONUC:", "GECTI" if ok else "KALDI")
     return 0 if ok else 1
 

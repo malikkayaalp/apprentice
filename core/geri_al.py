@@ -116,6 +116,44 @@ def _olaylar(jobs_dir: str, jid: str) -> list:
     return out
 
 
+def _bitis(jobs_dir: str, jid: str) -> float:
+    """Isin BITIS ani (events.jsonl mtime). Olaylarda guvenilir zaman damgasi yok; tek-yazar
+    kurali sayesinde is bitince o dosyaya kimse eklemez, mtime dogru isarettir. 0 = bilinmiyor."""
+    try:
+        return os.path.getmtime(os.path.join(jobs_dir, jid, "events.jsonl"))
+    except OSError:
+        return 0.0
+
+
+SLACK = 2.0    # dosya sistemi mtime cozunurlugu + isin son saniyesindeki yazimlar icin pay
+
+
+def _sonradan_degismis(tam: str, bitis: float, beklenen: str | None) -> str:
+    """Dosya IS BITTIKTEN SONRA degismis mi? Doner: sebep ('' = is guvenli).
+
+    NEDEN VAR: git yolu "kim degistirdiginden bagimsiz" calisiyordu ve bu, KULLANICININ
+    is bittikten sonra yaptigi duzenlemeyi de kapsiyordu. Somut zarar: cirak a.py yazar,
+    kullanici elle duzeltir, GERI AL'a basar -> `git checkout -- a.py` kullanicinin emegini
+    SESSIZCE siler. Daha kotusu: is bittikten sonra olusturulan YEPYENI dosya git'e '??'
+    gorunur ve `os.remove` ile silinirdi. Gunluk yolunda bu kural vardi, git yolunda YOKTU.
+
+    IKI OLCUT: (1) icerik - dosyanin write olayi varsa isci'nin BIRAKTIGI icerikle
+    karsilastirilir; (2) zaman - write olayi yoksa (kabuk yazmis ya da sonradan olusmus)
+    mtime bitis anina bakilir. Supheliyse DOKUNMA: yanlis atlama sadece is birakir,
+    yanlis silme veri kaybettirir."""
+    if beklenen is not None:
+        return "" if _oku(tam) == beklenen else "iş bittikten sonra değişmiş (başkası düzenlemiş)"
+    if not bitis:
+        return ""
+    try:
+        m = os.path.getmtime(tam)
+    except OSError:
+        return ""
+    if m > bitis + SLACK:
+        return "iş bittikten sonra oluşmuş/değişmiş (mtime iş bitişinden sonra)"
+    return ""
+
+
 def _oku(yol: str) -> str | None:
     try:
         with open(yol, encoding="utf-8", errors="replace") as f:
@@ -158,6 +196,7 @@ def plan(jobs_dir: str, jid: str) -> dict:
     # --- 1. YONTEM: GIT (kim degistirdiginden bagimsiz - run_shell boslugunu kapatir) ---
     if ag.get("yontem") == "git" and git_deposu_mu(workdir):
         basta_kirli = set(ag.get("kirli") or [])
+        bitis = _bitis(jobs_dir, jid)
         for yol, durum in sorted(_kirli(workdir).items()):
             tam = _guvenli(workdir, yol)
             if tam is None:
@@ -166,6 +205,13 @@ def plan(jobs_dir: str, jid: str) -> dict:
             if yol in basta_kirli:
                 # KURAL 1: is baslamadan da kirliydi -> kullanicinin kendi isi
                 atlanan.append({"yol": yol, "sebep": "iş başlamadan da değişikti (senin işin)"})
+                continue
+            # KURAL 2: is bittikten SONRA degismisse dokunma. Gunluk yolunda bu kural
+            # bastan beri vardi, git yolunda YOKTU - kullanicinin sonradan yaptigi
+            # duzenleme `git checkout` ile sessizce siliniyordu.
+            sebep = _sonradan_degismis(tam, bitis, yazimlar.get(yol, {}).get("son_sonra"))
+            if sebep:
+                atlanan.append({"yol": yol, "sebep": sebep})
                 continue
             if durum.strip() == "??":
                 eylemler.append({"yol": yol, "eylem": "sil", "kaynak": "git"})
@@ -223,13 +269,23 @@ def uygula(jobs_dir: str, jid: str, p: dict | None = None) -> dict:
     for e in _olaylar(jobs_dir, jid):
         if e.get("type") == "write":
             y = (e.get("path") or "").replace("\\", "/")
-            yazimlar.setdefault(y, {"ilk_once": e.get("before") or ""})
+            d = yazimlar.setdefault(y, {"ilk_once": e.get("before") or ""})
+            d["son_sonra"] = e.get("after") or ""
 
-    yapildi, basarisiz = [], []
+    bitis = _bitis(jobs_dir, jid)
+    yapildi, basarisiz, atlanan = [], [], list(p.get("atlanan") or [])
     for ey in p.get("eylemler") or []:
         yol, tam = ey["yol"], _guvenli(workdir, ey["yol"])
         if tam is None:
             basarisiz.append({"yol": yol, "sebep": "calisma alani disinda"})
+            continue
+        # SON KONTROL: plan gosterildikten SONRA dosya degismis olabilir (kullanici
+        # onay ekranindayken duzenlemis olabilir). Yikici adimin hemen oncesinde
+        # yeniden bakariz - plan ne kadar taze olursa olsun, yazan biz oldugumuz icin
+        # sorumluluk burada.
+        sebep = _sonradan_degismis(tam, bitis, yazimlar.get(yol, {}).get("son_sonra"))
+        if sebep:
+            atlanan.append({"yol": yol, "sebep": sebep + " - geri alma sirasinda atlandi"})
             continue
         try:
             if ey["kaynak"] == "git":
@@ -251,5 +307,5 @@ def uygula(jobs_dir: str, jid: str, p: dict | None = None) -> dict:
             yapildi.append(ey)
         except OSError as e:  # noqa: BLE001
             basarisiz.append({"yol": yol, "sebep": str(e)[:120]})
-    return {"yapildi": yapildi, "basarisiz": basarisiz, "atlanan": p.get("atlanan") or [],
+    return {"yapildi": yapildi, "basarisiz": basarisiz, "atlanan": atlanan,
             "yontem": p.get("yontem")}

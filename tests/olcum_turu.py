@@ -29,16 +29,26 @@ def _log(m: str) -> None:
     print("[%s] %s" % (time.strftime("%H:%M:%S"), m), flush=True)
 
 
+def _cfg_url() -> str:
+    """Ollama adresi ayardan (bkz. denetim bulgusu #7 - sabit adres baska portta kor kaliyor)."""
+    try:
+        from core import config as _c
+        return _c.get("ollama.url") or "http://localhost:11434"
+    except Exception:
+        return "http://localhost:11434"
+
+
 def _bellegi_bosalt() -> None:
     """Model degistirmeden ONCE oncekini indir: 56 GB + 20 GB ayni anda bellekte kalmasin
     ve olcum bellek baskisi altinda yapilmasin."""
     try:
         import json
         import urllib.request
-        d = json.load(urllib.request.urlopen("http://localhost:11434/api/ps", timeout=20))
+        u = (os.environ.get("OLLAMA_URL") or _cfg_url()).rstrip("/")
+        d = json.load(urllib.request.urlopen(u + "/api/ps", timeout=20))
         for m in d.get("models", []):
             istek = urllib.request.Request(
-                "http://localhost:11434/api/generate",
+                u + "/api/generate",
                 json.dumps({"model": m.get("name"), "keep_alive": 0}).encode(),
                 {"Content-Type": "application/json"})
             urllib.request.urlopen(istek, timeout=120).read()
@@ -46,6 +56,19 @@ def _bellegi_bosalt() -> None:
             time.sleep(4)
     except Exception:  # noqa: BLE001
         pass
+
+
+def _durum(r: dict) -> str:
+    """Kampanya cikis kodunu OKUNUR hale getir (sozlesme: core/olcum_arsiv.py).
+
+    Onceden 0 disindaki her sey "BASARISIZ", 0 ise "TAMAM"di - ve kampanyalar gizli
+    kontroller kalsa bile 0 donuyordu. Iki hata ust uste: basarisizlik BASARI gorunuyordu.
+    Simdi 2 = olcum gecerli ama gorevler tam cozulmedi; 1/negatif = harness arizasi."""
+    if r["cikis"] == 0:
+        return "TAMAM (hepsi gecti)"
+    if r["cikis"] == 2:
+        return "OLCULDU ama GOREVLER EKSIK (gizli kontroller kaldi - %s)" % os.path.basename(r["ham"])
+    return "ARIZA %s" % (r["hata"] or r["cikis"])
 
 
 def kos(kampanya: str, model: str, sinir: int) -> dict:
@@ -56,7 +79,10 @@ def kos(kampanya: str, model: str, sinir: int) -> dict:
     t0 = time.time()
     try:
         with open(ham, "w", encoding="utf-8") as f:
-            r = subprocess.run([sys.executable, "tests/%s_kampanya.py" % kampanya, "--tur", "2"],
+            # -u: TAMPONSUZ. Cikti dosyaya yonlendiginde Python tamponluyor ve gozetimsiz
+            # kosuda gunluk SAATLERCE 0 bayt kaliyordu - ilerleme goruilemiyordu.
+            r = subprocess.run([sys.executable, "-u", "tests/%s_kampanya.py" % kampanya,
+                                "--tur", "2"],
                                cwd=ROOT, stdout=f, stderr=subprocess.STDOUT,
                                timeout=sinir, env=ev, creationflags=PZ)
         kod = r.returncode
@@ -88,8 +114,7 @@ def main() -> int:
             _log("-> %s / %s" % (k, model.split("/")[-1][:36]))
             r = kos(k, model, a.sinir)
             sonuclar.append(r)
-            _log("<- %s (%.0f dk)" % ("TAMAM" if r["cikis"] == 0 else
-                                      "BASARISIZ %s" % (r["hata"] or r["cikis"]), r["sure"] / 60))
+            _log("<- %s (%.0f dk)" % (_durum(r), r["sure"] / 60))
 
     _log("--- TUR BITTI (%.0f dk) ---" % ((time.time() - t0) / 60))
     try:
@@ -99,9 +124,11 @@ def main() -> int:
         _log("telemetri okunamadi: %s" % str(e)[:120])
     for r in sonuclar:
         if r["cikis"] != 0:
-            _log("BASARISIZ: %s / %s -> %s" % (r["kampanya"], r["model"][:30],
-                                               r["hata"] or r["cikis"]))
-    return 0
+            _log("%s: %s / %s" % (_durum(r), r["kampanya"], r["model"][:30]))
+    # TUR cikisi da sonucu yansitir: ariza varsa 1, yalniz gorev eksigi varsa 2.
+    if any(r["cikis"] not in (0, 2) for r in sonuclar):
+        return 1
+    return 2 if any(r["cikis"] == 2 for r in sonuclar) else 0
 
 
 if __name__ == "__main__":

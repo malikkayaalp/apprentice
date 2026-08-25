@@ -8,7 +8,7 @@ toplam(a, b) yaz, test_toplam.py ile test et, pytest gecsin". Dogrulayici pytest
 rapor derleme_durumu=derlendi ancak pytest gecince doner.
 """
 from __future__ import annotations
-import json, os, shutil, sys, time
+import json, os, shutil, sys, tempfile, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -152,6 +152,37 @@ def offline() -> bool:
     r = d("run_shell", {"cmd": sys.executable + " -c \"import time; time.sleep(3)\""})
     assert r["exit"] == 0
     print("shell: ok")
+
+    # KABUK HAPSI - denetim bulgusu #1. write_file `Jail.path()` ile hapisteydi ama
+    # run_shell isletim sistemi kabugunu DOGRUDAN kosturuyordu; cwd'yi calisma alanina
+    # kurmak yetmiyor. OLCULDU (duzeltmeden once): `type C:\...\GIZLI.txt` disaridaki
+    # dosyayi OKUDU, `echo x > C:\...\yeni.txt` disariya YAZDI. Bu test o kacislari
+    # KILITLER - bir daha sessizce acilmasin diye.
+    disari = tempfile.mkdtemp()
+    gizli = os.path.join(disari, "GIZLI.txt")
+    with open(gizli, "w", encoding="utf-8") as f:
+        f.write("sir\n")
+    yeni = os.path.join(disari, "CIRAK_YAZDI.txt")
+    kacislar = (("mutlak okuma", 'type "%s"' % gizli),
+                ("mutlak yazma", 'echo x > "%s"' % yeni),
+                ("ust dizin", "type ..\\gizli.txt"),
+                ("ust dizin /", "cat ../gizli.txt"),
+                ("UNC", "type " + "\\" * 2 + "sunucu\\pay\\x"),
+                ("ev dizini", "cat ~/gizli"),
+                ("surucu-goreli", "type C:gizli.txt"),
+                ("koke goreli", "cat /etc/passwd"))
+    for ad, cmd in kacislar:
+        r = d("run_shell", {"cmd": cmd})
+        assert "calisma alani disina" in r.get("error", ""), "%s KACTI: %r" % (ad, r)
+    assert not os.path.exists(yeni), "kabuk calisma alani DISINA yazdi"
+    with open(gizli, encoding="utf-8") as f:
+        assert f.read() == "sir\n", "disaridaki dosya degistirildi"
+    # Koruma isi DURDURMAMALI: gunluk goreli komutlar gecmeli (yanlis pozitif = bozuk arac)
+    for cmd in ("python test_x.py", "pytest -q", "ls -la", "python alt/betik.py",
+                "pytest --tur 2 -q", "python betik.py > cikti.txt", "python ./betik.py"):
+        assert CR.kabuk_guvenli(cmd) == "", "mesru komut engellendi: %r" % cmd
+    shutil.rmtree(disari, ignore_errors=True)
+    print("kabuk hapsi: ok (%d kacis reddedildi, 7 mesru komut gecti)" % len(kacislar))
     return True
 
 

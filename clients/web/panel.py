@@ -155,7 +155,7 @@ def _sistem_olc() -> dict:
     out = {"model": "", "yuklu_gb": 0, "vram": [0, 0], "gpu": 0, "ornekler": [], "toplam_gb": 0}
     try:
         import urllib.request
-        with urllib.request.urlopen("http://localhost:11434/api/ps", timeout=3) as r:
+        with urllib.request.urlopen(ollama_url() + "/api/ps", timeout=3) as r:
             m = (json.load(r).get("models") or [])
         if m:
             out["model"] = m[0].get("name", "").split("/")[-1]
@@ -524,9 +524,24 @@ def _gorev_baslat(veri: dict) -> dict:
             "ekler_red": ek_red}
 
 
+
+def ollama_url() -> str:
+    """Ollama adresi: OLLAMA_URL > apprentice.config.json (ollama.url) > localhost.
+
+    NEDEN: core/client.py bunu bastan beri ayardan okuyordu ama panel ve izle.py adresi
+    SABIT tutuyordu. Ollama'yi baska portta ya da baska makinede kosturan kullanicida
+    cirak calisiyor, panel ise "model yuklu degil" diyordu - ayni ayarin iki farkli
+    dogrusu vardi. Tek cozucu: adres NEREDEN gelirse gelsin buradan gecer."""
+    try:
+        from core import config as _c
+        return (_c.env_or("OLLAMA_URL", "ollama.url", "http://localhost:11434")
+                or "http://localhost:11434").rstrip("/")
+    except Exception:
+        return os.environ.get("OLLAMA_URL", "http://localhost:11434").rstrip("/")
+
 def _ollama_get(yol: str, govde: dict | None = None):
     import urllib.request
-    url = "http://localhost:11434" + yol
+    url = ollama_url() + yol
     if govde is None:
         r = urllib.request.urlopen(url, timeout=6)
     else:
@@ -593,7 +608,7 @@ def _model_yukle(model: str = "") -> dict:
             try:
                 # soguk yukleme ~1-2 dk: istek arka planda, genis zaman asimiyla
                 urllib.request.urlopen(urllib.request.Request(
-                    "http://localhost:11434/api/generate",
+                    ollama_url() + "/api/generate",
                     json.dumps({"model": model, "keep_alive": "30m"}).encode(),
                     {"Content-Type": "application/json"}), timeout=600).read()
             except Exception:
@@ -655,7 +670,7 @@ def _cirak_sohbet(veri: dict) -> dict:
                        "keep_alive": "30m"}).encode()
     try:
         d = json.load(urllib.request.urlopen(urllib.request.Request(
-            "http://localhost:11434/api/chat", body, {"Content-Type": "application/json"}),
+            ollama_url() + "/api/chat", body, {"Content-Type": "application/json"}),
             timeout=600))
         cevap = ((d.get("message") or {}).get("content") or "").strip()
         with SOHBET_KILIT:
@@ -1027,7 +1042,7 @@ class Istek(BaseHTTPRequestHandler):
         parcalar = []
         try:
             with urllib.request.urlopen(urllib.request.Request(
-                    "http://localhost:11434/api/chat", body,
+                    ollama_url() + "/api/chat", body,
                     {"Content-Type": "application/json"}), timeout=600) as r:
                 for ham in r:
                     try:

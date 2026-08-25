@@ -114,3 +114,27 @@ if __name__ == "__main__":
     except Exception:
         pass
     yazdir(sys.argv[1] if len(sys.argv) > 1 else "")
+
+
+# --- KAMPANYA CIKIS KODU SOZLESMESI (denetim bulgusu #3) ---------------------------
+# Kampanyalar KOSULSUZ 0 donuyordu: gizli kontroller 11/12 kalsa bile cagiran taraf
+# "TAMAM"/"GECTI" yaziyordu. Gozetimsiz gece kosusunda bu, BASARISIZLIGI BASARI gibi
+# raporlar - telemetrinin "%100 basari" yanilgisiyla ayni sinif hata.
+#
+# UC DEGERLI, cunku iki farkli sey ayirt edilmeli:
+#   0 - kampanya kostu ve butun gizli kontroller gecti
+#   2 - kampanya KOSTU, olcum GECERLI, ama gizli kontroller kaldi (modelin basarisizligi)
+#   1 - kampanya KOSAMADI: harness patladi, cokme/zaman asimi - olcum YOK
+# 2'yi 1'den ayirmak sart: "model gorevi cozemedi" bir OLCUM SONUCU, "harness patladi"
+# ise bir ARIZA. Ikisini ayni koda katlamak, gece kosusunu okunamaz yapar.
+CIKIS_TAMAM = 0
+CIKIS_EKSIK = 2
+CIKIS_HATA = 1
+
+
+def kampanya_cikis(gecen: int, toplam: int) -> int:
+    """Gizli kontrol sayimindan kampanya cikis kodu. toplam=0 ise olculecek sey yoktur -
+    bunu BASARI saymayiz, ariza sayariz (kampanya bir sey kosmamis demektir)."""
+    if toplam <= 0:
+        return CIKIS_HATA
+    return CIKIS_TAMAM if gecen >= toplam else CIKIS_EKSIK

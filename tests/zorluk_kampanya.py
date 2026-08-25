@@ -363,20 +363,29 @@ def main() -> int:
         c.close()
 
     # ARSIVE yaz: her kosu oncekini EZMESIN (bkz. core/olcum_arsiv.py)
-    from core.olcum_arsiv import kaydet
+    from core.olcum_arsiv import kampanya_cikis, kaydet
     yollar = kaydet("zorluk_kampanya", rapor)
     if yollar.get("arsiv"):
         print("-> arsiv:", yollar["arsiv"])
 
     print("\n%-10s %-14s %-8s %-8s %-6s %s" % ("gorev", "zorluk", "tur1", "son", "tur", "sure"))
+    gecen = toplam = 0
     for ad, k in rapor["gorevler"].items():
         ilk, son = k["turlar"][0], k["turlar"][-1]
+        g, t = (son["gizli"].split("/") + ["0"])[:2]
+        gecen += int(g or 0); toplam += int(t or 0)
         print("%-10s %-14s %-8s %-8s %-6d %.0f s" % (ad, k["zorluk"], ilk["gizli"], son["gizli"],
                                                      len(k["turlar"]), sum(t["sure_s"] for t in k["turlar"])))
     with open(yol, "w", encoding="utf-8", newline="\n") as f:
         json.dump(rapor, f, ensure_ascii=False, indent=1)
     print("->", yol)
-    return 0
+    # CIKIS KODU sonucu YANSITIR (bkz. core/olcum_arsiv.py sozlesmesi). Kosulsuz 0
+    # donuluyordu: 11/12 kalan bir kosu gozetimsiz gece raporunda "TAMAM" gorunuyordu.
+    kod = kampanya_cikis(gecen, toplam)
+    print("TOPLAM gizli %d/%d -> cikis %d (%s)"
+          % (gecen, toplam, kod, "hepsi gecti" if kod == 0 else
+             "gizli kontroller kaldi" if kod == 2 else "olculecek kontrol yok"))
+    return kod
 
 
 if __name__ == "__main__":
