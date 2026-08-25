@@ -1,5 +1,92 @@
 # STATE.md — iş devri (en yeni üstte; kendi OpenMemory kuralımızın bu depoya uygulanması)
 
+## 2026-08-25 (2): YOL HARITASI 10-15 + denetim bulgulari
+
+**Denetim bulgulari (8+2) KAPANDI.** Ikisi kritikti:
+
+- `run_shell` calisma alani DISINA yazip okuyabiliyordu (OLCULDU, kacis kanitlandi).
+  `kabuk_guvenli()` eklendi. DURUST SINIR: bu bir KORUMA, kum havuzu DEGIL - calisma
+  aninda yol ureten yorumlayici asabilir. Kabuk araclari varsayilan KAPALI.
+  Ilk surum FAZLA GENISTI: `sys.executable` mutlak oldugu icin HARNESS'IN KENDISINI
+  engelledi (kendi testimiz yakaladi). Simdi komut parcasinin ILK belirteci (calistirilacak
+  PROGRAM) muaf, ikinci belirtec degil - oradaki mutlak yol VERI'dir ve reddedilir.
+- Geri alma KULLANICININ emegini siliyordu: git yolu "kim degistirdiginden bagimsiz"
+  calisiyordu, yani is bittikten SONRA yapilan duzenlemeyi de kapsiyordu. Cirak a.py yazar,
+  kullanici elle duzeltir, GERI AL -> `git checkout` sessizce siler. Is sonrasi olusturulan
+  YENI dosya da '??' gorunup silinirdi. Iki olcut (icerik + mtime) + yikici adimin hemen
+  oncesinde SON KONTROL (bayat plan uygulanmaz).
+
+Digerleri: kampanya cikis kodu (uc degerli sozlesme), AGENTS.md ezme, Ollama adresi,
+`--tek` argumanlari, JSONC yorum kaybi, README. #5 zaten kapaliymis (panel makine.num_ctx
+okuyor - denetim bayat koda bakmis), #6 daha once giderilmisti.
+
+**Yol haritasi 10-15 BITTI.** 16 (kucuk modeller) kullanici karariyla disarida; 8-9
+(panel.html bolme) kullanici karariyla DURDURULDU - esik zaten dolmamisti (115 KB / 130 KB).
+
+- **10 KUYRUK** (`core/kuyruk.py`): SERI, es zamanlilik 1 - tek GPU, num_batch olcumu
+  VRAM'in sinir kaynak oldugunu gosterdi; iki is ayni anda model yuklerse toplam is AZALIR.
+  Yarida kalan is SESSIZCE YENIDEN KOSTURULMAZ ("yarim" isaretlenir): o is calisma alanina
+  dosya YAZMIS olabilir, tekrar kosturmak ayni dosyayi ikinci kez ezmektir. Kendi dosyasinda
+  (kuyruk.json, atomik yazim) - tek yazar kurali korunur, events.jsonl'a dokunmaz.
+  Arayuz: ISLER panelinin ustune serit. Dokuzuncu YUZEN panel YAPILMADI - 24x24 izgarayi ve
+  yedi dizilimi yeniden dengelemek, kullanicinin kayitli duzenini bozmak demekti.
+- **13 POLITIKA** (`core/politika.py`): kuyruk tek basina tehlikeli - asil risk "bir is
+  kaldi" degil "bir is kaldi ve kimse durmadi". Karari MODEL VERMEZ, dogrulayicinin ciktisi
+  verir (modelin "her sey harika" beyani karari degistirmez - test bunu cakiyor). Uc sinyal:
+  dogrulama satirlari, yazma kapsami ihlali, DURAGANLIK. `otomatik_kabul` VARSAYILAN KAPALI -
+  otomatik kabul denetciyi devreden cikarmak demek. "bilinmiyor" MESRU sonuc.
+- **11 ZAMAN CIZGISI**: olaylarda zaman YOKTU (yalnizca tool_result.sure ve result.wall).
+  "Bu is 55 sn surdu" biliniyordu ama "45'i model uretimi, 14'u dogrulama" bilinmiyordu.
+  Emitter'a `t` eklendi - GERIYE DONUK UYUMLU: eski kayitta var=False, UYDURMA YOK.
+  PROJEKSIYONDA hesaplanir, panelde degil (yoksa 'tool'/'tool_result' eslesmesini arayuze
+  ogretmis olurduk ve sema degisince panel kirilirdi). Uc dilim: uretim / arac / dogrulama.
+- **14 BENCHMARK UI**: `/api/olcum` + METRIKLER panelinde tablo. Yalnizca OKUR, olcum
+  BASLATMAZ (olcum 20 dk surer ve GPU ister; panelden tetiklemek kullanicinin farkinda
+  olmadan is baslatmasi demek). Bu sirada ARSIV OZETINDE HATA bulundu: butun turlar
+  TOPLANIYORDU, iki turda cozulen gorev "4/12 + 12/12 = 16/24" gorunuyordu - kampanyanin
+  kendi raporuyla CELISIYORDU. `gizli_ilk` (ilk deneme) ve `gizli` (nihai) ayrildi.
+- **15 SSE**: BILDIRIM kanali, VERI kanali DEGIL. Sebep: olay akisinin istemci tarafinda
+  kazanilmis yaris duzeltmeleri var (ucusta is degisirse cevabi at, imlec, dibe kilit);
+  veriyi SSE'ye tasimak onlari bastan yazmak demekti. Yoklama KALDIRILMADI, SEYRELTILDI:
+  bagliyken 8/12 sn, koparsa 2/4 sn. Yeniden baglanma EventSource'a birakildi (elle close()
+  ussel geri cekilmeyi kaybettirir). OLCULDU: 0.40 sn bildirim (eskiden 2 sn'ye kadar).
+- **12 BASIT/UZMAN**: GORUNURLUK meselesi, DAVRANIS degil - gizlenen denetimlerin degerleri
+  gorev govdesine girer, basit kipte baslatilan is uzman kiptekiyle AYNI isi yapar.
+  Varsayilan UZMAN: mevcut kullanicinin ekrani kendiliginden degismesin.
+
+**Olcum sirasinda bulunan ARIZA:** Qwen3 zorluk kosusu 12 dk GPU yakti, butun gorevleri
+bitirdi ve EN SON adimda `ImportError` ile coktu - o kosunun arsivi hic yazilmadi, veri
+yalnizca ham gunlukte kaldi. Iki sebep: (1) arsiv importu fonksiyon icindeydi, yani en
+pahali isten SONRA cozuluyordu; (2) `kaydet()` korumasizdi ve butun kosuyu goturuyordu.
+Ikisi de duzeltildi - kirilacaksa BASTA kirilsin, is yanmadan.
+
+**MODEL KIYASI (2026-08-25, tek kosu - SAMPIYON DEGISTIRILMEDI):**
+
+| model | code (36 kontrol) | zorluk (51 kontrol) | zorluk sure |
+|---|---|---|---|
+| Qwen3-Coder-Next 80B (56 GB) | ilk 35/36, son 36/36 | son **50/51** (dama 11/12, iki turda da) | 760 s |
+| Muse-Glimmer 30B dflash (20 GB) | ilk **36/36** | son **51/51** (dama 4/12 -> 12/12) | 1969 s |
+
+Muse KALITEDE esit/ustun, zor gorevlerde HIZDA 2.6x yavas. Sampiyon degisikligi icin
+ornek YETERSIZ (11 gorev, tek kosu). Qwen3'un dama'da DURAGANLIK imzasi var (11/12 ->
+11/12, ayni hata, 2600 -> 6050 token) - politika modulu artik tam bu zinciri kesiyor.
+
+**Testler:** 17 dosya, 17 gecti, 0 kaldi, 0 KARARSIZ. Yeni: `test_kuyruk` (7 sozlesme),
+`test_politika` (6), test_panel'e kuyruk uclari + canli akis + basit/uzman,
+test_inceleme'ye zaman cizgisi, test_code_env'e kabuk hapsi, test_geri_al'a kullanici
+emegi + bayat plan. Kritik iki duzeltmenin testleri DUZELTME KAPALIYKEN dusuyor -
+"yazdim, gecti" degil "hatayi yakaliyor" seviyesi.
+
+**BULUNAN TUZAK:** `server/apprentice_server.py` ev dizinini ICE AKTARMA ANINDA okuyor
+(modul duzeyi) - ilk import KIM yaparsa ev dizinini O belirliyor. Paneldeki sekiz cagri
+yeri bu yuzden import'tan hemen once ortam degiskenini kuruyordu; kuyruk kurucusu atlayinca
+isler YANLIS klasore yazildi ve tekrar-dene testi dustu. `_srv()` yardimcisi eklendi.
+
+**Bekleyenler:** yol haritasi 8-9 (kullanici DURDURDU), 16 kucuk modeller (disarida),
+panel "ev" gecisi (iki port acmak zorunda kalmamak), ~8 yerel islem PUSH EDILMEDI.
+
+---
+
 ## 2026-08-25: INCELEME KATMANI (yol haritasi 1-7)
 
 Panel artik yalniz gostermiyor, KARAR aldiriyor. Kod: `core/inceleme.py`, `core/geri_al.py`,
