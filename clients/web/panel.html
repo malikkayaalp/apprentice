@@ -204,6 +204,8 @@ body.kipBasit #kipDugme{color:var(--vurgu2);border-color:var(--cizgi)}
 .zc-uretim{background:var(--yesil)}
 .zc-arac{background:var(--mavi)}
 .zc-dogrulama{background:var(--vurgu)}
+/* SINIFLANDIRILAMAYAN sure: uydurma etiket yerine DURUSTCE gri (bulgu 9) */
+.zc-bilinmiyor{background:var(--cizgi2)}
 .zcAnahtar{display:flex;gap:10px;flex-wrap:wrap;padding:0 12px 6px;font-size:.78em;
   color:var(--soluk)}
 .zcAnahtar i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px}
@@ -1708,6 +1710,12 @@ function incelemeCiz(r){
        ' ('+Math.round((zc.uretim_orani||0)*100)+'%)</span>'+
        '<span><i class="zc-arac"></i>araç '+Math.round(oz.arac||0)+'sn</span>'+
        '<span><i class="zc-dogrulama"></i>doğrulama '+Math.round(oz.dogrulama||0)+'sn</span>'+
+       (oz.bilinmiyor?'<span><i class="zc-bilinmiyor"></i>sınıflandırılamadı '+
+         Math.round(oz.bilinmiyor)+'sn</span>':"")+
+       // GOSTERIM SINIRI ACIKCA SOYLENIR: kirpilan dilimler ozete DAHILDIR, yani
+       // ekrandaki dilimleri toplamak toplami vermez (denetim bulgusu 9).
+       (zc.kirpildi?'<span style="opacity:.75">('+zc.dilim_sayisi+
+         ' dilimden ilk 40 tanesi çizildi; yüzdeler tüm süreye göre)</span>':"")+
        '</div>';
   }
 

@@ -290,7 +290,8 @@ def _zaman_cizgisi(olaylar: list) -> dict:
     if len(damgali) < 2:
         return {"var": False, "sebep": "olaylarda zaman damgasi yok (eski kayit)"}
     t0 = damgali[0]["t"]
-    dilimler, ozet = [], {"uretim": 0.0, "arac": 0.0, "dogrulama": 0.0}
+    dilimler, ozet = [], {"uretim": 0.0, "arac": 0.0, "dogrulama": 0.0,
+                          "bilinmiyor": 0.0}
     acik = None          # bekleyen tool olayi
     onceki_son = t0      # bir onceki dilimin bittigi an
 
@@ -301,6 +302,9 @@ def _zaman_cizgisi(olaylar: list) -> dict:
         dilimler.append({"ad": ad, "tip": tip, "bas": round(bas - t0, 2), "sure": sure})
         ozet[tip] = round(ozet[tip] + sure, 2)
 
+    # `assistant` olayi modelin NIHAI CEVABI bitirdigi andir - dogrulamanin baslangic
+    # sinirini o verir. Yoksa sinir BILINMEZ (asagiya bak).
+    son_assistant = None
     for e in damgali:
         tip, t = e.get("type"), e["t"]
         if tip == "tool":
@@ -311,16 +315,37 @@ def _zaman_cizgisi(olaylar: list) -> dict:
                 ekle(acik[0], "arac", acik[1], t)
                 acik = None
             onceki_son = t
+        elif tip == "assistant":
+            # Modelin nihai cevabi: buraya kadar URETIM'dir, dogrulama DEGIL.
+            ekle("model üretiyor", "uretim", onceki_son, t)
+            onceki_son = t
+            son_assistant = t
         elif tip in ("result", "exit"):
             if acik:                        # arac yarim kaldi (cokme/zaman asimi)
                 ekle(acik[0] + " (yarim)", "arac", acik[1], t)
                 acik = None
-            ekle("doğrulama", "dogrulama", onceki_son, t)
+            # DOGRULAMA SURESI YALNIZCA KANITLI ARALIKTIR (denetim bulgusu 9).
+            # Eski surum son arac sonucundan `result`'a kadarki HER SEYI "dogrulama"
+            # sayiyordu - modelin nihai cevabi hazirladigi sure de dahil. Arac hic
+            # kullanilmayan bir iste ise surenin TAMAMI dogrulama gorunuyordu (olculdu:
+            # 60 sn uretim, ekranda 60 sn "dogrulama").
+            # Artik: assistant olayi VARSA ondan sonrasi dogrulamadir. YOKSA sinir
+            # bilinmiyor - "bilinmiyor" deriz, yapay dogrulama suresi UYDURMAYIZ.
+            if son_assistant is not None:
+                ekle("doğrulama", "dogrulama", onceki_son, t)
+            else:
+                ekle("sınıflandırılamadı", "bilinmiyor", onceki_son, t)
             onceki_son = t
         elif tip == "write":
             onceki_son = max(onceki_son, t)
     toplam = round(damgali[-1]["t"] - t0, 2)
-    return {"var": bool(dilimler), "toplam": toplam, "dilimler": dilimler[:40],
+    # GOSTERIM SINIRI ACIKCA BILDIRILIR: kirpilan dilimler ozet toplamlarina DAHILDIR,
+    # yani "listedekileri topla" ile "ozet" ayrisir. Bunu soylemezsek kullanici ekrandaki
+    # dilimleri toplayip toplamla celisik bulur (denetim bulgusu 9).
+    SINIR = 40
+    return {"var": bool(dilimler), "toplam": toplam,
+            "dilimler": dilimler[:SINIR], "dilim_sayisi": len(dilimler),
+            "kirpildi": len(dilimler) > SINIR,
             "ozet": ozet,
             # ANLAMLI ORAN: zamanin ne kadari MODEL uretiminde gecti. Bu sayi hizlandirma
             # calismasinin nereye bakmasi gerektigini soyler (model mi, arac mi, dogrulama mi).

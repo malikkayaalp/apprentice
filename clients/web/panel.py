@@ -788,7 +788,14 @@ def _kuyruk_islem(yolu: str, veri: dict) -> dict:
     return {"hata": "bilinmeyen kuyruk islemi: %s" % yolu}
 
 
-SOHBET = {"mesajlar": []}          # cirakla serbest sohbet (gorev kalibi yok, hafizali)
+# NESIL: sohbet gecmisi her sifirlanisinda artar. Ucusta bir istek varken sifirlanirsa
+# o istegin cevabi YENI gecmise EKLENMEZ (denetim bulgusu 11) - eski konusmanin cevabi
+# temiz baslangica sizmasin.
+SOHBET = {"mesajlar": [], "nesil": 0}   # cirakla serbest sohbet (gorev kalibi yok, hafizali)
+# SIRA KILIDI: bir alisveris (kullanici mesaji -> model cagrisi -> cevap) BOLUNMEZ.
+# Eskiden kilit model cagrisi boyunca BIRAKILIYORDU: iki es zamanli istek geldiginde
+# gecmis siralamasi karisiyor, cevap yanlis mesajin ardina dusuyordu.
+SOHBET_SIRA = threading.Lock()
 SOHBET_KILIT = threading.Lock()    # iki sekme/istek ayni gecmisi bozmasin (yaris: pop()
                                    # listenin SONUNU siliyordu - baskasinin cevabini)
 
@@ -797,10 +804,12 @@ def _cirak_sohbet(veri: dict) -> dict:
     """Cirakla DUZ sohbet: worker_run kalibi (kriter/dogrulama/rapor) YOK - dogrudan Ollama.
     Kullanici geri bildirimi: 'her sorumda gorev basliyor, kriter istiyor'. Gorev kipi is
     yaptirir, sohbet kipi konusur. Hafiza: son 20 mesaj; temperature 0.7 (sohbet, is degil)."""
-    import importlib, urllib.request
+    import importlib
     prompt = str(veri.get("prompt") or "").strip()
     if veri.get("sifirla"):
-        SOHBET["mesajlar"] = []
+        with SOHBET_KILIT:
+            SOHBET["mesajlar"] = []
+            SOHBET["nesil"] = SOHBET.get("nesil", 0) + 1   # ucustaki cevaplar gecersiz
         if not prompt:
             return {"cevap": "", "sifirlandi": True}
     if not prompt:
@@ -809,7 +818,18 @@ def _cirak_sohbet(veri: dict) -> dict:
     srv = importlib.import_module("server.apprentice_server")
     model = str(veri.get("model") or "").strip() or \
         srv.config.env_or(["APPRENTICE_MODEL", "UNITY_CODE_MODEL"], "ollama.model")
+    # BUTUN ALISVERIS TEK KILIT ALTINDA: ayni oturumdaki ikinci istek SIRA BEKLER.
+    # Model cagrisi uzun surer ama boluneni birlestirmek mumkun degil - kullanici mesaji ile
+    # ona ait cevap AYRILAMAZ (denetim bulgusu 11).
+    with SOHBET_SIRA:
+        return _cirak_sohbet_kilitli(prompt, model)
+
+
+def _cirak_sohbet_kilitli(prompt: str, model: str) -> dict:
+    """Tek bir sohbet alisverisi. SOHBET_SIRA tutulurken cagrilir."""
+    import urllib.request
     with SOHBET_KILIT:
+        nesil = SOHBET.get("nesil", 0)
         SOHBET["mesajlar"].append({"role": "user", "content": prompt})
         benim = SOHBET["mesajlar"][-1]          # kimlikle sil: pop() baskasinin ogesini siliyordu
         gecmis = list(SOHBET["mesajlar"][-20:])
@@ -828,6 +848,11 @@ def _cirak_sohbet(veri: dict) -> dict:
             timeout=600))
         cevap = ((d.get("message") or {}).get("content") or "").strip()
         with SOHBET_KILIT:
+            if SOHBET.get("nesil", 0) != nesil:
+                # Biz cevabi beklerken kullanici gecmisi SIFIRLADI. Eski konusmanin cevabini
+                # yeni gecmise eklemek, kullanicinin "temizledim" beklentisini bozar.
+                return {"cevap": cevap, "atildi": True,
+                        "not": "geçmiş sıfırlandığı için bu cevap sohbete eklenmedi"}
             SOHBET["mesajlar"].append({"role": "assistant", "content": cevap})
         return {"cevap": cevap, "tok": d.get("eval_count")}
     except Exception as e:  # noqa: BLE001

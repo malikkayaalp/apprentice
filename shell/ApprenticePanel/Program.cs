@@ -61,7 +61,14 @@ internal sealed class TekPencereBaslatici : Form
         Load += async (_, _) =>
         {
             var ana = new PanelForm(args) { Opacity = 0, ShowInTaskbar = false };
-            await ana.SadeceSunucu(args);                 // sunucu ayakta mi, degilse baslat (--kok/--port dahil)
+            // SONUC DENETLENIR (denetim bulgusu 12): eski surum donus degerine BAKMIYORDU ve
+            // sunucu kurulamasa/baslatilamasa bile pencereyi aciyordu - kullanici BOS ya da
+            // calismayan bir panel goruyordu. Hata mesaji SadeceSunucu icinde gosterildi.
+            if (!await ana.SadeceSunucu(args))
+            {
+                Close();          // yarim kaynak birakma; tasiyici da kapansin
+                return;
+            }
             var ortam = await CoreWebView2Environment.CreateAsync(null, PanelForm.EvKlasoruDis());
             var alt = new AltPencere(string.Format("http://127.0.0.1:{0}/?tek={1}{2}",
                                                    ana.Port, panel, ustte ? "&ustte=1" : ""), ortam);
@@ -109,7 +116,7 @@ internal sealed class PanelForm : Form
     /// kuruluma --kok verildiginde tek-pencere kipi "kurulum bulunamadi" diyordu; --port
     /// verildiginde de cerceve, sunucunun gercekte kostugu porttan BASKA bir adrese
     /// gidiyordu. Normal yol (BaslatAsync) ikisini de okuyordu - iki yol ayni davranmali.</summary>
-    public async Task SadeceSunucu(string[] args)
+    public async Task<bool> SadeceSunucu(string[] args)
     {
         args ??= Array.Empty<string>();
         _kok = KurulumBul(args);
@@ -118,16 +125,34 @@ internal sealed class PanelForm : Form
             Hata.Goster("kurulum bulunamadi", @"clients\web\panel.py bulunamadi",
                         "Kurulum klasorunu acikca ver:\n" +
                         @"Apprentice-WebPanel.exe --tek akis --kok ""C:\...\Apprentice""");
-            return;
+            return false;
         }
         for (var i = 0; i < args.Length - 1; i++)
             if (args[i] == "--port" && int.TryParse(args[i + 1], out var p)) _port = p;
-        if (await AyaktaMi(_port)) return;
+        if (await AyaktaMi(_port)) return true;
         var deneme = _port;
         while (deneme < _port + 12 && PortDolu(deneme) && !await AyaktaMi(deneme)) deneme++;
         _port = deneme;
-        if (!await AyaktaMi(_port) && !SunucuyuBaslat()) return;
+        if (!await AyaktaMi(_port) && !SunucuyuBaslat())
+        {
+            Hata.Goster("sunucu baslatilamadi",
+                        $"Panel sunucusu {_port} portunda baslatilamadi.",
+                        "python kur.py --tani  ile ortami denetle.");
+            return false;
+        }
         for (var i = 0; i < 150 && !await AyaktaMi(_port); i++) await Task.Delay(80);
+        if (!await AyaktaMi(_port))
+        {
+            // KISMEN BASLATILMIS SUREC TEMIZLENIR: sunucu ayaga kalkmadiysa arkada
+            // yarim bir surec birakmayiz (denetim bulgusu 12).
+            SunucuyuDurdur();
+            Hata.Goster("sunucu cevap vermedi",
+                        $"Panel sunucusu 12 saniye icinde {_port} portunda cevap vermedi.",
+                        "Once tani al: python kur.py --tani\n" +
+                        @"Elle dene: python clients\web\panel.py");
+            return false;
+        }
+        return true;
     }
 
     private static string EvKlasoru()

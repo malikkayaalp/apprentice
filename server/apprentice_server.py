@@ -356,6 +356,7 @@ class Job:
     def report(self) -> dict:
         """Sozlesme: yazilan_dosyalar, derleme_durumu, hatalar, tur_sayisi, sure, ozet (+ek)."""
         ev = self.events()
+        _yazim: dict = {}          # yol -> [ilk_once, son_sonra, kac_kez]
         rep = {"yazilan_dosyalar": [], "derleme_durumu": "bilinmiyor", "hatalar": [],
                "tur_sayisi": 0, "sure": round(time.time() - self.t0, 1), "ozet": "",
                "olcumler": [], "araclar": [], "play": None,
@@ -372,14 +373,16 @@ class Job:
                 rep["olcumler"].append({"arac": e.get("name"), "sonuc": e.get("text", ""),
                                         "sure_s": e.get("sure")})
             elif t == "write":
-                # GIZLILIK: eskiden dosyanin TAM son icerigi buraya konuyordu ve bu rapor
-                # IDE'deki UZAK modele gidiyordu; belge ise "denetciye yalnizca ozetler ve
-                # olcumler gider" diyordu - iddia yanlisti. Artik varsayilan yalnizca FARK.
-                # Fark da kaynak koddur; bu yuzden sinirli, maskeli ve BELGEDE acikca yazili.
-                from core.gizlilik import dosya_ozeti
-                rep["yazilan_dosyalar"].append(dosya_ozeti(
-                    e.get("path"), e.get("before"), e.get("after") or "",
-                    _GIZLILIK, ICERIK_SINIRI))
+                # NET FARK ICIN ILK 'once' ve SON 'sonra' toplanir (denetim bulgusu 8).
+                # Eskiden her yazim ayri hesaplanip TOPLANIYORDU: ayni dosya uc kez yazilip
+                # basa donse "+2 -2" cikiyordu, oysa net degisiklik SIFIR. Disk raporu
+                # (rapor_diskten) zaten net hesapliyordu - ayni is icin IKI FARKLI SAYI.
+                p = e.get("path")
+                if p not in _yazim:
+                    _yazim[p] = [e.get("before"), e.get("after") or "", 1]
+                else:
+                    _yazim[p][1] = e.get("after") or ""
+                    _yazim[p][2] += 1
             elif t == "assistant":
                 rep["ozet"] = e.get("text", "")
             elif t == "result":
@@ -417,22 +420,16 @@ class Job:
             rep["hatalar"].append("isci sonuc yazmadan cikti (kod %s); bkz. %s" % (
                 self.code, os.path.join(self.dir, "stderr.txt")))
         rep["sure"] = round(time.time() - self.t0, 1)
-        # Yazilan dosyalar: ayni yol birden cok kez yazildiysa son hali kalsin, ilk 'yeni' korunsun.
-        merged: dict[str, dict] = {}
-        for d in rep["yazilan_dosyalar"]:
-            if d["yol"] in merged:
-                m = merged[d["yol"]]
-                m["eklendi"] += d["eklendi"]
-                m["silindi"] += d["silindi"]
-                m["satir"] = d["satir"]
-                # SON yazimin farki/icerigi kalir (HATA idi: ilk surum donuyordu, denetci bayat)
-                for alan in ("fark", "fark_kirpildi", "icerik", "maskelenen"):
-                    if alan in d:
-                        m[alan] = d[alan]
-                m["yazma"] = m.get("yazma", 1) + 1   # kac kez yazildi (onarim isareti)
-            else:
-                merged[d["yol"]] = dict(d)
-        rep["yazilan_dosyalar"] = list(merged.values())
+        # Dosya kayitlari TEK SEFERDE, NET fark uzerinden uretilir - disk raporuyla ayni
+        # anlam. `yazma` kac kez yazildigini soyler (onarim isareti); fark ise isin
+        # BASINDAN SONUNA net degisikligi.
+        from core.gizlilik import dosya_ozeti
+        rep["yazilan_dosyalar"] = []
+        for p, (once, sonra, kez) in _yazim.items():
+            kayit = dosya_ozeti(p, once, sonra, _GIZLILIK, ICERIK_SINIRI)
+            if kez > 1:
+                kayit["yazma"] = kez
+            rep["yazilan_dosyalar"].append(kayit)
         return rep
 
 
@@ -598,9 +595,10 @@ def rapor_diskten(jid: str) -> dict | None:
                 elif t == "write":
                     p = e.get("path")
                     if p not in icerik:                 # ILK yazimin oncesi = isin girdisi
-                        icerik[p] = [e.get("before"), e.get("after") or ""]
+                        icerik[p] = [e.get("before"), e.get("after") or "", 1]
                     else:
                         icerik[p][1] = e.get("after") or ""
+                        icerik[p][2] += 1
                 elif t == "assistant":
                     rep["ozet"] = e.get("text", "")
                 elif t == "result":
@@ -624,8 +622,12 @@ def rapor_diskten(jid: str) -> dict | None:
     # Ayni gizlilik kurali: disk raporu da tam icerik DEGIL, sinirli/maskeli fark tasir.
     # Iki rapor yolunun ayni sonucu vermesi sart - yoksa "hangisine bakiyorum" sorusu dogar.
     from core.gizlilik import dosya_ozeti
-    rep["yazilan_dosyalar"] = [dosya_ozeti(y, once, sonra, _GIZLILIK, ICERIK_SINIRI)
-                               for y, (once, sonra) in icerik.items()]
+    rep["yazilan_dosyalar"] = []
+    for y, (once, sonra, kez) in icerik.items():
+        kayit = dosya_ozeti(y, once, sonra, _GIZLILIK, ICERIK_SINIRI)
+        if kez > 1:
+            kayit["yazma"] = kez
+        rep["yazilan_dosyalar"].append(kayit)
     rep["gizlilik"] = _gizlilik_notu()
     return rep
 

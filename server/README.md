@@ -18,7 +18,7 @@ worker_run(gorev, kabul_kriterleri, ortam="code", calisma_dizini?, oturum?, play
 | `gorev` | string | ne yapılacak, düz dille; dosya/obje adlarını ver |
 | `kabul_kriterleri` | string[] | **denetçi yazar**, somut ve ölçülebilir; göreve metin olarak eklenir |
 | `ortam` | `code` (+ kurulu eklentiler) | araç seti + doğrulayıcı; `envs/*/env.json` ile keşfedilir. `fake` = modelsiz duman testi |
-| `calisma_dizini` | string | `code`: workspace köküne **göreli** alt klasör; boş = kökün kendisi. Kök, IDE'nin bildirdiği workspace'tir (MCP `roots`); dışına çıkılamaz |
+| `calisma_dizini` | string | `code`: çalışma köküne **göreli** alt klasör; boş = kökün kendisi. Dışına çıkılamaz. Kökün nasıl belirlendiği: [Çalışma kökü](#çalışma-kökü-nasıl-belirlenir) |
 | `oturum` | string | önceki çağrının `oturum`u verilirse işçi aynı bağlamla devam eder |
 | `play` | bool | ortama özgü ek çalışma-zamanı doğrulaması (eklenti destekliyorsa; vars. false) |
 | `onarim` | int | azami derleme onarım turu (vars. 3) |
@@ -86,6 +86,31 @@ kaynak koddur; "kod makineden çıkmaz" ifadesi yalnızca **yerel** denetçi iç
 Maskeleme desen tabanlıdır (`sk-`, `ghp_`, `AKIA`, özel anahtar blokları, parola atamaları,
 bağlantı dizeleri). Emniyet ağıdır, **garanti değildir** — sır barındıran bir dosyayı hiç
 göndermemek her zaman daha güvenlidir.
+
+## Çalışma kökü nasıl belirlenir
+
+Belge tek bir yol anlatıyordu (MCP `roots`), kod ise **üç** yol tanıyor. Gerçek sıra:
+
+1. **MCP `roots`** — istemci (Cursor, Claude Code, VS Code) açık workspace'ini bildirir.
+   Kullanıcı hiçbir yol yazmaz. Normal yol budur.
+2. **`APPRENTICE_WORKDIR_ROOT`** ortam değişkeni — `roots` desteklemeyen istemciler için.
+3. **Sunucunun çalışma dizini** — *yalnızca* depo kökünün **altındaysa**.
+
+Hiçbiri çözülemezse istek **reddedilir**; sessizce başka bir klasörde çalışmaya başlanmaz.
+Eskiden burada bir **sessiz yedekleme** vardı (kök bilinmiyorsa ev dizini kullanılıyordu);
+bu, hapis kökünü tüm ev dizini yapıyordu ve kaldırıldı. `roots` yanıtı gecikirse kısa süre
+beklenir — yanıt gelmeden ev dizinine düşmek aynı hatanın yarış hâliydi.
+
+`calisma_dizini` her zaman bu köke **görelidir**. Mutlak yol, sürücü harfi (`C:alt`), `..`
+ve UNC reddedilir; çözülen yol kökün altında değilse istek reddedilir ve **sebebi yazılır**.
+
+| senaryo | sonuç |
+|---|---|
+| depo kökü (`calisma_dizini` boş) | kabul — kökün kendisi |
+| depo alt klasörü (`src/oyun`) | kabul — yoksa oluşturulur |
+| depo dışı (`../baska`, `C:aska`) | **red** — "çalışma alanı dışına çıkıyor" |
+| var olmayan alt klasör | kabul — oluşturulur (kök altında kaldığı sürece) |
+| sembolik bağ ile dışarı | **red** — `realpath` ile çözülüp denetlenir |
 
 ## Örnek çağrı
 

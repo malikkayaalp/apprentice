@@ -405,6 +405,10 @@ def zaman_cizgisi() -> bool:
                {"type": "tool", "name": "write_file", "t": T + 40},
                {"type": "tool_result", "name": "write_file", "t": T + 40.6},
                {"type": "write", "path": "a.py", "before": "", "after": "x=1", "t": T + 40.6},
+               # `assistant` = modelin NIHAI cevabi bitti. Dogrulamanin BASLANGIC SINIRI
+               # budur; olmadan "son aractan sonrasi dogrulama" varsayimi modelin cevap
+               # uretme suresini de dogrulama sayardi (denetim bulgusu 9).
+               {"type": "assistant", "text": "bitti", "t": T + 40.6},
                {"type": "result", "ok": True, "errors": [], "wall": 55, "t": T + 55}]
 
     def yaz(ol):
@@ -428,6 +432,37 @@ def zaman_cizgisi() -> bool:
     yaz(olaylar[:4] + [{"type": "exit", "code": 1, "t": T + 60}])
     z2 = inceleme(d, "is1")["zaman_cizgisi"]
     assert any("yarim" in x["ad"] for x in z2["dilimler"]), z2["dilimler"]
+
+    # ARACSIZ IS: surenin TAMAMI uretimdir - yapay dogrulama suresi URETILMEZ.
+    # (Olculdu: eski surum 60 sn uretimi 60 sn "dogrulama" gosteriyordu.)
+    yaz([{"type": "system", "t": T},
+         {"type": "assistant", "text": "uzun cevap", "t": T + 60},
+         {"type": "result", "ok": True, "errors": [], "t": T + 60}])
+    za = inceleme(d, "is1")["zaman_cizgisi"]
+    assert za["ozet"]["dogrulama"] == 0.0, "aracsiz iste yapay dogrulama suresi: %s" % za["ozet"]
+    assert za["ozet"]["uretim"] == 60.0, za["ozet"]
+
+    # ASSISTANT YOKSA sinir BILINMEZ: "dogrulama" diye etiketlemek yerine acikca bilinmiyor
+    yaz([{"type": "system", "t": T},
+         {"type": "tool", "name": "w", "t": T + 5},
+         {"type": "tool_result", "name": "w", "t": T + 6},
+         {"type": "result", "ok": True, "errors": [], "t": T + 30}])
+    zb = inceleme(d, "is1")["zaman_cizgisi"]
+    assert zb["ozet"]["dogrulama"] == 0.0, zb["ozet"]
+    assert zb["ozet"]["bilinmiyor"] == 24.0, "siniflandirilamayan sure gizlendi: %s" % zb["ozet"]
+    assert any(x["tip"] == "bilinmiyor" for x in zb["dilimler"]), zb["dilimler"]
+
+    # GOSTERIM SINIRI acikca bildirilmeli (ekrandaki dilimleri toplamak toplami vermez)
+    cok = [{"type": "system", "t": T}]
+    for i in range(60):
+        cok.append({"type": "tool", "name": "a%d" % i, "t": T + i * 2 + 1})
+        cok.append({"type": "tool_result", "name": "a%d" % i, "t": T + i * 2 + 1.9})
+    cok.append({"type": "assistant", "text": "x", "t": T + 130})
+    cok.append({"type": "result", "ok": True, "errors": [], "t": T + 140})
+    yaz(cok)
+    zc = inceleme(d, "is1")["zaman_cizgisi"]
+    assert zc["kirpildi"] is True and zc["dilim_sayisi"] > len(zc["dilimler"]), zc["dilim_sayisi"]
+    assert sum(x["sure"] for x in zc["dilimler"]) < sum(zc["ozet"].values()) + 0.01,         "kirpma bildirilmis ama ozet dilimlerle ayni - kirpma anlamsiz"
 
     # ESKI KAYIT: zaman damgasi yok -> UYDURMA YOK
     yaz([{k: v for k, v in e.items() if k != "t"} for e in olaylar])
