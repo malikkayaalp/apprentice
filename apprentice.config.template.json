@@ -22,6 +22,20 @@
     "_olcum_ctx": "65536 -> 131072 olculdu (2026-08-24, kisa yol: 50k/100k tok prompt + 30 tok uretim + parola geri cagirma): uretim 26.4 vs 26.6 tok/s (fark yok), prefill 599 vs 570 tok/s (-%5), VRAM 14.9 GB AYNI, 100k derinlikte parola hatirlandi. Yeni Ollama pencere asimini SESSIZCE KIRPMIYOR, 400 hatasi donduruyor - eski uyari bayatladi.",
     "_olcum_batch": "16.6k tokenlik promptla: 512=189 t/s, 1024=320, 2048=520, 4096=730 (+%285). VRAM harcar - kucuk kartta sigmayabilir, o yuzden ilk calistirmada olculur. DIKKAT: kisa promptla olcum yaniltir."
   },
+  "politika": {
+    "_not": "Kuyruk gozetimsiz kosarken her isten sonra ne olacagina KOD karar verir. Karari MODEL degil DOGRULAYICININ ciktisi verir.",
+    "hata_olunca": "dur",
+    "duraganlikta": "dur",
+    "kapsam_disinda": "dur",
+    "dogrulanmayinca": "dur",
+    "_not_dogrulanmayinca": "Kabul kriteri verilip DENETLENMEDIYSE is 'basarili' sayilmaz. 'basarisiz degil' ile 'basarili' ayni sey degildir.",
+    "bilinmeyince": "dur",
+    "_not_bilinmeyince": "Is kaydi eksik/bozuksa is TAMAMLANMIS sayilmaz.",
+    "ust_uste_hata_siniri": 2,
+    "otomatik_kabul": false,
+    "_not_otomatik_kabul": "true yapmak denetciyi devreden cikarir. Yalnizca POZITIF kanit varsa (en az bir dogrulama gecti, hicbiri kalmadi/denetlenmedi) kabul isaretlenir.",
+    "otomatik_reddet": false
+  },
   "gizlilik": {
     "_not": "UZAK usta modeli kullanildiginda DEGISEN KOD o modele gonderilir. Fark da kaynak koddur; 'kod makineden cikmaz' KOSULSUZ dogru DEGILDIR. Yerel usta kullaniliyorsa veri makineden cikmaz.",
     "tam_icerik": false,

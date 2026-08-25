@@ -31,6 +31,11 @@ VARSAYILAN = {
     "ust_uste_hata_siniri": 2,     # bu kadar is UST USTE kalirsa dur (0 = kapali)
     "otomatik_kabul": False,       # hepsi gectiyse KABUL isaretle (varsayilan KAPALI)
     "otomatik_reddet": False,      # kalirsa REDDET isaretle (varsayilan KAPALI)
+    # KANIT YOKSA DURURUZ (denetim bulgusu 3). "Basarisiz degil" ile "basarili" AYNI SEY
+    # DEGILDIR; denetlenmemis bir isin ustune yeni is yigmak, gozetimsiz kosuda bozuk
+    # temel uzerine insa etmektir.
+    "dogrulanmayinca": "dur",      # dur | devam  (kabul kriteri denetlenmemis vb.)
+    "bilinmeyince": "dur",         # dur | devam  (is kaydi eksik/bozuk)
 }
 
 
@@ -55,8 +60,14 @@ def ayar_yukle(config=None) -> dict:
 def degerlendir(ozet: dict) -> dict:
     """ReviewSummary'yi oku, SAF karar ver. Doner: {sonuc, sebepler, kalan_kontroller}.
 
-    sonuc: "temiz" | "kaldi" | "bilinmiyor"
-    "bilinmiyor" MESRU bir sonuctur: is hala kosuyorsa ya da ozet uretilemediyse uydurmayiz.
+    sonuc DORT DEGERLI:
+      "temiz"        - POZITIF kanit var: en az bir dogrulama GECTI, hicbiri kalmadi.
+      "kaldi"        - acik basarisizlik (dogrulama kaldi / kapsam ihlali / duraganlik).
+      "dogrulanmadi" - ne gecti ne kaldi: OLCULMEDI. Kabul kriteri verilip denetlenmemis
+                       olabilir ya da hic dogrulama kaydi yoktur. BASARI DEGILDIR.
+      "bilinmiyor"   - is hala kosuyor ya da ozet hic uretilemedi (kayit eksik/bozuk).
+    "dogrulanmadi" ile "temiz" arasindaki fark bu maddenin CEKIRDEGI: "basarisiz degil"
+    ile "basarili" ayni sey DEGILDIR.
     """
     if not isinstance(ozet, dict) or not ozet.get("is_id"):
         return {"sonuc": "bilinmiyor", "sebepler": ["inceleme ozeti yok"],
@@ -65,13 +76,23 @@ def degerlendir(ozet: dict) -> dict:
         return {"sonuc": "bilinmiyor", "sebepler": ["is hala kosuyor"],
                 "kalan_kontroller": []}
 
-    sebepler, kalanlar = [], []
+    sebepler, kalanlar, denetlenmeyen, gecenler = [], [], [], []
     for d in ozet.get("dogrulama") or []:
         if not isinstance(d, dict):
             continue
-        if str(d.get("durum")) == "kaldi":
-            kalanlar.append(str(d.get("ad") or "?"))
-            sebepler.append("%s: %s" % (d.get("ad") or "?", str(d.get("kanit") or "")[:120]))
+        durum, ad = str(d.get("durum")), str(d.get("ad") or "?")
+        if durum == "kaldi":
+            kalanlar.append(ad)
+            sebepler.append("%s: %s" % (ad, str(d.get("kanit") or "")[:120]))
+        elif durum == "gecti":
+            gecenler.append(ad)
+        else:
+            # "yok" = OLCULMEDI. Bu bir BASARI DEGILDIR (denetim bulgusu 3): kabul
+            # kriterleri verilip hic denetlenmediyse `_kabul_satiri` "yok" yazar ve eski
+            # politika yalnizca "kaldi"ya baktigi icin isi TEMIZ sayiyordu. Telemetride
+            # duzelttigimiz "%100 dogrulayici / gercek %81,6" yalani politika kapisindan
+            # geri giriyordu.
+            denetlenmeyen.append("%s (%s)" % (ad, str(d.get("kanit") or "olculmedi")[:80]))
 
     disi = [d.get("yol") for d in (ozet.get("degisen_dosyalar") or [])
             if isinstance(d, dict) and d.get("kapsam_disi")]
@@ -85,8 +106,21 @@ def degerlendir(ozet: dict) -> dict:
         sebepler.append("duraganlik: ayni imza denemeler arasi tekrarliyor (%s)"
                         % str(dur.get("imza") or dur.get("sebep") or "")[:120])
 
-    return {"sonuc": "kaldi" if (kalanlar or disi or duragan) else "temiz",
-            "sebepler": sebepler, "kalan_kontroller": kalanlar,
+    # SIRA ONEMLI: once acik BASARISIZLIK, sonra EKSIK KANIT, en son temiz.
+    # "temiz" POZITIF KANIT ISTER: en az bir dogrulama GECMIS olmali. Kanit yoksa
+    # "dogrulanmadi" deriz - "kaldi" degildir ama BASARI da degildir.
+    if kalanlar or disi or duragan:
+        sonuc = "kaldi"
+    elif denetlenmeyen:
+        sonuc = "dogrulanmadi"
+        sebepler.append("denetlenmemis kontrol: " + "; ".join(denetlenmeyen[:3]))
+    elif not gecenler:
+        sonuc = "dogrulanmadi"
+        sebepler.append("hicbir dogrulama kaydi yok - basari iddia edilemez")
+    else:
+        sonuc = "temiz"
+    return {"sonuc": sonuc, "sebepler": sebepler, "kalan_kontroller": kalanlar,
+            "denetlenmeyen": denetlenmeyen, "gecen_kontroller": gecenler,
             "kapsam_disi": [str(x) for x in disi], "duraganlik": duragan}
 
 
@@ -101,14 +135,27 @@ def karar(degerlendirme: dict, ayar: dict, ust_uste: int = 0) -> dict:
     sonuc = d.get("sonuc")
 
     if sonuc == "bilinmiyor":
-        # UYDURMA YOK: ozet cikmadiysa ne kabul ederiz ne reddederiz, kuyrugu da durdurmayiz.
-        return {"eylem": "devam", "isaret": "",
-                "sebep": "; ".join(d.get("sebepler") or ["durum bilinmiyor"])[:200]}
+        # UYDURMA YOK - ve DEVAM DA YOK. Ozet cikmadiysa (kayit eksik/bozuk, is hala
+        # kosuyor gorunuyor) is TAMAMLANMIS SAYILMAZ. Eski surum burada "devam" diyordu:
+        # bozuk bir is kaydi kuyrugun sonraki isi baslatmasina sessizce izin veriyordu.
+        return {"eylem": "dur" if a.get("bilinmeyince") == "dur" else "devam",
+                "isaret": "",
+                "sebep": "durum BILINMIYOR (is kaydi eksik/bozuk olabilir): "
+                         + "; ".join(d.get("sebepler") or ["-"])[:160]}
+
+    if sonuc == "dogrulanmadi":
+        # KANIT YOK. Ne "kaldi" diyebiliriz ne "gecti". Otomatik kabul ASLA olmaz -
+        # dogrulanmamis isi basari saymak, bu projenin butun olcum durustlugunu bozar.
+        return {"eylem": "dur" if a.get("dogrulanmayinca") == "dur" else "devam",
+                "isaret": "",
+                "sebep": "DOGRULANMADI: " + "; ".join(d.get("sebepler") or ["-"])[:180]}
 
     if sonuc == "temiz":
+        # POZITIF KANIT var (en az bir "gecti", hic "kaldi"/"yok" yok).
         return {"eylem": "devam",
                 "isaret": "kabul" if a.get("otomatik_kabul") else "",
-                "sebep": "butun dogrulamalar gecti"}
+                "sebep": "butun dogrulamalar gecti (%d kontrol)"
+                         % len(d.get("gecen_kontroller") or [])}
 
     # --- kaldi ---
     eylem = "devam"
@@ -138,6 +185,10 @@ class Politika:
         self.ayar.update(ayar or {})
         self.ust_uste = 0
         self.gecmis: list = []
+        # SON KARARIN SEBEBI: kuyruk bunu okuyup kullanicinin gorecegi yere yazar.
+        # Olmadan panelde yalnizca "politika kuyrugu durdurdu" gorunuyordu - kullanici
+        # NEDEN durdugunu bilemiyordu (denetim bulgusu 3).
+        self.son_sebep = ""
         self._ozet_al = ozet_al
         self._karar_yaz = karar_yaz
 
@@ -166,14 +217,18 @@ class Politika:
             k = ("dur" if (self.ayar.get("hata_olunca") == "dur"
                            or (self.ayar.get("ust_uste_hata_siniri") or 0)
                            and self.ust_uste >= self.ayar["ust_uste_hata_siniri"]) else "devam")
-            self.gecmis.append({"is_id": "", "sonuc": "baslatilamadi", "eylem": k})
+            self.son_sebep = "is HIC baslatilamadi: %s" % (oge or {}).get("sebep", "-")
+            self.gecmis.append({"is_id": "", "sonuc": "baslatilamadi", "eylem": k,
+                                "sebep": self.son_sebep})
             return k
         d = degerlendir(self._ozet(jid))
-        k = karar(d, self.ayar, self.ust_uste + (1 if d.get("sonuc") == "kaldi" else 0))
-        if d.get("sonuc") == "kaldi":
-            self.ust_uste += 1
+        k = karar(d, self.ayar,
+                  self.ust_uste + (0 if d.get("sonuc") == "temiz" else 1))
+        if d.get("sonuc") in ("kaldi", "dogrulanmadi", "bilinmiyor"):
+            self.ust_uste += 1          # "temiz olmayan" her sonuc ust uste sayilir
         elif d.get("sonuc") == "temiz":
             self.ust_uste = 0
+        self.son_sebep = k.get("sebep") or ""
         if k.get("isaret"):
             self._yaz(jid, k["isaret"], k.get("sebep") or "")
         self.gecmis.append({"is_id": jid, "sonuc": d.get("sonuc"), "eylem": k["eylem"],

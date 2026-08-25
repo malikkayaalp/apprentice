@@ -158,6 +158,8 @@ html.tekKip .tutamak{display:none}
 .kuyOge .kuyMini{visibility:hidden}
 .kuyOge:hover .kuyMini{visibility:visible}
 .kuyNot{font-size:.82em;color:var(--sari);padding:3px 4px;line-height:1.35}
+.kuyNot b{color:var(--kirmizi)}
+.kuyNotIs{color:var(--soluk);font-size:.95em;margin-top:2px}
 
 /* OLCUM GECMISI tablosu (yol haritasi 14) */
 #olcumBolum{border-top:1px solid var(--cizgi);margin-top:8px;padding-top:6px}
@@ -1411,10 +1413,21 @@ async function kuyrukCiz(){
     });
     // SEBEP GORUNUR OLMALI: kuyruk kendiliginden durduysa kullanici NEDEN durdugunu
     // bilmeden "panel bozuldu" der. Politika kararinin sebebi burada yazar.
+    // KUYRUK NEDEN DURDU: politika durdurduysa sebebi KUYRUK duzeyinde gelir. Eskiden
+    // yalnizca hatali/yarim ogelerin sebebine bakiliyordu; politikanin durdurdugu oge
+    // "bitti" gorundugu icin kullanici sebebi HIC goremiyordu (denetim bulgusu 3).
     const sorunlu=ogeler.filter(o=>o.sebep&&(o.durum==="hata"||o.durum==="yarim"));
-    $("#kuyNot").innerHTML=d.duraklatildi&&sorunlu.length
-      ? "⏸ "+kacir(sorunlu[sorunlu.length-1].sebep)
-      : (ogeler.length>12?"… ve "+(ogeler.length-12)+" iş daha":"");
+    let notu="";
+    if(d.durma_sebebi){
+      const ds=d.durma_sebebi;
+      notu='<b>⏸ Kuyruk durduruldu</b> — '+kacir(ds.sebep||"")+
+           (ds.baslik?'<div class="kuyNotIs">iş: '+kacir(ds.baslik)+'</div>':"");
+    }else if(d.duraklatildi&&sorunlu.length){
+      notu="⏸ "+kacir(sorunlu[sorunlu.length-1].sebep);
+    }else if(ogeler.length>12){
+      notu="… ve "+(ogeler.length-12)+" iş daha";
+    }
+    $("#kuyNot").innerHTML=notu;
   }catch(e){}
   setTimeout(kuyrukCiz, AKIS.bagli?12000:4000);
 }

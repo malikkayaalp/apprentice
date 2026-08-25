@@ -52,14 +52,22 @@ def dogrulayici_karar_verir() -> bool:
     return True
 
 
-def bilinmiyor_mesru() -> bool:
-    """Is kosuyorsa ya da ozet yoksa UYDURMAYIZ - ne kabul ne red, kuyruk da durmaz."""
+def bilinmiyor_tamamlanmis_sayilmaz() -> bool:
+    """Is kaydi eksik/bozuk ya da is hala kosuyorsa: UYDURMA YOK, DEVAM DA YOK.
+
+    ILK SURUM BU TESTI YANLIS CAKMISTI ("bilinmiyor mesru"): bilinmeyen durumda kuyrugun
+    DEVAM etmesini dogru sayiyordu. Ama bozuk bir is kaydi, kuyrugun sonraki isi
+    baslatmasina sessizce izin veriyordu - "tamamlanmis sayilmamali" kuralinin tersi."""
     for o in ({}, {"sema": 1}, None, _ozet(durum="kosuyor")):
         d = degerlendir(o)
         assert d["sonuc"] == "bilinmiyor", (o, d)
         k = karar(d, VARSAYILAN)
-        assert k["eylem"] == "devam" and k["isaret"] == "", k
-    print("bilinmiyor mesru: ok (uydurma yok, kuyruk durmuyor)")
+        assert k["isaret"] == "", "bilinmeyen durumda karar yazildi: %s" % k
+        assert k["eylem"] == "dur", "bilinmeyen durumda kuyruk DEVAM etti: %s" % k
+        assert "BILINMIYOR" in k["sebep"], k
+    gevsek = dict(VARSAYILAN, bilinmeyince="devam")   # acikca istenirse devam edilebilir
+    assert karar(degerlendir({}), gevsek)["eylem"] == "devam"
+    print("bilinmiyor tamamlanmis sayilmaz: ok (varsayilan DUR)")
     return True
 
 
@@ -130,7 +138,8 @@ def kuyruga_takiliyor() -> bool:
 
     k.adim(); biten.add("is1"); k.adim()          # is1 bitti -> temiz
     assert not k.liste()["duraklatildi"], "temiz isten sonra kuyruk durdu"
-    assert yazilan == [("is1", "kabul", "butun dogrulamalar gecti")], yazilan
+    assert yazilan and yazilan[0][:2] == ("is1", "kabul"), yazilan
+    assert "gecti" in yazilan[0][2], yazilan
 
     k.adim(); biten.add("is2"); k.adim()          # is2 bitti -> kaldi
     assert k.liste()["duraklatildi"], "kalan isten sonra kuyruk DURMADI"
@@ -165,9 +174,136 @@ def ayar_okuma() -> bool:
     return True
 
 
+def dogrulanmamis_basari_sayilmaz() -> bool:
+    """DENETLENMEMIS is BASARI DEGILDIR (denetim bulgusu 3).
+
+    Eski `degerlendir()` yalnizca "kaldi" satirlarina bakiyordu. `_kabul_satiri`
+    denetlenmemis kritere "yok" yazar - yani hicbir "kaldi" olmaz - ve is TEMIZ sayilirdi.
+    otomatik_kabul acikken bu, DOGRULANMAMIS isin KABUL edilmesi demekti: telemetride
+    duzelttigimiz "%100 dogrulayici / gercek %81,6" yalani politika kapisindan geri
+    giriyordu.
+
+    "temiz" artik POZITIF KANIT ister: en az bir dogrulama GECMIS olmali."""
+    riskli = dict(VARSAYILAN, otomatik_kabul=True)      # EN RISKLI ayar
+
+    # 1) GECTI -> tek kabul edilebilir hal
+    d = degerlendir(_ozet())
+    assert d["sonuc"] == "temiz", d
+    k = karar(d, riskli)
+    assert k["eylem"] == "devam" and k["isaret"] == "kabul", k
+
+    # 2) KALDI -> kabul yok, dur
+    d2 = degerlendir(_ozet(dogrulama=[{"ad": "testler", "durum": "kaldi", "kanit": "2 failed"}]))
+    k2 = karar(d2, riskli)
+    assert d2["sonuc"] == "kaldi" and k2["eylem"] == "dur" and k2["isaret"] != "kabul", (d2, k2)
+
+    # 3) YOK (kabul kriteri verilmis, DENETLENMEMIS) -> kabul YOK, dur
+    yok = _ozet(dogrulama=[{"ad": "derleme", "durum": "gecti", "kanit": "derlendi"},
+                           {"ad": "kabul kriterleri", "durum": "yok",
+                            "kanit": "3 kriter verildi, DOGRULANMADI"}])
+    d3 = degerlendir(yok)
+    k3 = karar(d3, riskli)
+    assert d3["sonuc"] == "dogrulanmadi", d3
+    assert k3["isaret"] == "", "DOGRULANMAMIS is KABUL edildi: %s" % k3
+    assert k3["eylem"] == "dur", k3
+    assert "DOGRULANMADI" in k3["sebep"], k3
+    assert d3["denetlenmeyen"], d3
+
+    # 4) HIC dogrulama kaydi yok -> basari iddia edilemez
+    d4 = degerlendir(_ozet(dogrulama=[]))
+    assert d4["sonuc"] == "dogrulanmadi", d4
+    assert karar(d4, riskli)["isaret"] == "", "kanitsiz is KABUL edildi"
+
+    # 5) EKSIK/BOZUK kayit -> tamamlanmis SAYILMAZ
+    for bozuk in ({}, {"sema": 1}, None, {"is_id": "x", "durum": "calisiyor"}):
+        db = degerlendir(bozuk)
+        kb = karar(db, riskli)
+        assert db["sonuc"] == "bilinmiyor", (bozuk, db)
+        assert kb["isaret"] == "", "bilinmeyen durum KABUL edildi: %s" % kb
+        assert kb["eylem"] == "dur", "bozuk kayitta kuyruk DEVAM etti: %s" % kb
+    print("dogrulanmamis basari sayilmaz: ok (gecti/kaldi/yok/bilinmiyor ayri)")
+    return True
+
+
+def politika_patlarsa_kuyruk_durur() -> bool:
+    """POLITIKA PATLARSA KUYRUK DURUR.
+
+    Eski surum istisnayi yutup `return` ediyordu: koruma katmani coktugu halde kuyruk
+    devam ediyordu. Yani en cok korumaya ihtiyac duyulan anda koruma YOKTU ve kimse
+    bilmiyordu. Bu testin ilk surumu bu davranisi DOGRU diye cakiyordu - guvenli
+    davranisa cevrildi."""
+    def patlak(oge, kuyruk):
+        raise ValueError("politika bozuk")
+
+    sayac = {"n": 0}
+    biten = set()
+
+    def calistir(istek):
+        sayac["n"] += 1
+        return {"is_id": "is%d" % sayac["n"]}
+
+    k = Kuyruk(tempfile.mkdtemp(), calistir, lambda j: j in biten, politika=patlak)
+    k.ekle({"gorev": "bir"}); k.ekle({"gorev": "iki"})
+    k.adim(); biten.add("is1"); k.adim()
+
+    d = k.liste()
+    assert d["duraklatildi"], "politika PATLADI ama kuyruk devam etti"
+    assert k.adim() == "bosta", "duraklatilmis kuyruk sonrakini baslatti"
+    assert sayac["n"] == 1, "ikinci is baslatildi: %d" % sayac["n"]
+    # SEBEP GORUNUR OLMALI - sessizce yutulmamali
+    ds = d.get("durma_sebebi") or {}
+    assert "PATLADI" in (ds.get("sebep") or ""), "istisna sebebi kaydedilmemis: %s" % ds
+    assert "politika bozuk" in ds["sebep"], ds
+    print("politika patlarsa kuyruk durur: ok (sebep kayitli, sessiz yutma yok)")
+    return True
+
+
+def durma_sebebi_gorunur() -> bool:
+    """Kuyruk NEDEN durdu - kullanici panelde GORMELI.
+
+    Durduran oge cogu zaman "bitti" gorunur; panel yalnizca hatali/yarim ogelerin
+    sebebine bakiyordu ve kullanici sebebi HIC goremiyordu."""
+    ozetler = {"is1": _ozet(dogrulama=[{"ad": "kabul kriterleri", "durum": "yok",
+                                        "kanit": "2 kriter verildi, DOGRULANMADI"}])}
+    p = Politika("", VARSAYILAN, ozet_al=lambda j: dict(ozetler.get(j, {}), is_id=j),
+                 karar_yaz=lambda *a: None)
+    biten = set()
+
+    def calistir(istek):
+        return {"is_id": "is1"}
+
+    k = Kuyruk(tempfile.mkdtemp(), calistir, lambda j: j in biten, politika=p)
+    k.ekle({"gorev": "bir"}, baslik="KDV hesabı"); k.ekle({"gorev": "iki"})
+    k.adim(); biten.add("is1"); k.adim()
+
+    d = k.liste()
+    assert d["duraklatildi"], "denetlenmemis is sonrasi kuyruk durmadi"
+    ds = d.get("durma_sebebi") or {}
+    assert ds.get("baslik") == "KDV hesabı", ds
+    assert "DOGRULANMADI" in (ds.get("sebep") or ""), ds
+    assert ds.get("is_id") == "is1", ds
+    # DURDURAN oge "bitti" durumunda - yani sebebi ogeden okumak YETMEZ
+    durduran = [o for o in d["ogeler"] if o.get("no") == ds["no"]][0]
+    assert durduran["durum"] == "bitti", durduran
+
+    # SURDURUNCE sebep temizlenir (bayat sebep gostermeyelim)
+    k.duraklat(False)
+    assert k.liste().get("durma_sebebi") is None, k.liste().get("durma_sebebi")
+
+    # PANEL bu alani gercekten cizmeli
+    with open(os.path.join(ROOT, "clients", "web", "panel.html"), encoding="utf-8") as f:
+        h = f.read()
+    assert "durma_sebebi" in h, "panel kuyrugun durma sebebini okumuyor"
+    assert "Kuyruk durduruldu" in h, "panel durma sebebini gostermiyor"
+    print("durma sebebi gorunur: ok (kuyruk duzeyinde + panelde)")
+    return True
+
+
 def main() -> int:
-    ok = (dogrulayici_karar_verir() and bilinmiyor_mesru() and varsayilan_muhafazakar()
-          and durdurma_kurallari() and kuyruga_takiliyor() and ayar_okuma())
+    ok = (dogrulayici_karar_verir() and bilinmiyor_tamamlanmis_sayilmaz()
+          and varsayilan_muhafazakar() and durdurma_kurallari() and kuyruga_takiliyor()
+          and ayar_okuma() and dogrulanmamis_basari_sayilmaz()
+          and politika_patlarsa_kuyruk_durur() and durma_sebebi_gorunur())
     print("SONUC:", "GECTI" if ok else "KALDI")
     return 0 if ok else 1
 

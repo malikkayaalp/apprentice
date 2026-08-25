@@ -148,6 +148,8 @@ class Kuyruk:
     def duraklat(self, deger: bool = True) -> dict:
         with self.kilit:
             self.veri["duraklatildi"] = bool(deger)
+            if not deger:
+                self.veri.pop("durma_sebebi", None)   # surduruldu: eski sebep bayat
             self._yaz()
             return {"ok": True, "duraklatildi": self.veri["duraklatildi"]}
 
@@ -165,6 +167,7 @@ class Kuyruk:
             ogeler = [dict(o) for o in self.veri["ogeler"]]
         sayim = {d: sum(1 for o in ogeler if o.get("durum") == d) for d in DURUMLAR}
         return {"sema": SEMA, "duraklatildi": self.veri["duraklatildi"],
+                "durma_sebebi": self.veri.get("durma_sebebi") or None,
                 "ogeler": ogeler, "sayim": sayim,
                 "calisiyor": bool(self._is_parcacigi and self._is_parcacigi.is_alive())}
 
@@ -237,15 +240,27 @@ class Kuyruk:
             return
         try:
             karar = self.politika(dict(oge), self) or "devam"
-        except Exception:                 # noqa: BLE001 - politika patlarsa kuyruk durmaz
-            return
+            hata = ""
+        except Exception as e:            # noqa: BLE001
+            # POLITIKA PATLARSA DURURUZ (denetim bulgusu 3). Eski surum sessizce `return`
+            # ediyordu: koruma katmani coktugu halde kuyruk devam ediyordu - yani en cok
+            # korumaya ihtiyac duyulan anda koruma YOKTU ve kimse bilmiyordu.
+            karar, hata = "dur", "politika degerlendirmesi PATLADI: %s: %s" % (
+                type(e).__name__, str(e)[:160])
         if karar == "dur":
             with self.kilit:
                 self.veri["duraklatildi"] = True
                 oge_ref = next((o for o in self.veri["ogeler"]
                                 if o.get("no") == oge.get("no")), None)
+                sebep = hata or getattr(self.politika, "son_sebep", "") or "politika kuyrugu durdurdu"
                 if oge_ref is not None and not oge_ref.get("sebep"):
-                    oge_ref["sebep"] = "politika kuyrugu durdurdu"
+                    oge_ref["sebep"] = sebep
+                # KUYRUK DUZEYINDE de sakla: durduran oge "bitti" gorunuyor olabilir ve
+                # panel yalnizca hatali ogelerin sebebine bakiyordu - kullanici kuyrugun
+                # NEDEN durdugunu goremiyordu.
+                self.veri["durma_sebebi"] = {"no": oge.get("no"), "is_id": oge.get("is_id"),
+                                             "baslik": oge.get("baslik"), "sebep": sebep,
+                                             "t": _simdi()}
                 self._yaz()
 
     def _dongu(self) -> None:

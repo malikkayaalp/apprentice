@@ -186,15 +186,19 @@ def politika_durdurur() -> bool:
     assert len(s.baslatilan) == 2, s.baslatilan
     assert gorulen == ["iyi", "kotu"], gorulen
 
-    # POLITIKA PATLARSA kuyruk durmaz (politika bir yardimci, tek nokta arizasi degil)
+    # POLITIKA PATLARSA KUYRUK DURUR. ILK SURUM TERSINI CAKIYORDU ("patlayan politika
+    # kuyrugu durdurmaz"): koruma katmani coktugu halde kuyruk devam ediyordu - en cok
+    # korumaya ihtiyac duyulan anda koruma YOKTU ve kimse bilmiyordu (denetim bulgusu 3).
     def patlak_politika(oge, kuyruk):
         raise ValueError("politika bozuk")
     k2, s2, _ = _kuyruk(politika=patlak_politika)
     k2.ekle({"gorev": "a"}); k2.ekle({"gorev": "b"})
     k2.adim(); s2.bitir("is1"); k2.adim()
-    assert not k2.liste()["duraklatildi"], "patlayan politika kuyrugu durdurdu"
-    assert k2.adim() == "baslatildi"
-    print("politika: ok (dur karari uygulanir, patlayan politika kuyrugu durdurmaz)")
+    assert k2.liste()["duraklatildi"], "patlayan politika kuyrugu DURDURMADI"
+    assert k2.adim() == "bosta", "duraklatilmis kuyruk devam etti"
+    ds = k2.liste().get("durma_sebebi") or {}
+    assert "PATLADI" in (ds.get("sebep") or ""), "istisna sessizce yutuldu: %s" % ds
+    print("politika: ok (dur karari uygulanir, patlayan politika da DURDURUR)")
     return True
 
 

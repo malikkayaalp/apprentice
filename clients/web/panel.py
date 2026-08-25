@@ -662,7 +662,14 @@ def _kuyruk_bitti_mi(jid: str) -> bool:
         pass
     try:
         from core.inceleme import inceleme
-        return str(inceleme(os.path.join(HOME, "jobs"), jid).get("durum") or "") != "calisiyor"
+        ozet = inceleme(os.path.join(HOME, "jobs"), jid)
+        # KAYIT YOK/BOZUK ISE "BITTI" DEMEYIZ (denetim bulgusu 3). Eski satir
+        # `str(... .get("durum") or "") != "calisiyor"` idi: is bulunamayinca inceleme()
+        # {"hata": "is bulunamadi"} donuyor, `durum` alani HIC YOK, "" != "calisiyor"
+        # oluyor ve kuyruk isi BITMIS sayip sıradakini baslatiyordu.
+        if ozet.get("hata") or not ozet.get("durum"):
+            return False
+        return str(ozet.get("durum")) != "calisiyor"
     except Exception:      # noqa: BLE001 - bilinmiyorsa BITMEDI say: kuyruk beklesin,
         return False       # erken ilerleyip ikinci isi ayni anda baslatmaktansa bekleriz
 
