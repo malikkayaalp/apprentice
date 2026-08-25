@@ -254,9 +254,29 @@ def sayfa(jid: str, yol: str, kip: str = "kod") -> str:
 
 
 def _yol_gecerli(yol: str) -> str:
-    """Calisma alani disina cikan yollari reddet; temizlenmis yolu doner ('' = gecersiz)."""
+    """Calisma alani disina cikan yollari reddet; temizlenmis yolu doner ('' = gecersiz).
+
+    HYPOTHESIS BULDU (uretilmis girdi): son bileseni surucu harfi olan HER yol kaciyordu.
+        ntpath.join("D:/ws", "a/C:") == "C:"
+    ntpath.join herhangi bir bilesende surucu gorunce ONCESINI ATAR; bizim denetim ise
+    surucuyu yalniz dizgenin TAMAMINDA ariyordu - splitdrive("a/C:") == ("", "a/C:").
+    Ayni sinif daha once elle de yakalanmisti ("C:foo" surucu-goreli yol), ama yalniz
+    BASTAKI hali kapatilmisti.
+
+    Iki katman: (1) her bilesen ayri denetlenir, (2) birlestirme SIMULE edilir - hangi
+    numara olursa olsun sonuc sahte kokun altinda kalmali. (2) gelecekteki bilmedigimiz
+    numaralari da kapatir; (1) sebebi okunur kilar."""
     yol = (yol or "").replace("\\", "/").strip("/")
-    if not yol or ".." in yol.split("/") or os.path.isabs(yol) or os.path.splitdrive(yol)[0]:
+    if not yol:
+        return ""
+    parcalar = yol.split("/")
+    if ".." in parcalar or os.path.isabs(yol) or os.path.splitdrive(yol)[0]:
+        return ""
+    if any(os.path.splitdrive(p)[0] or p.endswith(":") for p in parcalar):
+        return ""
+    sahte = os.path.abspath(os.sep + "_apprentice_kok")      # diske DOKUNMAZ, saf dize
+    tam = os.path.normpath(os.path.join(sahte, yol))
+    if tam != sahte and not tam.startswith(sahte + os.sep):
         return ""
     return yol
 
@@ -382,8 +402,8 @@ def oku(jobs_dir: str, jid: str, yol: str, surum: int = 0) -> dict:
             return {"hata": "surum yok"}
         return {"icerik": ic, "satir": ic.count(chr(10)) + 1,
                 "bayt": len(ic.encode("utf-8")), "kaynak": "surum %d" % surum}
-    yol = (yol or "").replace("\\", "/").strip("/")
-    if not yol or ".." in yol.split("/") or os.path.isabs(yol) or os.path.splitdrive(yol)[0]:
+    yol = _yol_gecerli(yol)          # denetim TEK YERDE: kopya, duzeltmeyi kacirir
+    if not yol:
         return {"hata": "gecersiz yol"}
     try:
         with open(os.path.join(jobs_dir, jid, "job.json"), encoding="utf-8") as f:

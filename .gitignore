@@ -28,3 +28,5 @@ Apprentice-WebPanel.exe
 # cirak test alanlari (bagli calisma klasoru, urun kodu degil)
 CursorTest/
 Test_Kurulum/
+# Hypothesis ornek veritabani (gelistirme)
+.hypothesis/
