@@ -295,6 +295,110 @@ def _is_listesi() -> list:
         return out
 
 
+def _karar_ver(veri: dict) -> dict:
+    """KABUL / RED. Ikisi cok farkli sey yapar:
+
+      kabul - DOSYALARA DOKUNMAZ. Cirak zaten yazdi; bu yalniz "inceledim, tamam" demek.
+      red   - geri alma planini UYGULAR: isin degistirdigi dosyalar eski haline doner,
+              isin YARATTIGI dosyalar silinir. Kullanicinin kendi degisiklikleri ve is
+              bittikten sonra degismis dosyalar KORUNUR (core/geri_al kurallari).
+
+    Karar events.jsonl'e YAZILMAZ - o dosyanin sahibi isi kosan surectir (TEK YAZAR
+    KURALI). Karar inceleyenin sozudur, ayri dosyada durur.
+
+    `onay` acikca True olmalidir: yanlislikla gonderilen istek dosya silmesin."""
+    from core.inceleme import karar_yaz
+    jid = str(veri.get("is") or "").strip()
+    karar = str(veri.get("karar") or "").strip()
+    if not jid or not os.path.isdir(os.path.join(DEPO.jobs_dir, jid)):
+        return {"hata": "is bulunamadi"}
+    if karar == "kabul":
+        return karar_yaz(DEPO.jobs_dir, jid, "kabul", {"not": str(veri.get("not") or "")[:400]})
+    if karar != "red":
+        return {"hata": "gecersiz karar (kabul|red)"}
+    if veri.get("onay") is not True:
+        return {"hata": "onay gerekli: geri alma GERI ALINAMAZ, once plani goster"}
+    try:
+        from core.geri_al import plan, uygula
+        p = plan(DEPO.jobs_dir, jid)
+        if not p.get("mumkun"):
+            return {"hata": p.get("sebep") or "geri alinamaz"}
+        r = uygula(DEPO.jobs_dir, jid, p)
+    except Exception as e:  # noqa: BLE001
+        return {"hata": "geri alma calismadi: %s" % str(e)[:200]}
+    kayit = karar_yaz(DEPO.jobs_dir, jid, "red", {
+        "yontem": r.get("yontem"), "geri_alinan": len(r.get("yapildi") or []),
+        "basarisiz": r.get("basarisiz") or [], "atlanan": r.get("atlanan") or []})
+    kayit["sonuc"] = r
+    return kayit
+
+
+def _tekrar_dene(veri: dict) -> dict:
+    """TEKRAR DENE: ayni gorevi, BASARISIZLIK KANITIYLA birlikte YENI bir is olarak baslatir.
+
+    Neden yeni is: eski isin kaydi kapanmistir ve sahibi odur (TEK YAZAR). Ustune yazmak
+    yerine yeni kayit acariz - iki denemenin karnesi de ayri ayri olculebilir.
+
+    Kanit OZETLENMIS gider, ham dokum degil: bu projenin kurucu olcumu - isci ham olcumu
+    kendi yorumlayinca yakinsamadi, ozetlenmis kanitla 2 turda cozdu."""
+    from core.inceleme import inceleme
+    jid = str(veri.get("is") or "").strip()
+    jd = os.path.join(DEPO.jobs_dir, jid)
+    if not jid or not os.path.isdir(jd):
+        return {"hata": "is bulunamadi"}
+    try:
+        with open(os.path.join(jd, "job.json"), encoding="utf-8") as f:
+            eski = json.load(f)
+    except Exception:
+        return {"hata": "is kaydi okunamadi"}
+
+    inc = inceleme(DEPO.jobs_dir, jid)
+    kanitlar = []
+    for d in inc.get("dogrulama") or []:
+        if d.get("durum") == "kaldi":
+            kanitlar.append("- %s: %s" % (d.get("ad"), d.get("kanit")))
+    dv = inc.get("devir_onerisi") or {}
+    if dv.get("son_hata"):
+        kanitlar.append("- son hata:\n%s" % str(dv["son_hata"])[:600])
+    for u in (inc.get("uyarilar") or [])[:4]:
+        kanitlar.append("- uyari: %s" % u)
+    if not kanitlar:
+        kanitlar.append("- onceki denemede dogrulayici gecti ama sonuc yetersiz bulundu")
+
+    gorev = str(eski.get("gorev") or "").strip()
+    gorev += ("\n\nONCEKI DENEME BASARISIZ - kanit:\n" + "\n".join(kanitlar) +
+              "\nBu sefer once ilgili dosyayi read_file ile OKU, sebebi bul, sonra yaz.")
+
+    # calisma_dizini KOKE GORELI verilmeli (_gorev_baslat oyle bekliyor)
+    kok = AYAR.get("kok", HOME)
+    tam = eski.get("calisma_dizini") or kok
+    try:
+        goreli = os.path.relpath(tam, kok)
+        if goreli.startswith("..") or os.path.isabs(goreli):
+            return {"hata": "eski calisma dizini simdiki calisma alaninin disinda: %s" % tam}
+        if goreli == ".":
+            goreli = ""
+    except ValueError:                      # farkli surucu
+        return {"hata": "eski calisma dizini baska surucude: %s" % tam}
+
+    yeni = _gorev_baslat({
+        "gorev": gorev,
+        "kriterler": eski.get("kabul_kriterleri") or [],
+        "ortam": eski.get("ortam") or "code",
+        "dogrulama": eski.get("dogrulama") or "derleme",
+        "calisma_dizini": goreli,
+        "model": eski.get("model") or "",
+        "yazilabilir": eski.get("yazilabilir") or [],
+        "harita": bool(eski.get("harita")),
+        "canli": bool(eski.get("canli", True)),
+        "baslik": ("tekrar: " + str(eski.get("baslik") or gorev)[:60]),
+    })
+    if yeni.get("hata"):
+        return yeni
+    yeni["onceki_is"] = jid
+    return yeni
+
+
 def _gorev_baslat(veri: dict) -> dict:
     """Web'den is: sunucudaki Job sinifinin ta kendisiyle (ayni olay semasi, ayni ev)."""
     os.environ["APPRENTICE_HOME"] = HOME   # --home her zaman kazanir (setdefault ezmiyordu)
@@ -762,6 +866,14 @@ class Istek(BaseHTTPRequestHandler):
                 import goruntuleyici as G
                 self._gonder(G.oku(DEPO.jobs_dir, q.get("is", ""), q.get("yol", ""),
                                    _sayi(q.get("surum"))))
+            elif yol.path == "/api/geri_al":
+                # KURU CALISMA: ne yapilacagini soyler, HICBIR SEYI DEGISTIRMEZ.
+                # Arayuz once bunu gosterir, kullanici onaylayinca POST /api/karar gelir.
+                try:
+                    from core.geri_al import plan
+                    self._gonder(plan(DEPO.jobs_dir, q.get("is", "")))
+                except Exception as e:  # noqa: BLE001
+                    self._gonder({"mumkun": False, "sebep": str(e)[:200], "eylemler": []})
             elif yol.path == "/api/inceleme":
                 # INCELEME SOZLESMESI: arayuz olay semasini BILMEZ, bu projeksiyonu okur.
                 # Yarin dugum tabanli orkestratore gecersek sema degisir, sozlesme kalir.
@@ -922,6 +1034,10 @@ class Istek(BaseHTTPRequestHandler):
                         self._gonder({"durum": "giris penceresi acildi"})
                     except Exception as e:  # noqa: BLE001
                         self._gonder({"hata": str(e)[:200]})
+            elif yolu == "/api/karar":
+                self._gonder(_karar_ver(veri))
+            elif yolu == "/api/tekrar":
+                self._gonder(_tekrar_dene(veri))
             elif yolu == "/api/oksuz_temizle":
                 self._gonder(_oksuz_temizle())
             elif yolu == "/api/eject":

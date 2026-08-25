@@ -23,7 +23,7 @@ Kurallar:
      yuzden kabuk komutu kosmus bir iste geri alma MUMKUN DEGIL denir ve sebebi yazilir.
 """
 from __future__ import annotations
-import difflib, json, os
+import difflib, json, os, time
 
 SEMA = 1                      # sozlesme surumu: alan eklenirse artmaz, alan ANLAMI degisirse artar
 KABUK_ARACLARI = ("run_shell", "run_tests")
@@ -105,6 +105,42 @@ def _kapsam_disi(yol: str, kapsam: dict) -> bool:
         if not i or y == i or y.startswith(i + "/"):
             return False
     return True
+
+
+KARAR_DOSYASI = "inceleme.json"     # INCELEYENIN dosyasi (events.jsonl KOSUCUNUN)
+
+
+def karar_oku(jobs_dir: str, jid: str) -> dict:
+    """Inceleyenin karari: kabul / red / (bos). TEK YAZAR KURALI geregi olay gunlugune
+    DEGIL, ayri bir dosyaya yazilir - events.jsonl'in sahibi isi kosan surectir, karar ise
+    inceleyenin sozudur. Ikisini ayni dosyaya karistirmak sahipligi bozar."""
+    try:
+        with open(os.path.join(jobs_dir, jid, KARAR_DOSYASI), encoding="utf-8") as f:
+            k = json.load(f)
+        return k if isinstance(k, dict) else {}
+    except Exception:
+        return {}
+
+
+def karar_yaz(jobs_dir: str, jid: str, durum: str, ayrinti: dict | None = None) -> dict:
+    """Karari kaydet. durum: "kabul" | "red". Var olan karari EZER (kullanici fikir
+    degistirebilir) ama gecmisi 'onceki' altinda tutar - kayit silinmez."""
+    if durum not in ("kabul", "red"):
+        return {"hata": "gecersiz karar: %r" % durum}
+    jd = os.path.join(jobs_dir, jid)
+    if not os.path.isdir(jd):
+        return {"hata": "is bulunamadi"}
+    eski = karar_oku(jobs_dir, jid)
+    kayit = {"sema": SEMA, "durum": durum, "t": time.time()}
+    kayit.update(ayrinti or {})
+    if eski.get("durum"):
+        kayit["onceki"] = [x for x in (eski.get("onceki") or [])][-4:] +                           [{"durum": eski["durum"], "t": eski.get("t")}]
+    try:
+        with open(os.path.join(jd, KARAR_DOSYASI), "w", encoding="utf-8", newline="\n") as f:
+            json.dump(kayit, f, ensure_ascii=False, indent=1)
+    except OSError as e:
+        return {"hata": str(e)[:150]}
+    return kayit
 
 
 def inceleme(jobs_dir: str, jid: str) -> dict:
@@ -236,4 +272,5 @@ def inceleme(jobs_dir: str, jid: str) -> dict:
         "sure": sonuc.get("wall") or kayit.get("sure") or 0,
         "beyan": beyan[:600],            # modelin kendi ozeti - KANIT DEGIL, ayri alanda durur
         "geri_alinabilir": geri,
+        "karar": karar_oku(jobs_dir, jid),
     }

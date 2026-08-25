@@ -20,7 +20,7 @@ try:      # pencereli exe/pythonw: sys.stdout None olabilir
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except Exception:
     pass
-from core.inceleme import SEMA, inceleme  # noqa: E402
+from core.inceleme import SEMA, inceleme, karar_oku, karar_yaz  # noqa: E402
 
 # V0, V1'den SATIR SAYISIYLA da farkli olmali. Yoksa "ilk once -> son sonra" ile "son turun
 # farki" ayni sayiyi verir ve test iki uygulamayi AYIRT EDEMEZ - test gecer ama hicbir sey
@@ -219,9 +219,43 @@ def uc_baglandi() -> bool:
     return True
 
 
+def karar_kaydi() -> bool:
+    """Inceleyenin karari AYRI dosyada durur (tek yazar kurali): events.jsonl'in sahibi
+    isi kosan surectir, karar ise inceleyenin sozudur.
+
+    Bu BIRIM testi: HTTP ucu ayrica denetliyor ama gecersiz girdi korumasi burada da
+    olmali - iki katman birden bozulmasin diye (savunma derinligi)."""
+    d = tempfile.mkdtemp()
+    os.makedirs(os.path.join(d, "is1"), exist_ok=True)
+    assert karar_oku(d, "is1") == {}, "karar yokken bos sozluk donmeli"
+
+    k = karar_yaz(d, "is1", "kabul", {"not": "olur"})
+    assert k["durum"] == "kabul" and k["sema"] == SEMA and k["not"] == "olur", k
+    assert karar_oku(d, "is1")["durum"] == "kabul"
+    assert os.path.exists(os.path.join(d, "is1", "inceleme.json")), "ayri dosyaya yazilmadi"
+
+    # fikir degistirmek serbest ama GECMIS SILINMEZ
+    k2 = karar_yaz(d, "is1", "red", {"geri_alinan": 3})
+    assert k2["durum"] == "red" and k2["geri_alinan"] == 3, k2
+    assert k2["onceki"] and k2["onceki"][-1]["durum"] == "kabul", k2
+
+    # GECERSIZ girdi: bu katman da reddetmeli
+    for kotu in ("sacma", "", None, "KABUL"):
+        assert karar_yaz(d, "is1", kotu).get("hata"), "gecersiz karar kabul edildi: %r" % kotu
+    assert karar_oku(d, "is1")["durum"] == "red", "gecersiz karar mevcut karari bozdu"
+    assert karar_yaz(d, "olmayan_is", "kabul").get("hata")
+
+    # bozuk dosya: patlamaz, bos doner
+    with open(os.path.join(d, "is1", "inceleme.json"), "w", encoding="utf-8") as f:
+        f.write("{bozuk")
+    assert karar_oku(d, "is1") == {}
+    print("karar kaydi: ok (ayri dosya, gecmis korunuyor, gecersiz girdi reddediliyor)")
+    return True
+
+
 def main() -> int:
     ok = (net_fark() and geri_alma_ispati() and devir_kanitla() and kapsam_ve_dogrulama()
-          and beyan_kanittan_ayri() and uc_baglandi())
+          and beyan_kanittan_ayri() and uc_baglandi() and karar_kaydi())
     print("SONUC:", "GECTI" if ok else "KALDI")
     return 0 if ok else 1
 

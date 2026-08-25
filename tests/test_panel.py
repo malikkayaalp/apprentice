@@ -952,12 +952,109 @@ def sahiplik_kurali() -> bool:
     return True
 
 
+def karar_uclari() -> bool:
+    """KABUL / REDDET / TEKRAR DENE. Ucunden yalniz REDDET dosyaya dokunur.
+
+    En kritik cakma: ONAY OLMADAN reddin tek bayt degistirmedigi. Geri alma GERI
+    ALINAMAZ; kazara gonderilen bir istek kullanicinin kodunu silmemeli."""
+    ev = os.path.join(ROOT, ".apprentice_test_home", "karar_unit")
+    if os.path.isdir(ev):
+        shutil.rmtree(ev, ignore_errors=True)
+    os.makedirs(os.path.join(ev, "jobs"), exist_ok=True)
+    wd = tempfile.mkdtemp()
+    with open(os.path.join(wd, "a.py"), "w", encoding="utf-8") as f:
+        f.write("yeni\n")
+    with open(os.path.join(wd, "b.py"), "w", encoding="utf-8") as f:
+        f.write("cirak yaratti\n")
+    jd = os.path.join(ev, "jobs", "is1")
+    os.makedirs(jd, exist_ok=True)
+    with open(os.path.join(jd, "job.json"), "w", encoding="utf-8") as f:
+        json.dump({"id": "is1", "durum": "bitti", "calisma_dizini": wd, "gorev": "a.py duzelt",
+                   "kabul_kriterleri": ["x"], "ortam": "code", "dogrulama": "derleme",
+                   "anlik": {"yontem": "yok"}, "kaynak": "web-panel",
+                   "sahip": {"rol": "panel", "pid": os.getpid()}}, f)
+    with open(os.path.join(jd, "events.jsonl"), "w", encoding="utf-8") as f:
+        for e in ({"type": "write", "path": "a.py", "before": "eski\n", "after": "yeni\n"},
+                  {"type": "write", "path": "b.py", "before": "", "after": "cirak yaratti\n"},
+                  {"type": "result", "ok": False, "errors": ["a.py(1): SyntaxError: bad"],
+                   "rounds": 1},
+                  {"type": "exit", "code": 1}):
+            f.write(json.dumps(e) + "\n")
+
+    port = 8893
+    p = subprocess.Popen([sys.executable, os.path.join(ROOT, "clients", "web", "panel.py"),
+                          "--port", str(port), "--home", ev],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, cwd=ROOT,
+                         creationflags=0x08000000 if os.name == "nt" else 0)
+
+    def istek(u, govde=None):
+        r = urllib.request.Request("http://127.0.0.1:%d%s" % (port, u),
+                                   data=json.dumps(govde).encode() if govde is not None else None,
+                                   headers={"X-Apprentice": "panel",
+                                            "Content-Type": "application/json"})
+        return json.load(urllib.request.urlopen(r, timeout=30))
+
+    def var(ad):
+        return os.path.exists(os.path.join(wd, ad))
+
+    def oku(ad):
+        with open(os.path.join(wd, ad), encoding="utf-8") as f:
+            return f.read()
+
+    try:
+        for _ in range(120):
+            time.sleep(0.1)
+            try:
+                istek("/api/hazir")
+                break
+            except Exception:
+                pass
+
+        # 1) PLAN kuru calisma: hicbir seyi degistirmez
+        pl = istek("/api/geri_al?is=is1")
+        assert pl["mumkun"] is True, pl
+        assert {e["yol"]: e["eylem"] for e in pl["eylemler"]} == {"a.py": "geri_yaz",
+                                                                 "b.py": "sil"}, pl
+        assert var("b.py") and oku("a.py") == "yeni\n", "PLAN DOSYAYA DOKUNDU"
+
+        # 2) ONAYSIZ RED -> REDDEDILIR ve tek bayt degismez  (en kritik cakma)
+        r = istek("/api/karar", {"is": "is1", "karar": "red"})
+        assert r.get("hata") and "onay" in r["hata"], r
+        assert var("b.py") and oku("a.py") == "yeni\n", "ONAYSIZ SILME OLDU"
+
+        # 3) KABUL -> dosyalara DOKUNMAZ, yalniz kayit
+        k = istek("/api/karar", {"is": "is1", "karar": "kabul", "not": "olur"})
+        assert k["durum"] == "kabul", k
+        assert var("b.py") and oku("a.py") == "yeni\n", "KABUL DOSYAYA DOKUNDU"
+        assert istek("/api/inceleme?is=is1")["karar"]["durum"] == "kabul"
+        # karar OLAY GUNLUGUNE yazilmamali (tek yazar kurali)
+        with open(os.path.join(jd, "events.jsonl"), encoding="utf-8") as f:
+            assert "kabul" not in f.read(), "karar events.jsonl'e yazilmis"
+        assert os.path.exists(os.path.join(jd, "inceleme.json")), "karar dosyasi yok"
+
+        # 4) ONAYLI RED -> geri alir; onceki karar kayitta kalir
+        r2 = istek("/api/karar", {"is": "is1", "karar": "red", "onay": True})
+        assert r2["durum"] == "red" and r2["geri_alinan"] == 2, r2
+        assert oku("a.py") == "eski\n" and not var("b.py"), "geri alinmadi"
+        assert r2.get("onceki") and r2["onceki"][0]["durum"] == "kabul", r2
+
+        # 5) gecersiz istekler
+        assert istek("/api/karar", {"is": "is1", "karar": "sacma"}).get("hata")
+        assert istek("/api/karar", {"is": "yok", "karar": "kabul"}).get("hata")
+        assert istek("/api/tekrar", {"is": "yok"}).get("hata")
+        print("karar uclari: ok (onaysiz red reddedildi, kabul dokunmadi, red geri aldi)")
+        return True
+    finally:
+        p.terminate()
+        shutil.rmtree(ev, ignore_errors=True)
+
+
 def main() -> int:
     ok = (js_sozdizimi() and metin_isleyicileri() and kaynak_denetimi() and id_butunlugu() and uc_sozlesmesi() and ust_bar_gorunur() and yerlesim_butun() and dizilimler_butun()
           and yerlesim_motoru() and sunucu_uclari() and calisma_dizini_kurallari() and sohbet_uclari()
           and goruntuleyici_sayfasi() and fark_gorunumu()
           and animasyon_tanimlari() and model_kapsulu()
-          and vurgulayici_sozlesmesi() and sahiplik_kurali())
+          and vurgulayici_sozlesmesi() and sahiplik_kurali() and karar_uclari())
     print("SONUC:", "GECTI" if ok else "KALDI")
     return 0 if ok else 1
 

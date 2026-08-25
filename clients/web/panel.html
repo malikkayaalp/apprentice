@@ -319,6 +319,26 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
 .kapsamIpucu.genis{color:var(--sari)}
 #dalDurum{margin-left:6px;font-size:.92em}
 #dalDurum.temiz{color:var(--yesil)} #dalDurum.kirli{color:var(--sari)}
+/* KARAR: uc dugmeden yalniz REDDET dosyaya dokunur - o yuzden kirmizi ve onayli */
+#kararKutu{padding:0 12px 10px;font:.85em var(--mono)}
+.kararSira{display:flex;gap:7px;flex-wrap:wrap;margin-top:6px}
+.kbtn{background:transparent;border:1px solid var(--cizgi2);color:var(--soluk);
+  border-radius:7px;padding:5px 12px;cursor:pointer;font:600 11px var(--mono);
+  letter-spacing:.05em}
+.kbtn:hover:not(:disabled){color:var(--metin);border-color:var(--vurgu)}
+.kbtn:disabled{opacity:.4;cursor:not-allowed}
+.kbtn.kabul:hover:not(:disabled){border-color:var(--yesil);color:var(--yesil)}
+.kbtn.red{border-color:rgba(224,108,95,.5);color:#e06c5f}
+.kbtn.red:hover:not(:disabled){background:rgba(224,108,95,.16);color:#fff}
+.kararRozet{display:inline-block;border-radius:6px;padding:2px 9px;margin-top:6px;font-size:.92em}
+.kararRozet.kabul{background:rgba(111,194,138,.16);color:var(--yesil)}
+.kararRozet.red{background:rgba(224,108,95,.16);color:#e06c5f}
+.kararOnay{border:1px solid var(--sari);background:rgba(233,184,92,.07);border-radius:8px;
+  padding:8px 10px;margin-top:8px}
+.kararOnay.yok{border-color:var(--cizgi2);color:var(--soluk)}
+.onaySat{display:flex;gap:7px;align-items:baseline;padding:1px 0}
+.onaySat.atla{color:var(--soluk)}
+.onayUyari{color:var(--sari);margin-top:6px;letter-spacing:.06em;font-weight:700}
 .uyari{padding:6px 10px;margin-top:6px;border-radius:8px;font:.82em var(--mono);
   background:rgba(224,179,69,.08);border:1px solid rgba(224,179,69,.3);color:var(--sari);
   overflow-wrap:anywhere}
@@ -441,7 +461,7 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
     </div></div><div class="tutamak"></div></div>
 
   <div class="kart" data-p="ozet"><div class="kbaslik">İŞ ÖZETİ · SONUÇ</div>
-    <div class="kgovde"><div id="ozetKutu">—</div><div id="uyarilar" style="padding:0 12px 10px"></div></div>
+    <div class="kgovde"><div id="ozetKutu">—</div><div id="uyarilar" style="padding:0 12px 10px"></div><div id="kararKutu"></div></div>
     <div class="tutamak"></div></div>
 
   <div class="kart" data-p="usta"><div class="kbaslik" style="color:var(--cyan)">🧠 USTA · CLAUDE
@@ -1298,7 +1318,7 @@ function incelemeCiz(r){
   const kap=$("#ozetKutu"), uy=$("#uyarilar");
   if(!r||r.hata){
     kap.innerHTML='<span class="incBos">'+kacir((r&&r.hata)||"—")+'</span>';
-    if(uy)uy.innerHTML=""; return;
+    if(uy)uy.innerHTML=""; kararCiz(null); return;
   }
   const ks=r.yazma_kapsami||{}, gr=r.geri_alinabilir||{}, dv=r.devir_onerisi||{};
   const bitti=r.durum!=="calisiyor", k=r.kullanim||{};
@@ -1373,6 +1393,7 @@ function incelemeCiz(r){
        '<span class="incKanit">'+kacir(gr.sebep||"")+'</span></div>';
   }
   kap.innerHTML=h;
+  kararCiz(r);
 
   if(uy){
     uy.innerHTML="";
@@ -1382,6 +1403,101 @@ function incelemeCiz(r){
   }
 }
 
+/* KARAR DUGMELERI: uret -> kanitla -> degerlendir -> KABUL ET. Ucunden yalniz biri
+   dosyaya dokunur:
+     kabul       - dosyalara DOKUNMAZ; "inceledim, tamam" demek (defter tutma).
+     reddet      - geri alma planini uygular. GERI ALINAMAZ, o yuzden once PLAN gosterilir
+                   ve acik onay istenir; sunucu da onay:true olmadan islemi reddeder.
+     tekrar dene - silmez/yaratmaz; ayni gorevi OZETLENMIS kanitla YENI is olarak baslatir.
+   Karar events.jsonl'e yazilmaz (tek yazar kurali) - inceleme.json'a yazilir. */
+function kararCiz(r){
+  const kap=$("#kararKutu");
+  if(!kap) return;
+  if(!r || r.hata || r.durum==="calisiyor"){ kap.innerHTML=""; return; }
+  const gr=r.geri_alinabilir||{}, kr=r.karar||{};
+  let h="";
+  if(kr.durum){
+    h+='<div class="kararRozet '+kr.durum+'">'+
+       (kr.durum==="kabul" ? "✓ kabul edildi"
+                           : "↺ reddedildi — "+(kr.geri_alinan||0)+" dosya geri alındı")+
+       '</div>';
+  }
+  h+='<div class="kararSira">'+
+     '<button class="kbtn kabul" id="bKabul">KABUL ET</button>'+
+     '<button class="kbtn red" id="bReddet"'+(gr.mumkun?"":" disabled")+
+       ' title="'+ozniteligeKacir(gr.mumkun ? "işin değişikliklerini geri al"
+                                            : (gr.sebep||"geri alınamaz"))+'">REDDET</button>'+
+     '<button class="kbtn" id="bTekrar" title="aynı görevi kanıtla birlikte yeniden başlat"'+
+       '>TEKRAR DENE</button></div>';
+  h+='<div id="kararOnay"></div>';
+  kap.innerHTML=h;
+}
+async function kararGonder(karar, ek){
+  const g=Object.assign({is:seciliIs, karar:karar}, ek||{});
+  const r=await(await fetch("/api/karar",{method:"POST",
+    headers:{"Content-Type":"application/json"},body:JSON.stringify(g)})).json();
+  if(r.hata){ tost("HATA: "+r.hata); return null; }
+  incelemeImza="";                       // sozlesmeyi hemen tazele
+  incelemeCek(seciliIs);
+  return r;
+}
+/* Delegasyon: pano surekli yeniden ciziliyor, dugmeleri tek tek baglamak bozulur. */
+document.addEventListener("click", async e=>{
+  if(!seciliIs) return;
+  if(e.target.closest("#bKabul")){
+    const r=await kararGonder("kabul");
+    if(r) tost("✓ kabul edildi — dosyalara dokunulmadı");
+    return;
+  }
+  if(e.target.closest("#bTekrar")){
+    const b=e.target.closest("#bTekrar"); b.disabled=true; b.textContent="başlatılıyor…";
+    try{
+      const r=await(await fetch("/api/tekrar",{method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({is:seciliIs})})).json();
+      if(r.hata){ tost("HATA: "+r.hata); }
+      else{ tost("↻ yeni iş başlatıldı — kanıt göreve eklendi"); isSec(r.id||r.is_id); }
+    }catch(err){ tost("HATA: "+err); }
+    finally{ b.disabled=false; b.textContent="TEKRAR DENE"; }
+    return;
+  }
+  if(e.target.closest("#bReddet")){
+    /* ONCE PLAN, SONRA UYGULAMA. Geri alma GERI ALINAMAZ - ne olacagini gormeden
+       onaylatmiyoruz. Plan sunucudan gelir ve hicbir seyi degistirmez. */
+    const onay=$("#kararOnay"); if(!onay) return;
+    onay.innerHTML='<div class="kararOnay">plan çıkarılıyor…</div>';
+    let p;
+    try{ p=await(await fetch("/api/geri_al?is="+encodeURIComponent(seciliIs))).json(); }
+    catch(err){ onay.innerHTML=""; tost("HATA: "+err); return; }
+    if(!p.mumkun){
+      onay.innerHTML='<div class="kararOnay yok">geri alınamaz — '+kacir(p.sebep||"")+'</div>';
+      return;
+    }
+    let h='<div class="kararOnay"><b>şunlar yapılacak:</b>';
+    (p.eylemler||[]).forEach(a=>{
+      h+='<div class="onaySat"><span class="'+(a.eylem==="sil"?"incEks":"incArt")+'">'+
+         (a.eylem==="sil"?"sil":"geri yaz")+'</span> '+kacir(a.yol)+
+         '<span class="incKanit">'+kacir(a.kaynak)+'</span></div>';
+    });
+    (p.atlanan||[]).forEach(a=>{
+      h+='<div class="onaySat atla">dokunulmaz '+kacir(a.yol)+
+         '<span class="incKanit">'+kacir(a.sebep)+'</span></div>';
+    });
+    h+='<div class="onayUyari">bu işlem GERİ ALINAMAZ</div>'+
+       '<div class="kararSira"><button class="kbtn red" id="bOnayla">ONAYLA, GERİ AL</button>'+
+       '<button class="kbtn" id="bVazgec">vazgeç</button></div></div>';
+    onay.innerHTML=h;
+    return;
+  }
+  if(e.target.closest("#bVazgec")){ const o=$("#kararOnay"); if(o)o.innerHTML=""; return; }
+  if(e.target.closest("#bOnayla")){
+    const b=e.target.closest("#bOnayla"); b.disabled=true; b.textContent="geri alınıyor…";
+    const r=await kararGonder("red", {onay:true});
+    if(r) tost("↺ "+(r.geri_alinan||0)+" dosya geri alındı"+
+               ((r.basarisiz||[]).length?" — "+r.basarisiz.length+" hata":""));
+    const o=$("#kararOnay"); if(o)o.innerHTML="";
+  }
+});
 /* Dosyaya tiklayinca DOGRUDAN fark gorunumu (derin baglanti ?kip=fark). Delegasyon:
    ekran surekli yeniden ciziliyor, tek tek baglamak bozulur. */
 document.addEventListener("click", e=>{
