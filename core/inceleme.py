@@ -121,7 +121,6 @@ def inceleme(jobs_dir: str, jid: str) -> dict:
     duraganlik = None
     onarim_turu = 0
     kabuk_kosan = []
-    kapali_araclar = []
     beyan = ""
     cikis = None
 
@@ -134,9 +133,6 @@ def inceleme(jobs_dir: str, jid: str) -> dict:
             d["surum"] += 1
         elif t == "tool" and e.get("name") in KABUK_ARACLARI:
             kabuk_kosan.append(e.get("name"))
-        elif t == "system" and e.get("subtype") == "tools_off":
-            ham = e.get("tools")
-            kapali_araclar = ham if isinstance(ham, list) else [str(ham)]
         elif t == "onarim":
             onarim_turu = max(onarim_turu, int(e.get("tur") or 0))
         elif t == "duraganlik":
@@ -195,18 +191,19 @@ def inceleme(jobs_dir: str, jid: str) -> dict:
              "son_hata": (hatalar[0][:400] if hatalar else "")}
 
     # --- GERI ALINABILIRLIK: ispat, varsayim degil ---
-    if kabuk_kosan:
-        geri = {"mumkun": False,
-                "sebep": "kabuk komutu calisti (%s) - dosya degisiklikleri olay gunlugunde "
-                         "olmayabilir, geri alma calisma alanini eski haline dondurmeyi "
-                         "GARANTI EDEMEZ" % ", ".join(sorted(set(kabuk_kosan)))}
-    elif not dosyalar:
-        geri = {"mumkun": False, "sebep": "geri alinacak yazim yok"}
-    else:
-        geri = {"mumkun": True,
-                "sebep": "butun degisiklikler write olaylarinda (before/after) kayitli%s"
-                         % ("; kabuk araclari kapaliydi: " + ", ".join(kapali_araclar)
-                            if kapali_araclar else "")}
+    # Karar artik core/geri_al.py'de: calisma alani git deposuysa degisikligi KIM yaparsa
+    # yapsin (run_shell dahil) geri alinabilir; degilse yalniz kabuk kosmadiysa olay
+    # gunluguyle; ikisi de yoksa MUMKUN DEGIL denir ve sebebi yazilir.
+    try:
+        from core.geri_al import plan as _geri_plan
+        gp = _geri_plan(jobs_dir, jid)
+        geri = {"mumkun": bool(gp.get("mumkun")), "sebep": gp.get("sebep") or "",
+                "yontem": gp.get("yontem") or "yok",
+                "eylem_sayisi": len(gp.get("eylemler") or []),
+                "atlanan": gp.get("atlanan") or []}
+    except Exception as e:  # noqa: BLE001
+        geri = {"mumkun": False, "sebep": "geri alma plani cikarilamadi: %s" % str(e)[:80],
+                "yontem": "yok", "eylem_sayisi": 0, "atlanan": []}
 
     durum = kayit.get("durum") or ("bitti" if sonuc else "calisiyor")
     if cikis not in (None, 0) and durum != "bitti":

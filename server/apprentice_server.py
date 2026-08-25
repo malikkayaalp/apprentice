@@ -92,6 +92,15 @@ def _diff_stat(before: str | None, after: str) -> tuple[int, int]:
 
 
 # --------------------------------------------------------------------------- is
+def _anlik_goruntu(workdir: str) -> dict:
+    """Geri alma anlik goruntusu; git yoksa/patlarsa is DURMAZ - yalniz geri alma kapanir."""
+    try:
+        from core.geri_al import anlik
+        return anlik(workdir)
+    except Exception as e:  # noqa: BLE001
+        return {"yontem": "yok", "sebep": "anlik goruntu alinamadi: %s" % str(e)[:80]}
+
+
 class Job:
     def __init__(self, ortam: str, gorev: str, kriterler: list, oturum: str,
                  play: bool, onarim: int, model: str, url: str, workdir: str = "",
@@ -165,7 +174,12 @@ class Job:
                  # surec ayni dosyaya append ediyordu (Windows'ta satir yirtilabilir,
                  # okuyucular bozuk satiri yuttugu icin sessizce kayboluyordu) hem de
                  # yazilan sey "ustaya su gitti" iddiasiydi: usta hic bakmamis olabilir.
-                 "sahip": {"rol": "mcp", "pid": os.getpid()}}
+                 "sahip": {"rol": "mcp", "pid": os.getpid()},
+                 # GERI ALMA icin ANLIK GORUNTU (is BASLARKEN): git HEAD + o an zaten kirli
+                 # olan dosyalar. Ucuz (iki git komutu, kopyalama yok). Sonradan "simdi kirli
+                 # ama baslarken degildi" olan dosyalar isin eseridir - run_shell ile
+                 # yapilmis degisiklik de buraya dusr, gunluk boslugu kapanir.
+                 "anlik": _anlik_goruntu(self.workdir)}
         # istemciler (panel) kaynak/baslik gibi alanlari ISI BASLATMADAN once ekler; izleyiciler
         # job.json'u bir kez okuyup onbellege aldigi icin sonradan yamalanan alan kaybolur.
         kayit.update(getattr(self, "ek_alanlar", None) or {})

@@ -67,29 +67,64 @@ def net_fark() -> bool:
 
 
 def geri_alma_ispati() -> bool:
-    """run_shell kostuysa geri alma MUMKUN DEGIL - calismayan dugme koymayalim."""
+    """Geri alma ISPATLANIR, varsayilmaz. Karar core/geri_al.py'de; sozlesme onu tasir.
+
+    Fixture'lar GERCEK calisma dizini kurar: plan diske bakar (dosya hala isin yazdigi
+    halde mi?), sahte klasorle sinanamaz - sinanirsa test hicbir sey olcmez."""
     d = tempfile.mkdtemp()
+
+    def calisma_alani(**dosyalar) -> str:
+        wd = tempfile.mkdtemp()
+        for ad, ic in dosyalar.items():
+            with open(os.path.join(wd, ad), "w", encoding="utf-8") as f:
+                f.write(ic)
+        return wd
+
+    # 1) KABUK KOSTU + git yok -> MUMKUN DEGIL, sebep GORUNUR (sessizce gizlenmez)
+    wd = calisma_alani(**{"a.py": V1})
     _is_yaz(d, "kabuk", [
         {"type": "write", "path": "a.py", "before": "", "after": V1},
         {"type": "tool", "name": "run_shell", "detail": "python olustur.py"},
         {"type": "result", "ok": True, "errors": [], "rounds": 0},
-    ], {"id": "kabuk", "durum": "bitti"})
+    ], {"id": "kabuk", "durum": "bitti", "calisma_dizini": wd})
     g = inceleme(d, "kabuk")["geri_alinabilir"]
     assert g["mumkun"] is False, g
-    assert "run_shell" in g["sebep"], g          # sebep GORUNUR olmali, sessizce gizlenmemeli
+    assert "run_shell" in g["sebep"], g
 
+    # 2) KABUK KOSMADI -> olay gunlugu yeter
+    wd2 = calisma_alani(**{"a.py": V1})
     _is_yaz(d, "temiz", [
         {"type": "system", "subtype": "tools_off", "tools": ["run_shell", "run_tests"]},
         {"type": "write", "path": "a.py", "before": "", "after": V1},
         {"type": "result", "ok": True, "errors": [], "rounds": 0},
-    ], {"id": "temiz", "durum": "bitti"})
+    ], {"id": "temiz", "durum": "bitti", "calisma_dizini": wd2})
     t = inceleme(d, "temiz")["geri_alinabilir"]
-    assert t["mumkun"] is True and "run_shell" in t["sebep"], t   # kapali oldugu YAZILI
+    assert t["mumkun"] is True and t["yontem"] == "gunluk", t
+    assert t["eylem_sayisi"] == 1, t
 
+    # 3) YAZIM YOK -> geri alinacak sey yok
+    wd3 = calisma_alani()
     _is_yaz(d, "bos", [{"type": "result", "ok": True, "errors": [], "rounds": 0}],
-            {"id": "bos", "durum": "bitti"})
+            {"id": "bos", "durum": "bitti", "calisma_dizini": wd3})
     assert inceleme(d, "bos")["geri_alinabilir"]["mumkun"] is False
-    print("geri alma ispati: ok (kabuk kostuysa red, kapaliysa izin, yazim yoksa red)")
+
+    # 4) IS BITTIKTEN SONRA baskasi degistirmis -> DOKUNULMAZ
+    wd4 = calisma_alani(**{"a.py": "BASKASI ELLE DEGISTIRDI\n"})
+    _is_yaz(d, "sonradan", [
+        {"type": "write", "path": "a.py", "before": V1, "after": V2},
+        {"type": "result", "ok": True, "errors": [], "rounds": 0},
+    ], {"id": "sonradan", "durum": "bitti", "calisma_dizini": wd4})
+    s4 = inceleme(d, "sonradan")["geri_alinabilir"]
+    assert s4["mumkun"] is False and s4["atlanan"], s4
+    assert "sonra" in s4["atlanan"][0]["sebep"], s4
+
+    # 5) CALISMA DIZINI YOK -> uydurma yapilmaz
+    _is_yaz(d, "dizinsiz", [
+        {"type": "write", "path": "a.py", "before": "", "after": V1},
+        {"type": "result", "ok": True, "errors": [], "rounds": 0},
+    ], {"id": "dizinsiz", "durum": "bitti", "calisma_dizini": os.path.join(d, "yok")})
+    assert inceleme(d, "dizinsiz")["geri_alinabilir"]["mumkun"] is False
+    print("geri alma ispati: ok (kabuk->red, gunluk->izin, sonradan degisen->dokunma)")
     return True
 
 
