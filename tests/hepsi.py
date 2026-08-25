@@ -30,7 +30,7 @@ def main() -> int:
     ap.add_argument("--hizli", action="store_true", help="pencere acan testleri atla")
     a = ap.parse_args()
     ev = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONDONTWRITEBYTECODE="1")
-    kalan, gecen, atlanan = [], 0, 0
+    kalan, kararsiz, gecen, atlanan = [], [], 0, 0
     for ad in TESTLER:
         yol = os.path.join(ROOT, "tests", ad)
         if not os.path.isfile(yol):
@@ -41,26 +41,46 @@ def main() -> int:
             print("%-24s atlandi (--hizli)" % ad)
             atlanan += 1
             continue
-        t0 = time.time()
-        r = subprocess.run([sys.executable, yol], cwd=ROOT, capture_output=True, text=True,
-                           encoding="utf-8", errors="replace", env=ev,
-                           creationflags=0x08000000 if os.name == "nt" else 0)
-        sure = time.time() - t0
+        def _kos():
+            t = time.time()
+            rr = subprocess.run([sys.executable, yol], cwd=ROOT, capture_output=True, text=True,
+                                encoding="utf-8", errors="replace", env=ev,
+                                creationflags=0x08000000 if os.name == "nt" else 0)
+            return rr, time.time() - t
+
+        r, sure = _kos()
         if r.returncode == 0:
             n = (r.stdout or "").count(": ok")
             print("%-24s GECTI  (%2d kontrol, %.0f sn)" % (ad, n, sure))
             gecen += 1
         else:
-            print("%-24s KALDI  (%.0f sn)" % (ad, sure))
-            son = [s for s in ((r.stdout or "") + (r.stderr or "")).splitlines() if s.strip()]
-            for s in son[-6:]:
-                print("      " + s[:150])
-            kalan.append(ad)
+            # KARARSIZ mi BOZUK mu? Gozetimsiz kosuda en cok bu ayrim lazim. Bir kez daha
+            # denenir: ikinci kosuda geciyorsa test KARARSIZ demektir - "gecti" saymayiz,
+            # ayri raporlariz. (Yasandi: test_rag bir kez kaldi, ardindan iki kez gecti;
+            # sebebi bulunamadi - kampanya yeni bitmisken kaynak cekismesi olabilir.)
+            ilk_cikti = ((r.stdout or "") + (r.stderr or ""))
+            r2, sure2 = _kos()
+            if r2.returncode == 0:
+                print("%-24s KARARSIZ (1. kosu KALDI, 2. kosu gecti; %.0f+%.0f sn)"
+                      % (ad, sure, sure2))
+                for x in [y for y in ilk_cikti.splitlines() if y.strip()][-4:]:
+                    print("      1. kosu: " + x[:140])
+                kararsiz.append(ad)
+            else:
+                print("%-24s KALDI  (iki kosuda da; %.0f+%.0f sn)" % (ad, sure, sure2))
+                son = [y for y in ((r2.stdout or "") + (r2.stderr or "")).splitlines() if y.strip()]
+                for y in son[-6:]:
+                    print("      " + y[:150])
+                kalan.append(ad)
     print("")
-    print("SONUC: %d gecti, %d kaldi, %d atlandi" % (gecen, len(kalan), atlanan))
+    print("SONUC: %d gecti, %d kaldi, %d KARARSIZ, %d atlandi"
+          % (gecen, len(kalan), len(kararsiz), atlanan))
     if kalan:
         print("KALANLAR: %s" % ", ".join(kalan))
-    return 1 if kalan else 0
+    if kararsiz:
+        # Kararsiz test BASARI SAYILMAZ: ya testte ya sistemde bir yaris/kaynak sorunu var.
+        print("KARARSIZ: %s  (ikinci kosuda gecti - sebebi arastirilmali)" % ", ".join(kararsiz))
+    return 1 if (kalan or kararsiz) else 0
 
 
 if __name__ == "__main__":
