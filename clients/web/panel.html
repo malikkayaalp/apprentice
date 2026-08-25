@@ -318,6 +318,8 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
 .kapsamIpucu.dar{color:var(--yesil)}
 .kapsamIpucu.genis{color:var(--sari)}
 #bayatSerit{background:rgba(233,184,92,.15);border-bottom:1px solid var(--sari);color:var(--sari);padding:7px 14px;font:12px var(--mono);text-align:center}
+#bayatSerit .kbtn{margin-left:10px;border-color:var(--sari);color:var(--sari)}
+#bayatSerit .kbtn:hover:not(:disabled){background:rgba(233,184,92,.2);color:#fff}
 #dalDurum{margin-left:6px;font-size:.92em}
 #dalDurum.temiz{color:var(--yesil)} #dalDurum.kirli{color:var(--sari)}
 /* KARAR: uc dugmeden yalniz REDDET dosyaya dokunur - o yuzden kirmizi ve onayli */
@@ -359,7 +361,8 @@ details.ham pre{margin-top:5px;padding:8px;border-radius:8px;background:rgba(0,0
 <body>
 <div id="bayatSerit" style="display:none">
   ⚠ <b>Sunucu eski sürümde çalışıyor.</b> Arayüz güncellendi ama panel süreci güncellenmedi —
-  bazı düğmeler sessizce çalışmayabilir. <b>Paneli kapatıp yeniden aç.</b>
+  bazı düğmeler sessizce çalışmayabilir.
+  <button class="kbtn" id="bYenidenBaslat">SUNUCUYU YENİDEN BAŞLAT</button>
 </div>
 <div id="ust">
   <div id="logo">APPRENTICE</div>
@@ -1911,6 +1914,25 @@ async function bayatYokla(){
   }catch(e){}
 }
 bayatYokla(); setInterval(bayatYokla, 20000);
+/* SUNUCUYU YENIDEN BASLAT: panel PENCERESINI kapatip acmak sunucuyu durdurmaz - kabuk
+   zaten calisan sunucuyu yeniden kullanir. Kod guncellenince sureci elle oldurmek
+   gerekiyordu; artik dugme yapiyor. Yeni surec portu bosalana kadar bekleyip baglanir,
+   biz de ayaga kalkinca sayfayi tazeleriz. */
+const _byb=$("#bYenidenBaslat");
+if(_byb) _byb.onclick=async()=>{
+  _byb.disabled=true; _byb.textContent="yeniden başlatılıyor…";
+  try{
+    await fetch("/api/yeniden_baslat",{method:"POST",
+      headers:{"Content-Type":"application/json"},body:"{}"});
+  }catch(e){}                               // surec cikarken baglanti kopabilir: normal
+  for(let i=0;i<60;i++){
+    await new Promise(r=>setTimeout(r,500));
+    try{ const r=await(await fetch("/api/hazir")).json(); if(r&&r.hazir){ location.reload(); return; } }
+    catch(e){}
+  }
+  _byb.disabled=false; _byb.textContent="SUNUCUYU YENİDEN BAŞLAT";
+  tost("sunucu ayağa kalkmadı — paneli kapatıp aç");
+};
 isleriCek(); olaylariCek(); daktiloAdim(); ustaChatCek(); modelleriYukle(); kokGoster();
 kapsamIpucu();
 </script>

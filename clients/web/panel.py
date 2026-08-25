@@ -827,10 +827,15 @@ def _usta_cevap(uid: str) -> dict:
 
 
 def _kaynak_imza() -> str:
-    """Bu dosyanin (panel.py) diskteki imzasi: boyut + degisiklik zamani."""
+    """Bu dosyanin (panel.py) ICERIK ozeti.
+
+    Neden mtime degil: dosya AYNI icerikle yeniden yazilabilir (surum kontrolu, gerileme
+    sinamasi, editorun kaydetmesi) - o zaman mtime degisir ama kod degismez. Boyut+mtime
+    kullanan ilk surum bu yuzden YANLIS ALARM verdi: "sunucu eski" dedi, eskimemisti."""
     try:
-        st = os.stat(os.path.abspath(__file__))
-        return "%d-%d" % (st.st_size, int(st.st_mtime))
+        import hashlib
+        with open(os.path.abspath(__file__), "rb") as f:
+            return hashlib.sha1(f.read()).hexdigest()[:16]
     except OSError:
         return ""
 
@@ -847,6 +852,25 @@ def _bayat_mi() -> bool:
     yazdi, sebep bos kaldi. Sessiz kalmak yerine paneli uyariyoruz."""
     yeni = _kaynak_imza()
     return bool(_BASLANGIC_IMZA and yeni and yeni != _BASLANGIC_IMZA)
+
+
+def _yeniden_baslat() -> dict:
+    """Sunucuyu yeniden baslat: AYNI argumanlarla yeni surec acilir, bu surec cikar.
+
+    Neden gerekli: panel PENCERESINI kapatip acmak sunucuyu durdurmaz - kabuk zaten
+    calisan sunucuyu yeniden kullanir (hizli acilis icin). Kod guncellenince kullanicinin
+    surec oldurmeyi bilmesi gerekiyordu; artik dugme var."""
+    try:
+        kod = [sys.executable, os.path.abspath(__file__)] + sys.argv[1:]
+        bayrak = (0x08000000 | 0x00000008) if os.name == "nt" else 0   # pencere yok + ayrik
+        _sp3 = __import__("subprocess")
+        _sp3.Popen(kod, cwd=ROOT, stdout=_sp3.DEVNULL, stderr=_sp3.DEVNULL,
+                   creationflags=bayrak)
+    except Exception as e:  # noqa: BLE001
+        return {"hata": "yeni surec baslatilamadi: %s" % str(e)[:160]}
+    # yanit gitsin, sonra cik. Yeni surec portu bosalana kadar bekleyip baglanir.
+    threading.Timer(0.4, lambda: os._exit(0)).start()
+    return {"durum": "yeniden baslatiliyor"}
 
 
 def _sayi(deger, varsayilan: int = 0) -> int:
@@ -1058,6 +1082,8 @@ class Istek(BaseHTTPRequestHandler):
                         self._gonder({"durum": "giris penceresi acildi"})
                     except Exception as e:  # noqa: BLE001
                         self._gonder({"hata": str(e)[:200]})
+            elif yolu == "/api/yeniden_baslat":
+                self._gonder(_yeniden_baslat())
             elif yolu == "/api/karar":
                 self._gonder(_karar_ver(veri))
             elif yolu == "/api/tekrar":
@@ -1106,7 +1132,17 @@ def main() -> int:
     HOME = os.path.expanduser(a.home)
     DEPO = IsDeposu(HOME)
     _ayar_yukle()
-    srv = ThreadingHTTPServer(("127.0.0.1", a.port), Istek)
+    # Yeniden baslatmada eski surec portu birakana kadar birkac saniye gecebilir.
+    srv = None
+    for _ in range(40):
+        try:
+            srv = ThreadingHTTPServer(("127.0.0.1", a.port), Istek)
+            break
+        except OSError:
+            time.sleep(0.25)
+    if srv is None:
+        print("port %d bosalmadi - baska bir surec tutuyor olabilir" % a.port)
+        return 1
     url = "http://127.0.0.1:%d" % a.port
     print("Apprentice Web Panel: %s  (ev: %s)" % (url, HOME))
     if a.ac:

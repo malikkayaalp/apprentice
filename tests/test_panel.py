@@ -1078,14 +1078,44 @@ def bayat_surec_uyarisi() -> bool:
     sys.path.insert(0, os.path.join(ROOT, "clients", "web"))
     import panel as P
     imza = P._kaynak_imza()
-    assert imza and "-" in imza, imza
+    assert imza and len(imza) >= 8, imza
     assert P._bayat_mi() is False, "degismemis dosya bayat sayildi"
     eski = P._BASLANGIC_IMZA
     try:
-        P._BASLANGIC_IMZA = "0-0"        # sanki surec ESKI surumle baslamis
+        P._BASLANGIC_IMZA = "0" * 16     # sanki surec ESKI surumle baslamis
         assert P._bayat_mi() is True, "degismis dosya bayat sayilmadi"
     finally:
         P._BASLANGIC_IMZA = eski
+
+    # IMZA ICERIGE bagli olmali, mtime'a DEGIL. YASANDI: ilk surum boyut+mtime kullandi;
+    # gerileme sinamasi dosyayi AYNI icerikle geri yazinca panel "sunucu eski" diye
+    # YANLIS ALARM verdi ve kullaniciyi bosuna ugrastirdi.
+    kaynak = os.path.join(ROOT, "clients", "web", "panel.py")
+    once = P._kaynak_imza()
+    # mtime'i ACIKCA farkli bir ana kur: os.utime(None) "simdi" yazar ve saniye
+    # cozunurlugunde ayni kalabilir - o zaman bu sinama hicbir seyi olcmez (yasandi).
+    st = os.stat(kaynak)
+    os.utime(kaynak, (st.st_atime, st.st_mtime - 7200))
+    assert P._kaynak_imza() == once, "imza mtime'a bagli - ayni icerik farkli imza verdi"
+    with open(kaynak, encoding="utf-8", newline="") as f:
+        ham = f.read()
+    try:
+        with open(kaynak, "w", encoding="utf-8", newline="") as f:
+            f.write(ham + "\n# gecici\n")
+        assert P._kaynak_imza() != once, "icerik degisti ama imza ayni kaldi"
+    finally:
+        with open(kaynak, "w", encoding="utf-8", newline="") as f:
+            f.write(ham)
+    assert P._kaynak_imza() == once, "geri alinca imza eski haline donmedi"
+
+    # YENIDEN BASLAT: panel PENCERESINI kapatip acmak sunucuyu durdurmaz (kabuk calisan
+    # sunucuyu yeniden kullanir) - bu yuzden serit uzerinde dugme olmali.
+    assert "def _yeniden_baslat(" in sunucu, "yeniden baslatma yok"   # parantez sart:
+    # "def _yeniden_baslat" alt dizgesi "_yeniden_baslat_YOK" icinde de gecer (yasandi)
+    assert '"/api/yeniden_baslat"' in sunucu, "yeniden baslatma ucu yok"
+    assert "srv = None" in sunucu and "range(40)" in sunucu,         "yeni surec portun bosalmasini beklemiyor"
+    assert 'id="bYenidenBaslat"' in html, "seritte yeniden baslat dugmesi yok"
+    assert "/api/yeniden_baslat" in html, "dugme ucu cagirmiyor"
     print("bayat surec uyarisi: ok (imza + uc + serit zinciri tam)")
     return True
 
