@@ -112,6 +112,25 @@ back up so the panel never dies quietly.
 **Simple / Expert.** One toggle hides the advanced controls. It changes *visibility only* — the
 hidden values are still sent, so a job started in Simple mode does exactly what it would in Expert.
 
+**Settings that actually apply.** `apprentice.config.json` is read for real. Sampling values
+(`temperature`, `think`, `num_predict`, `max_steps`, `retries`) and `prompt.ek_talimat` used to sit
+in the template and be ignored at runtime — a silently ignored setting is worse than a missing one,
+because you think you changed something. The safe defaults stay (`temperature: 0.0`, `think: false`
+— both measured: `think` burned ~3900 reasoning tokens per task for no quality gain). You may change
+them: nothing is blocked, but risky values raise a **warning with its reason**, and every job report
+carries the **effective** values so "did my change apply?" is answered by record, not guesswork.
+Campaigns run under a locked measurement profile so a benchmark stays single-variable.
+
+**Truncation is no longer silent.** When a prompt exceeds the model's window Ollama does not reject
+it — it *cuts* the prompt, and the model answers from a fragment. That is a "successful" job telling
+a quiet lie. Truncation is now counted and surfaced: how many requests were cut, in which repair
+rounds, and the largest prompt in a **single** request (kept separate from the per-job total —
+"did it fit?" is a per-request question). The live/XML path gets the same check as the standard one.
+
+**Unverified is not success.** If acceptance criteria were supplied but never checked, the result is
+`dogrulanmadi` — not a pass. Auto-accept requires **positive evidence**, and the queue stops rather
+than piling new work on an unverified foundation.
+
 Tools, return schema and rules: [server/README.md](server/README.md).
 Unity support is a separate, optional repo: [apprentice-unity](https://github.com/malikkayaalp/apprentice-unity).
 
@@ -244,6 +263,40 @@ Asıl risk "bir iş kaldı" değil, "bir iş kaldı ve kimse durmadı"dır.
 Otomatik kabul **varsayılan kapalı**: kabul etmek denetçinin işidir ve bu mimarinin tamamı
 "usta **koşturarak** doğrular" üzerine kurulu.
 
+## Ayarlar gerçekten uygulanır
+
+`apprentice.config.json` artık **okunuyor**. Uzun süre şablonda duran ama hiçbir yerde
+okunmayan alanlar vardı (`sampling.*`, `prompt.ek_talimat`); sessizce yok sayılan bir ayar,
+olmayan bir ayardan kötüdür — değiştirdiğinizi sanırsınız.
+
+**Güvenli varsayılanlar korundu.** `temperature: 0.0` ve `think: false` ölçülmüş
+kararlardır: `think` açıkken görev başına ~3900 düşünme tokeni yandı ve kalite artmadı;
+`temperature > 0` tekrarlanabilirliği bozar. Değiştirebilirsiniz — **engellenmez, uyarılır**,
+ve uyarı gerekçesiyle birlikte panelde çıkar. Geçersiz değer güvenliye düşer ve bildirilir.
+
+Her iş raporu **etkin** değerleri taşır; panel yalnızca varsayılandan **sapan** alanları
+gösterir. "Ayarı değiştirdim, uygulandı mı?" sorusu tahminle değil kayıtla cevaplanır.
+
+**Ölçüm profili.** Kampanyalar `APPRENTICE_OLCUM_PROFILI=1` ile koşar: yapılandırma yok
+sayılır, kilitli varsayılanlar kullanılır. Kıyas tek değişkenli kalmalı — aksi hâlde
+`temperature`'ı değiştirmiş bir kullanıcının kampanyası önceki koşularla karşılaştırılamaz
+hale gelir ve bunu kimse fark etmez.
+
+**Kuyruk politikası** aynı dosyadan ayarlanır: doğrulama kalırsa, yazma kapsamı ihlal
+edilirse, durağanlık görülürse ya da **iş hiç doğrulanmamışsa** kuyruk durur. Bu sonuncusu
+önemli: *"başarısız değil" ile "başarılı" aynı şey değildir* — kabul kriteri verilip hiç
+denetlenmediyse iş başarı sayılmaz.
+
+## Bağlam kesilmesi görünür
+
+İstem modelin penceresine sığmazsa Ollama isteği reddetmez; istemi **kırpar** ve model
+yarım bir metne bakarak cevap üretir. Bu, "başarılı" görünen bir işin sessiz yalanıdır.
+
+Kesilme artık ölçülüyor ve iş özetinde açık uyarı olarak çıkıyor: kaç istekte kesildi,
+hangi onarım turlarında, **tek istekteki** en büyük istem kaç token. Son sayı ayrı tutulur:
+"bağlama sığdı mı" sorusu tek istekle ilgilidir, turların toplamıyla değil. Standart ve
+canlı/XML akışları aynı güvenceyi verir — iş hangi kipte koştuğuna göre farklı korunmaz.
+
 ## Süre nereye gitti · ölçüm geçmişi · canlı akış
 
 **Süre dağılımı.** Her iş, süresini *model üretiyor* / *araç koşuyor* / *doğrulama* diye üçe bölen
@@ -342,6 +395,14 @@ alanlar ayrı depolardır ve `envs/<ad>` olarak klonlanır:
 - Araç bloğu küçük ve sabit tutulur: her turda yeniden gönderilir, kullanılmayan araç kalıcı vergidir.
 - Yazma anında derleme + ruff: hata bir sonraki tura değil, **aynı** tura döner.
 - `yazilabilir` listesi (−%94 token), `dogrulama=derleme` (−%55), canlı kip (−%31 istem).
+- **Doğrulanmamış iş başarı sayılmaz.** Kabul kriteri verilip denetlenmediyse sonuç
+  "doğrulanmadı"dır; otomatik kabul yalnızca **pozitif kanıt** varsa çalışır.
+- **Söylemeden önce bakılır.** "Durduruldu" ancak süreç gerçekten kapandıysa denir;
+  kapanmadıysa sebebiyle birlikte "durmadı" denir.
+- **Kullanıcının dosyasına dokunulmaz.** Panel ekleri projeye yazılmaz; geri alma iş
+  başlangıcındaki içeriği esas alır ve dal/HEAD değiştiyse durur.
+- **Sessiz yutma yok.** Kuyruk diske yazılamazsa "eklendi" denmez; bozuk kuyruk dosyası
+  boş kuyruk gibi davranmaz, korunur ve bildirilir.
 
 ## Test
 

@@ -1,5 +1,109 @@
 # STATE.md — iş devri (en yeni üstte; kendi OpenMemory kuralımızın bu depoya uygulanması)
 
+## 2026-08-25 (3): DIS DENETIM - 14 madde, alti faz, hepsi kapandi
+
+Kullanicidan 14 maddelik ikinci bir denetim listesi geldi. Once DOGRULANDI (kod okunarak,
+iddiaya guvenilmeden): **13'u gercek, 1'i kismen**. Hicbiri asilsiz degildi. Sonra kullanici
+onayiyla alti faza bolunup uygulandi.
+
+### Sirayi kullanici belirledi, bir noktada BEN degistirdim
+Madde 13'u (gizlilik) ikinci gruptan alip EN BASA cektim: diger 12 madde POTANSIYEL zarar,
+bu madde o an GERCEKLESIYORDU - v0.4.0 bir saat once yayinlanmisti ve README "kodunuz
+makineden cikmaz" diyordu. Kullanici kabul etti ve ONEMLI BIR DUZELTME yapti:
+**"diff de kaynak koddur"** - tam dosya yerine fark gondermek iddiayi DOGRU YAPMAZ.
+Bu yuzden hem miktar kisildi hem ifade duzeltildi; ikisi tek is olarak yapildi.
+Ayrica 7'yi 6'dan once yaptim: guvenilir iptal olmadan guvenli yeniden baslatma yazilamaz.
+
+### FAZ 1 - madde 13 (gizlilik)
+`report()` her yazilan dosyanin TAM son icerigini (<=12000 karakter) ustaya gonderiyordu.
+`core/gizlilik.py`: varsayilan yalnizca SINIRLI + MASKELI fark; tam icerik acikca acilir
+(`gizlilik.tam_icerik`). Maskeleme DAR tutuldu - genis desen normal kodu maskeleyip
+DENETCIYI KOR EDER. Denetci kurali (kur.py) da `fark` okuyacak sekilde degisti; README ve
+server/README kosulsuz iddiayi biraktı. Panel USTA panosunda GERCEK ayari gosteriyor.
+
+### FAZ 2 - maddeler 1, 2 (ek guvenligi, geri alma)
+Ekler proje klasorune adiyla yaziliyor ve ayni adli dosyayi SESSIZCE eziyordu; ustelik
+anlik goruntuden ONCE oldugu icin geri alma da kurtaramiyordu (uc kat zarar). Artik
+`<HOME>/jobs/<id>/ekler/` - calisma agacinin DISI. Hapse DAR bir OKUMA izni eklendi
+(`Jail.oku_yolu`); yazma hapsi HIC degismedi.
+Geri almada DORT ayri kusur: kayitli baslangic HEAD'i HIC OKUNMUYORDU · `git checkout`
+indeksten geri yaziyordu · bitis ani `usta_rapor` yuzunden ILERI kayiyordu · porcelain
+ayristirmasi Unicode/yeniden adlandirmayi bozuyordu (`-z` ile duzeldi).
+**Denenip birakildi:** `git show <head>:<yol>` + ham bayt yazma. `git show` BLOB verir,
+satir sonu suzgeclerini uygulamaz - dosya hala "degismis" gorunuyor ve ikinci geri alma
+onu tekrar yakaliyordu. MEVCUT senaryo testi yakaladi. Dogrusu `git checkout <bas_head>`.
+
+### FAZ 3 - maddeler 7, 6 (iptal, yeniden baslatma)
+`kill()` taskkill'in DONUS KODUNU okumadan kosulsuz `return` ediyordu. Artik sonuc doner
+(surec_yok | zaten_bitmis | durduruldu | DURMADI), taskkill basarisizsa proc.kill()'e
+dusulur ve olum SINIRLI BEKLEMEYLE DOGRULANIR.
+Yeniden baslatma `os._exit(0)` cagiriyordu: isci alt surecleri olmuyordu, yeni kuyruk eski
+isi "yarim" sayip sıradakini baslatiyordu - IKI YAZAN, TEK PROJE. Artik once durdurulur,
+durdugu dogrulanir; durduramazsa YENIDEN BASLATMAZ. Cokme kurtarma uc hali ayirir:
+bitmis / HALA CALISIYOR (sahipsiz, kuyruk yeni is baslatmaz) / gercekten yarim.
+`JOBS` sozlugu sinirsiz buyuyordu - budandi (BITMEMIS is asla dusurulmez).
+
+### FAZ 4 - madde 3 (dogrulanmamis basari)
+`degerlendir()` yalnizca "kaldi"ya bakiyordu; `_kabul_satiri` denetlenmemis kritere "yok"
+yazar - yani is TEMIZ sayiliyordu. Telemetride duzelttigimiz "%100 vs gercek %81,6" yalani
+POLITIKA KAPISINDAN geri giriyordu. Artik DORT DEGERLI: temiz | kaldi | dogrulanmadi |
+bilinmiyor. "temiz" POZITIF KANIT ister.
+Iki hata daha: `_kuyruk_bitti_mi` BULUNAMAYAN isi BITMIS sayiyordu (`durum` alani yok ->
+"" != "calisiyor"); kuyruk politika istisnasini yutup devam ediyordu.
+
+### FAZ 5 - maddeler 4, 5, 10
+`sampling.*` ve `prompt.ek_talimat` sablonda vardi, HIC OKUNMUYORDU. `core/ayarlar.py`
+eklendi: deger + KAYNAK + uyari + tip/sinir denetimi. Guvenli varsayilanlar KORUNDU
+(kullanici karari), riskli deger ENGELLENMEZ ama UYARILIR. Kampanyalar KILITLI olcum
+profiliyle kosuyor.
+Baglam kesilmesi `client.py`'de uretiliyor ama HIC OKUNMUYORDU; canli/XML yolunda tespit
+HIC YOKTU. Ikisi de kapatildi; toplam istem ile TEK ISTEKTEKI en buyuk istem AYRILDI.
+Kuyruk yazma hatasi yutuluyordu ("eklendi" deniyordu); bozuk dosya sessizce BOS kuyruga
+donuyordu. Ikisi de gorunur; bozuk icerik `.bozuk-<zaman>` olarak KORUNUYOR.
+
+### FAZ 6 - maddeler 8, 9, 11, 12, 14
+Canli rapor turlari TOPLUYORDU, disk raporu NET hesapliyordu: ayni dosya uc kez yazilip
+basa donunce "+2 -2" vs "+0 -0". Ikisi NET farka esitlendi (`yazma` alani kac kez
+yazildigini ayrica soyler).
+Zaman cizgisi son aractan sonrasini HEP "dogrulama" sayiyordu; ARACSIZ iste surenin TAMAMI
+dogrulama gorunuyordu (60 sn uretim -> 60 sn "dogrulama"). `assistant` olayi artik
+dogrulamanin BASLANGIC SINIRI; yoksa "bilinmiyor" denir, uydurma yapilmaz. Gosterim siniri
+ACIKCA bildiriliyor.
+Sohbet kilidi model cagrisi boyunca birakiliyordu - alisveris artik BOLUNMEZ; sifirlama
+icin NESIL sayaci (ucustaki cevap yeni gecmise EKLENMEZ).
+`--tek`: `SadeceSunucu` sonuc dondurmuyordu, basarisizlikta bile pencere aciliyordu. Artik
+`Task<bool>`, kismen baslatilmis surec temizleniyor, pencere ACILMIYOR.
+server/README calisma kokunun UC yolunu da anlatiyor (iddia edilen "sessiz geri donus"
+zaten giderilmisti - madde 14 KISMEN dogruydu).
+
+### EN ONEMLI DERS: kendi testlerim UC KEZ guvensiz davranisi SOZLESME diye cakmisti
+  - "bilinmiyor durumda kuyruk devam etsin"      (test_politika)
+  - "patlayan politika kuyrugu durdurmasin"      (test_kuyruk)
+  - "tam dosya icerigi ustaya gitsin"            (test_server)
+O fazlarda YESIL TEST KANIT DEGILDI - duzeltilecek seyin parcasiydi. Bu yuzden her madde
+icin ayrica GERILEME KANITI alindi: duzeltme kapatilinca ilgili test GERCEKTEN dusuyor mu.
+
+### DENENIP KALDIRILAN TEST (durustluk notu)
+TDZ ("ayni islevde tanimdan once kullanim") icin statik tarayici yazildi, YANLIS ALARM
+verdi (JS blok kapsamini ve ic ice islevleri gormuyor) ve KALDIRILDI. Yanlis alarm veren
+test testsizlikten kotudur.
+**ACIK RISK:** `node --check` TDZ hatasini YAKALAMAZ. Bu oturumda gercek ornek yasandi:
+kesilme uyarisindaki `ks` adi ayni islevde daha asagida tanimli `const ks` ile cakisti;
+sozdizimi testi YESIL kaldi, ekran ise kesilme yasayan HER iste cizilmezdi. Tarayicida
+gercek veriyle yakalandi. Dogru cozum DOM'lu bir cizim testi - AYRI IS.
+
+### Durum
+Batarya 17 -> 22 dosya. Yeni: test_gizlilik, test_ekler, test_durdurma, test_ayarlar,
+test_tutarlilik. Tam batarya 22/22, 0 KARARSIZ.
+Yeni cekirdek modul: `core/gizlilik.py`, `core/ekler.py`, `core/ayarlar.py`.
+Yeni ayar bolumleri: `gizlilik`, `politika`, ve gercekten okunan `sampling`/`prompt`.
+
+**Bekleyenler:** yol haritasi 8-9 (kullanici DURDURDU, esik dolmadi: 115/130 KB) ·
+16 kucuk modeller (kapsam disi) · panel "ev" gecisi (kullanici istemedi) ·
+DOM'lu cizim testi (TDZ boslugu).
+
+---
+
 ## 2026-08-25 (2): YOL HARITASI 10-15 + denetim bulgulari
 
 **Denetim bulgulari (8+2) KAPANDI.** Ikisi kritikti:
