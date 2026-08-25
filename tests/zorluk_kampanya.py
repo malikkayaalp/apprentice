@@ -362,6 +362,12 @@ def main() -> int:
     finally:
         c.close()
 
+    # ARSIVE yaz: her kosu oncekini EZMESIN (bkz. core/olcum.py)
+    from core.olcum import kaydet
+    yollar = kaydet("zorluk_kampanya", rapor)
+    if yollar.get("arsiv"):
+        print("-> arsiv:", yollar["arsiv"])
+
     print("\n%-10s %-14s %-8s %-8s %-6s %s" % ("gorev", "zorluk", "tur1", "son", "tur", "sure"))
     for ad, k in rapor["gorevler"].items():
         ilk, son = k["turlar"][0], k["turlar"][-1]

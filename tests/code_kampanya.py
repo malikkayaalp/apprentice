@@ -249,9 +249,13 @@ def main() -> int:
     print("TOPLAM tur1 %d/%d, son %d/%d" % (t1, n, ts, n))
     rapor["ozet"] = {"tur1": t1, "son": ts, "toplam": n}
     rapor["bitis"] = time.strftime("%Y-%m-%d %H:%M:%S")
-    with open(yol, "w", encoding="utf-8", newline="\n") as f:
-        json.dump(rapor, f, ensure_ascii=False, indent=1)
-    print("->", yol)
+    # ARSIVE de yaz: eskiden yalniz .son.json vardi ve her kosu oncekini EZIYORDU.
+    # 2026-08-23 temel cizgisi (2416 sn) boyle kaybolmustu; git'ten kurtarildi.
+    from core.olcum import kaydet
+    yollar = kaydet("code_kampanya", rapor)
+    print("->", yollar.get("son", yol))
+    if yollar.get("arsiv"):
+        print("-> arsiv:", yollar["arsiv"])
     return 0
 
 

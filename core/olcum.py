@@ -1,118 +1,116 @@
-"""Ilk calistirma olcumu: bu makinede num_batch icin en iyi degeri bul, ayar dosyasina yaz.
+"""OLCUM ARSIVI: kampanya sonuclari ustune YAZILMAZ, birikir.
 
-    python core/olcum.py [--model M] [--batches 512,1024,2048,4096] [--tokens 12000] [--yaz]
+    python -m core.olcum                 # arsivdeki butun kosulari listele
+    python -m core.olcum code_kampanya   # tek kampanyanin kosulari, yan yana
 
-Neden: num_batch prefill hizini belirler (olculen: 512=189 t/s, 4096=730 t/s, +%285) ama
-VRAM harcar; kucuk kartta sigmayabilir. Deger donanima ozel, kopyalanmamali - sablondaki
-"makine" bolumu bu yuzden "ilk calistirmada olc" der. Bu betik her num_batch icin UZUN bir
-promptla (kisa promptla olcum yaniltir: tek batch'e sigar) /api/generate cagirir,
-prompt_eval_count / prompt_eval_duration'dan t/s hesaplar, en hizli ve hatasiz olani secer.
+YASANDI: kampanyalar sonucu `tests/<ad>.son.json`'a yaziyordu ve her kosu oncekini
+EZIYORDU. 2026-08-23'teki temel cizgi (6 gorev, 8 tur, 2416 sn) 2026-08-25 kosusuyla
+(883 sn) degistirildi; aradaki 2.7 katlik farkin sebebi artik olculemiyordu - kiyas noktasi
+silinmisti. Olcum iddiasindaki bir projede kabul edilemez.
 
-Onbellek tuzagi: Ollama ayni prefix'i yeniden islemez. Her kosuda prompt'un BASINA
-benzersiz bir damga konur ki tam prefill olculsun.
+Artik iki yere yazilir:
+    tests/<ad>.son.json                  SON kosu (kolay erisim, eskisi gibi)
+    reports/olcum/<ad>-<zaman>.json      ARSIV (asla silinmez, asla ezilmez)
 
---yaz: apprentice.config.json'daki "makine" bolumunu gunceller (dosya yoksa sablondan
-olusturur). Yazmazsa yalnizca raporlar.
+Arsiv dosya adindaki zaman damgasi kosunun BASLANGICINDAN gelir; ayni saniyede iki kosu
+olursa sonuna sayac eklenir - sessizce ezme YOK.
 """
 from __future__ import annotations
-import argparse, json, os, sys, time, urllib.request, uuid
+import json, os, sys, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, ROOT)
-from core import config  # noqa: E402
+ARSIV = os.path.join(ROOT, "reports", "olcum")
 
 
-def _post(url: str, body: dict, timeout: float = 600) -> dict:
-    req = urllib.request.Request(url, json.dumps(body).encode("utf-8"),
-                                 {"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.load(r)
-
-
-def uzun_prompt(hedef_token: int) -> str:
-    # ~4 karakter/token varsayimi; kod benzeri metin (gercek is yuku: arac blogu + dosyalar)
-    satir = ("class Ornek%d:\n    def guncelle(self, dt):\n        self.konum = "
-             "(self.konum[0] + %d * dt, self.konum[1] + %d * dt)\n\n")
-    parcalar, n, i = [], 0, 0
-    while n < hedef_token * 4:
-        s = satir % (i, i % 7, i % 5)
-        parcalar.append(s)
-        n += len(s)
-        i += 1
-    return "".join(parcalar) + "\nYukaridaki siniflardan kacinin guncelle metodu var? Tek sayi yaz."
-
-
-def olc(base: str, model: str, num_batch: int, num_ctx: int, prompt: str) -> dict:
-    damga = "// olcum %s\n" % uuid.uuid4().hex
-    t0 = time.time()
-    try:
-        r = _post(base + "/api/generate", {
-            "model": model, "prompt": damga + prompt, "stream": False,
-            "options": {"num_batch": num_batch, "num_ctx": num_ctx, "num_predict": 8,
-                        "temperature": 0}, "keep_alive": "10m"})
-    except Exception as e:
-        return {"num_batch": num_batch, "hata": str(e)[:200]}
-    pe, pd = r.get("prompt_eval_count", 0), r.get("prompt_eval_duration", 0)
-    return {"num_batch": num_batch, "prompt_token": pe,
-            "prefill_tps": round(pe / (pd / 1e9), 1) if pd else None,
-            "prefill_s": round(pd / 1e9, 1) if pd else None,
-            "toplam_s": round(time.time() - t0, 1)}
-
-
-def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--model", default=config.env_or(["APPRENTICE_MODEL", "UNITY_CODE_MODEL"], "ollama.model"))
-    ap.add_argument("--url", default=(config.get("ollama.url") or "http://localhost:11434").rstrip("/"))
-    ap.add_argument("--batches", default="512,1024,2048,4096")
-    ap.add_argument("--tokens", type=int, default=12000)
-    ap.add_argument("--ctx", type=int, default=config.get("makine.num_ctx", 65536))
-    ap.add_argument("--yaz", action="store_true")
-    a = ap.parse_args()
-
-    prompt = uzun_prompt(a.tokens)
-    sonuc = []
-    print("model %s, ~%d token prompt, ctx %d" % (a.model, a.tokens, a.ctx), flush=True)
-    for b in [int(x) for x in a.batches.split(",") if x.strip()]:
-        r = olc(a.url, a.model, b, a.ctx, prompt)
-        sonuc.append(r)
-        print("  num_batch %5d: %s" % (b, "HATA %s" % r["hata"] if "hata" in r else
-                                      "%s t/s prefill (%s s, %s token)" % (r["prefill_tps"], r["prefill_s"], r["prompt_token"])),
-              flush=True)
-    iyi = [r for r in sonuc if r.get("prefill_tps")]
-    if not iyi:
-        print("olcum alinamadi")
-        return 1
-    en = max(iyi, key=lambda r: r["prefill_tps"])
-    print("secim: num_batch=%d (%s t/s)" % (en["num_batch"], en["prefill_tps"]))
-
-    if a.yaz:
-        up = config.user_path()
-        cfg = {}
-        if os.path.exists(up):
-            with open(up, encoding="utf-8") as f:
-                cfg = json.load(f)
-        else:
-            with open(config.TEMPLATE, encoding="utf-8") as f:
-                cfg = json.load(f)
-        mk = cfg.setdefault("makine", {})
-        mk["num_batch"] = en["num_batch"]
-        mk["num_ctx"] = a.ctx
-        mk["ilk_calistirmada_olc"] = False
-        mk["olcum"] = {"tarih": time.strftime("%Y-%m-%d %H:%M"), "model": a.model,
-                       "prompt_token": a.tokens, "sonuclar": sonuc}
+def kaydet(ad: str, veri: dict, zaman: float | None = None) -> dict:
+    """Kampanya sonucunu SON + ARSIV olarak yaz. Doner: {"son": yol, "arsiv": yol}."""
+    ad = "".join(c for c in str(ad) if c.isalnum() or c in "_-") or "olcum"
+    os.makedirs(ARSIV, exist_ok=True)
+    damga = time.strftime("%Y%m%d-%H%M%S", time.localtime(zaman or time.time()))
+    arsiv = os.path.join(ARSIV, "%s-%s.json" % (ad, damga))
+    k = 2
+    while os.path.exists(arsiv):        # ayni saniyede iki kosu: EZME, sayac ekle
+        arsiv = os.path.join(ARSIV, "%s-%s-%d.json" % (ad, damga, k))
+        k += 1
+    out = {}
+    for yol in (os.path.join(ROOT, "tests", "%s.son.json" % ad), arsiv):
         try:
-            import subprocess
-            gpu = subprocess.run(["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader"],
-                                 creationflags=0x08000000 if os.name == "nt" else 0,
-                                 capture_output=True, text=True, timeout=10).stdout.strip()
-            mk["olculdugu_gpu"] = gpu
+            with open(yol, "w", encoding="utf-8", newline="\n") as f:
+                json.dump(veri, f, ensure_ascii=False, indent=1)
+            out["arsiv" if yol == arsiv else "son"] = yol
+        except OSError as e:
+            out["hata"] = str(e)[:150]
+    return out
+
+
+def _ozet(veri: dict) -> dict:
+    """Kampanya ciktisindan kiyaslanabilir sayilar. Sema kampanyadan kampanyaya biraz
+    farkli (turlar 'sure' ya da 'sure_s'), ikisi de okunur."""
+    g = veri.get("gorevler") or {}
+    sureler, turlar, gecen, toplam = [], 0, 0, 0
+    for v in g.values():
+        for t in (v.get("turlar") or []):
+            turlar += 1
+            s = t.get("sure", t.get("sure_s"))
+            if isinstance(s, (int, float)):
+                sureler.append(float(s))
+            if isinstance(t.get("gizli_gecen"), int):
+                gecen += t["gizli_gecen"]
+                toplam += t.get("gizli_toplam") or 0
+            elif isinstance(t.get("gizli"), str) and "/" in t["gizli"]:
+                a, b = t["gizli"].split("/", 1)
+                if a.strip().isdigit() and b.strip().isdigit():
+                    gecen += int(a)
+                    toplam += int(b)
+    return {"baslangic": veri.get("baslangic") or "?", "gorev": len(g), "tur": turlar,
+            "toplam_sn": round(sum(sureler)), "tur_basi_sn": round(sum(sureler) / turlar, 1)
+            if turlar else 0, "gizli": "%d/%d" % (gecen, toplam) if toplam else "-"}
+
+
+def kosular(ad: str = "") -> list:
+    """Arsivdeki kosular, ESKIDEN YENIYE. ad verilirse yalniz o kampanya."""
+    out = []
+    try:
+        dosyalar = sorted(os.listdir(ARSIV))
+    except OSError:
+        return out
+    for f in dosyalar:
+        if not f.endswith(".json") or (ad and not f.startswith(ad + "-")):
+            continue
+        try:
+            with open(os.path.join(ARSIV, f), encoding="utf-8") as fh:
+                veri = json.load(fh)
         except Exception:
-            pass
-        with open(up, "w", encoding="utf-8", newline="\n") as f:
-            json.dump(cfg, f, ensure_ascii=False, indent=2)
-        print("yazildi:", up)
-    return 0
+            continue
+        out.append(dict(_ozet(veri), dosya=f))
+    return out
+
+
+def yazdir(ad: str = "") -> None:
+    ks = kosular(ad)
+    if not ks:
+        print("arsivde kosu yok (%s)" % (ARSIV))
+        return
+    print("%-34s %-17s %5s %4s %8s %9s %8s" %
+          ("dosya", "baslangic", "gorev", "tur", "toplam", "tur basi", "gizli"))
+    print("-" * 92)
+    for k in ks:
+        print("%-34s %-17s %5d %4d %7ds %8.1fs %8s" %
+              (k["dosya"][:34], str(k["baslangic"])[:17], k["gorev"], k["tur"],
+               k["toplam_sn"], k["tur_basi_sn"], k["gizli"]))
+    if len(ks) >= 2:
+        ilk, son = ks[0], ks[-1]
+        if ilk["tur_basi_sn"] and son["tur_basi_sn"]:
+            oran = ilk["tur_basi_sn"] / son["tur_basi_sn"]
+            print("-" * 92)
+            print("ilk -> son: tur basi %.1fs -> %.1fs  (%.2fx %s)"
+                  % (ilk["tur_basi_sn"], son["tur_basi_sn"], oran,
+                     "hizlandi" if oran > 1 else "yavasladi"))
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+    yazdir(sys.argv[1] if len(sys.argv) > 1 else "")

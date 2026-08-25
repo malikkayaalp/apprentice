@@ -30,3 +30,5 @@ CursorTest/
 Test_Kurulum/
 # Hypothesis ornek veritabani (gelistirme)
 .hypothesis/
+# olcum arsivi: kosu ciktilari (birikir, depoya girmez)
+reports/
